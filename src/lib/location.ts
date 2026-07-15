@@ -14,6 +14,7 @@ export interface LocationState {
   city?: string;
   area?: string;
   label?: string; // human-readable "Bahria Town, Rawalpindi"
+  shortLabel?: string; // compact display label for nav/chips
 }
 
 // ── Reference centres ──────────────────────────────────────────────────────

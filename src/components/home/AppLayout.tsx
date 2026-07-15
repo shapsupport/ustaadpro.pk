@@ -4,10 +4,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { useState, useMemo, useEffect } from "react";
 import {
-  Search, MapPin, ChevronDown, ChevronRight, ChevronLeft, Star,
+  Search, MapPin, ChevronDown, ChevronRight, ChevronLeft, Star, UserRound,
   Clock, Layers, BadgeCheck, ArrowRight, Zap,
   Snowflake, Wrench, Sparkles, Shirt, Paintbrush,
-  Hammer, Camera, Flame, Calendar, UserRound,
+  Hammer, Camera, Flame, Calendar,
   type LucideIcon
 } from "lucide-react";
 import type { ApiService, ApiCategory } from "@/lib/api-types";
@@ -67,7 +67,6 @@ const heroMaintenanceSlides = [
 
 export function AppLayout({ initialServices, categories }: AppLayoutProps) {
   const { location, setShowPicker } = useLocation();
-  const { user, setAuthModalMode } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [profileOpen, setProfileOpen] = useState(false);
@@ -195,23 +194,10 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
               className="flex items-center gap-2 text-white/90 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full backdrop-blur-sm transition-colors border border-white/20"
             >
               <MapPin className="h-4 w-4" />
-              <span className="font-medium text-sm max-w-[200px] truncate">
-                {location.label || "Set your location"}
+              <span className="font-medium text-sm max-w-[220px] truncate">
+                {location.shortLabel || location.label || "Set your location"}
               </span>
               <ChevronDown className="h-3.5 w-3.5 opacity-70" />
-            </button>
-            <button
-              onClick={() => {
-                if (user) {
-                  setProfileOpen(true);
-                } else {
-                  setAuthModalMode("login");
-                }
-              }}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20"
-              aria-label={user ? "Open account" : "Sign in"}
-            >
-              <UserRound className="h-5 w-5" />
             </button>
           </div>
 
@@ -220,14 +206,14 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
             <div>
               <div className="inline-flex items-center gap-2 bg-white/10 text-white text-xs font-semibold px-3 py-1.5 rounded-full mb-4 border border-white/20">
                 <Zap className="h-3.5 w-3.5 text-amber-300" />
-                Rawalpindi &amp; Islamabad
+                Serving Rawalpindi &amp; Islamabad now
               </div>
               <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight mb-3">
                 Expert home services,<br />
                 <span className="text-emerald-200">at your doorstep</span>
               </h1>
               <p className="text-white/70 text-lg mb-8 max-w-lg leading-relaxed">
-                Book verified electricians, plumbers, AC technicians and 100+ more services — same day, transparent pricing.
+                Book verified electricians, plumbers, AC technicians and 100+ more services in Rawalpindi and Islamabad — we’ll be in more cities soon.
               </p>
 
               {/* Search */}
@@ -359,7 +345,7 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-slate-900">Our Services</h2>
-          <p className="mt-1 text-sm text-slate-500">{filtered.length} service{filtered.length !== 1 ? "s" : ""} available in Rawalpindi &amp; Islamabad</p>
+          <p className="mt-1 text-sm text-slate-500">{filtered.length} service{filtered.length !== 1 ? "s" : ""} available in Rawalpindi &amp; Islamabad right now</p>
         </div>
 
         {filtered.length === 0 ? (

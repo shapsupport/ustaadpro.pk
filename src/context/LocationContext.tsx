@@ -20,7 +20,7 @@ interface LocationContextValue {
   location: LocationState;
   geoError: string;
   detectLocation: () => Promise<void>;
-  setManualLocation: (coords: Coords, label: string, city: string) => void;
+  setManualLocation: (coords: Coords, label: string, city: string, area?: string) => void;
   resetLocation: () => void;
   skipLocation: () => void;
   showPicker: boolean;
@@ -74,6 +74,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           city,
           area,
           label,
+          shortLabel: area ? `${area}, ${city}` : city,
         };
         persist(next);
         setShowPicker(false);
@@ -93,13 +94,15 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setManualLocation = useCallback(
-    (coords: Coords, label: string, city: string) => {
+    (coords: Coords, label: string, city: string, area?: string) => {
       const serviceable = isInServiceArea(coords);
       const next: LocationState = {
         status: serviceable ? "serviceable" : "not-serviceable",
         coords,
         city,
+        area,
         label,
+        shortLabel: area ? `${area}, ${city}` : city,
       };
       persist(next);
       setShowPicker(false);

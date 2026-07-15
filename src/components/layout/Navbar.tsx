@@ -74,7 +74,7 @@ export function Navbar() {
               className="hidden items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 shadow-sm hover:border-primary hover:text-primary transition-all md:flex cursor-pointer"
             >
               <MapPin className="h-4 w-4 text-primary" />
-              <span className="max-w-[130px] truncate">{location.label || "Set location"}</span>
+              <span className="max-w-[150px] truncate font-semibold text-slate-700">{location.shortLabel || location.label || "Set location"}</span>
               <ChevronDown className="h-3 w-3 opacity-60" />
             </button>
 

@@ -156,7 +156,7 @@ export default function CheckoutPageClient() {
   const shippingFee = settings.shippingCost;
   const totalAmount = subtotal + serviceTaxAmount + inspectionFee + shippingFee;
   const rewardPointsEarned = Math.floor(subtotal / settings.rewardPointValue);
-  const selectedLocation = location.label || "No location selected yet";
+  const selectedLocation = location.shortLabel || location.label || "No location selected yet";
   const hasLocation = location.status === "serviceable" || location.status === "not-serviceable" || Boolean(location.label);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -299,7 +299,8 @@ export default function CheckoutPageClient() {
                           <MapPin className="mt-0.5 h-4 w-4 text-primary" />
                           <div>
                             <p className="font-semibold text-slate-900">Selected location</p>
-                            <p>{selectedLocation}</p>
+                            <p className="font-medium text-slate-700">{selectedLocation}</p>
+                            <p className="mt-1 text-xs text-slate-500">Your saved service area will be used for this booking.</p>
                           </div>
                         </div>
                       </div>

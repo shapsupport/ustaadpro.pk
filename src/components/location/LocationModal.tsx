@@ -56,7 +56,8 @@ export function LocationModal() {
   const handleSelect = (s: LocationSuggestion) => {
     setSelecting(true);
     const city = s.sublabel.split(",")[0].trim();
-    setManualLocation(s.coords, `${s.label}, ${s.sublabel}`, city);
+    const area = s.label;
+    setManualLocation(s.coords, `${area}, ${s.sublabel}`, city, area);
     setQuery("");
     setSuggestions([]);
     setSelecting(false);
@@ -66,10 +67,10 @@ export function LocationModal() {
     setSelecting(true);
     const results = await searchLocations(q.split(",")[0]);
     if (results.length > 0) {
-      setManualLocation(results[0].coords, label, city);
+      setManualLocation(results[0].coords, label, city, label.split(",")[0]);
     } else {
       // Fallback coords for the twin cities center if geocoding fails
-      setManualLocation({ lat: 33.6007, lng: 73.0679 }, label, city);
+      setManualLocation({ lat: 33.6007, lng: 73.0679 }, label, city, label.split(",")[0]);
     }
     setSelecting(false);
   };
@@ -115,7 +116,7 @@ export function LocationModal() {
             </div>
             <div>
               <h2 className="text-xl font-bold">Where are you?</h2>
-              <p className="text-emerald-100 text-sm">We serve Rawalpindi &amp; Islamabad</p>
+              <p className="text-emerald-100 text-sm font-medium">Serving Rawalpindi &amp; Islamabad now — we’ll expand to more cities soon</p>
             </div>
           </div>
 
@@ -143,7 +144,7 @@ export function LocationModal() {
           {/* ── Autocomplete search ── */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-              Search your area
+              Search your area in Rawalpindi or Islamabad
             </p>
 
             <div className="relative">
@@ -201,7 +202,7 @@ export function LocationModal() {
           {/* ── Popular quick picks ── */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-              Popular areas
+              Popular areas in the twin cities
             </p>
             <div className="grid grid-cols-2 gap-2">
               {POPULAR_AREAS.map((area) => (
@@ -225,7 +226,7 @@ export function LocationModal() {
             onClick={skipLocation}
             className="w-full text-center text-xs text-slate-400 hover:text-slate-600 py-1 transition-colors"
           >
-            Skip for now — browse as Rawalpindi / Islamabad
+            Skip for now — browse as Rawalpindi / Islamabad while we expand
           </button>
         </div>
       </div>
