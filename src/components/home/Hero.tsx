@@ -4,7 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { FloatingElements } from "@/components/shared/FloatingElements";
-import { ArrowRight, Play, Star, Users, ShieldCheck } from "lucide-react";
+import { ArrowRight, Play } from "lucide-react";
 
 export function Hero() {
   return (

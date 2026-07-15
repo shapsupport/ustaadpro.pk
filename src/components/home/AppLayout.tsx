@@ -14,6 +14,7 @@ import type { ApiService, ApiCategory } from "@/lib/api-types";
 import { useLocation } from "@/context/LocationContext";
 import { useAuth } from "@/context/AuthContext";
 import { UserProfileModal } from "@/components/auth/UserProfileModal";
+import { useRef } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
@@ -71,6 +72,17 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [profileOpen, setProfileOpen] = useState(false);
   const [heroSlideIndex, setHeroSlideIndex] = useState(0);
+
+  const tabsRef = useRef<HTMLDivElement>(null);
+
+  const scrollTabs = (direction: "left" | "right") => {
+    if (!tabsRef.current) return;
+
+    tabsRef.current.scrollBy({
+      left: direction === "left" ? -250 : 250,
+      behavior: "smooth",
+    });
+  };
 
   // De-dup categories from services + API categories
   const allCategories = useMemo(() => {
@@ -278,25 +290,67 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
       </section>
 
       {/* ── Category tabs ── */}
-      <div className="bg-white border-b border-slate-100 sticky top-16 z-20 shadow-sm">
+      <div className="bg-white border-b border-slate-100 sticky top-22 z-20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-1 overflow-x-auto hide-scrollbar py-3">
-            {categoryTabs.map((tab) => {
-              const IconComponent = tab.icon || Wrench;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveCategory(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors shrink-0 ${activeCategory === tab.id
-                    ? "bg-primary text-white shadow-sm"
-                    : "text-slate-600 hover:bg-slate-100"
-                    }`}
-                >
-                  <IconComponent className="h-4 w-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
+          <div className="relative">
+            {/* Left Arrow */}
+            <button
+              onClick={() => scrollTabs("left")}
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow rounded-full p-2 hover:bg-slate-100"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+
+            {/* Tabs */}
+            <div className="relative">
+              {/* Left Arrow */}
+              <button
+                onClick={() => scrollTabs("left")}
+                className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow rounded-full p-2 hover:bg-slate-100"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+
+              {/* Tabs */}
+              <div
+                ref={tabsRef}
+                className="flex gap-1 overflow-x-auto hide-scrollbar py-3 px-10 scroll-smooth"
+              >
+                {categoryTabs.map((tab) => {
+                  const IconComponent = tab.icon || Wrench;
+
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveCategory(tab.id)}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors shrink-0 ${activeCategory === tab.id
+                        ? "bg-primary text-white shadow-sm"
+                        : "text-slate-600 hover:bg-slate-100"
+                        }`}
+                    >
+                      <IconComponent className="h-4 w-4" />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Right Arrow */}
+              <button
+                onClick={() => scrollTabs("right")}
+                className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow rounded-full p-2 hover:bg-slate-100"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Right Arrow */}
+            <button
+              onClick={() => scrollTabs("right")}
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow rounded-full p-2 hover:bg-slate-100"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
           </div>
         </div>
       </div>

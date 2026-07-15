@@ -21,8 +21,11 @@ import {
   Shirt,
   Wrench,
   Zap,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import type { ApiCategory, ApiService } from "@/lib/api-types";
+import { useRef } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
@@ -46,24 +49,6 @@ const CAT_ICONS: Record<string, ComponentType<{ className?: string }>> = {
 
 const PRIORITY_CATS = ["electrician", "plumbers", "carpenter", "home-cleaning", "ac-services"];
 
-const NEED_CARDS = [
-  {
-    title: "Fast repairs",
-    description: "Get urgent support for everyday fixes without the long wait.",
-    icon: Zap,
-  },
-  {
-    title: "Premium maintenance",
-    description: "Keep your home or office running smoothly with scheduled care.",
-    icon: ShieldCheck,
-  },
-  {
-    title: "Smart installations",
-    description: "Book secure setups for AC, CCTV, lighting, and more.",
-    icon: Sparkles,
-  },
-];
-
 interface ServicesPageContentProps {
   initialServices: ApiService[];
   initialCategories: ApiCategory[];
@@ -72,6 +57,15 @@ interface ServicesPageContentProps {
 export function ServicesPageContent({ initialServices, initialCategories }: ServicesPageContentProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
+
+  const tabsRef = useRef<HTMLDivElement>(null);
+
+  const scrollTabs = (direction: "left" | "right") => {
+    tabsRef.current?.scrollBy({
+      left: direction === "left" ? -250 : 250,
+      behavior: "smooth",
+    });
+  };
 
   const allCategories = useMemo(() => {
     const catIds = [...new Set(initialServices.map((s) => s.category_id))];
@@ -163,51 +157,60 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
         </div>
       </section>
 
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="grid gap-4 md:grid-cols-3">
-          {NEED_CARDS.map((card) => {
-            const Icon = card.icon;
-            return (
-              <div key={card.title} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-primary">
-                  <Icon className="h-5 w-5" />
-                </div>
-                <h3 className="mt-4 text-lg font-bold text-slate-900">{card.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{card.description}</p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="sticky top-16 z-20 border-b border-slate-200 bg-white/90 shadow-sm backdrop-blur">
+      <div className="sticky top-22 z-20 border-b border-slate-200 bg-white/90 shadow-sm backdrop-blur">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-2 overflow-x-auto py-3 hide-scrollbar">
+          <div className="relative">
+            {/* Left Arrow */}
             <button
-              onClick={() => setActiveCategory("all")}
-              className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition ${activeCategory === "all"
+              type="button"
+              onClick={() => scrollTabs("left")}
+              className="absolute left-2 top-1/2 z-20 -translate-y-1/2 rounded-full border border-slate-200 bg-white p-2 shadow-md transition hover:bg-slate-100"
+            >
+              <ChevronLeft className="h-5 w-5 text-slate-700" />
+            </button>
+
+            {/* Category Tabs */}
+            <div
+              ref={tabsRef}
+              className="flex gap-2 overflow-x-auto px-14 py-3 hide-scrollbar scroll-smooth"
+            >
+              <button
+                onClick={() => setActiveCategory("all")}
+                className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition ${activeCategory === "all"
                   ? "bg-primary text-white shadow-sm"
                   : "text-slate-600 hover:bg-slate-100"
-                }`}
-            >
-              All Services
-            </button>
-            {allCategories.map((cat) => {
-              const IconComponent = CAT_ICONS[cat.id] || Wrench;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCategory(cat.id)}
-                  className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition ${activeCategory === cat.id
+                  }`}
+              >
+                All Services
+              </button>
+
+              {allCategories.map((cat) => {
+                const IconComponent = CAT_ICONS[cat.id] || Wrench;
+
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setActiveCategory(cat.id)}
+                    className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition ${activeCategory === cat.id
                       ? "bg-primary text-white shadow-sm"
                       : "text-slate-600 hover:bg-slate-100"
-                    }`}
-                >
-                  <IconComponent className="h-4 w-4" />
-                  {cat.title}
-                </button>
-              );
-            })}
+                      }`}
+                  >
+                    <IconComponent className="h-4 w-4" />
+                    {cat.title}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Right Arrow */}
+            <button
+              type="button"
+              onClick={() => scrollTabs("right")}
+              className="absolute right-2 top-1/2 z-20 -translate-y-1/2 rounded-full border border-slate-200 bg-white p-2 shadow-md transition hover:bg-slate-100"
+            >
+              <ChevronRight className="h-5 w-5 text-slate-700" />
+            </button>
           </div>
         </div>
       </div>
