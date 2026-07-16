@@ -7,7 +7,7 @@ export const siteConfig = {
   url: "https://ustaadpro.pk",
   email: "ustaadpro.official26@gmail.com",
   phone: "+92 371 9201273",
-  address: "Lahore, Pakistan",
+  address: "Islamabad, Pakistan",
 } as const;
 
 export const navItems = [
