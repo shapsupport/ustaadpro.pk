@@ -164,21 +164,28 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
     });
   }, [initialServices, activeCategory, searchQuery]);
 
-  const featuredService = initialServices[0];
-  const featuredImg = imgSrc(featuredService?.image_url || featuredService?.imageUrl);
-  const activeHeroSlide = heroMaintenanceSlides[heroSlideIndex];
+  const featuredService = initialServices[heroSlideIndex];
+
+  const featuredImg = imgSrc(
+    featuredService?.image_url || featuredService?.imageUrl
+  );
+
+  const activeHeroSlide = featuredService;
 
   useEffect(() => {
+    if (!initialServices.length) return;
+
     const timer = window.setInterval(() => {
-      setHeroSlideIndex((current) => (current + 1) % heroMaintenanceSlides.length);
+      setHeroSlideIndex(
+        (current) => (current + 1) % initialServices.length
+      );
     }, 5000);
 
     return () => window.clearInterval(timer);
-  }, []);
+  }, [initialServices]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-
       {/* ── Hero Header ── */}
       <section className="bg-gradient-to-br from-emerald-900 via-primary to-emerald-700 px-4 pt-24 pb-16 sm:px-6 lg:px-8 relative overflow-hidden">
         {/* Background decoration */}
@@ -186,31 +193,31 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
           <div className="absolute -top-20 -right-20 h-96 w-96 rounded-full bg-white blur-3xl" />
           <div className="absolute bottom-0 left-1/4 h-64 w-64 rounded-full bg-emerald-300 blur-3xl" />
         </div>
-        <div className="relative z-10 max-w-7xl mx-auto">
-          {/* Top row */}
-          <div className="flex items-center justify-between mb-8">
-            <button
-              onClick={() => setShowPicker(true)}
-              className="flex items-center gap-2 text-white/90 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full backdrop-blur-sm transition-colors border border-white/20"
-            >
-              <MapPin className="h-4 w-4" />
-              <span className="font-medium text-sm max-w-[220px] truncate">
-                {location.shortLabel || location.label || "Set your location"}
-              </span>
-              <ChevronDown className="h-3.5 w-3.5 opacity-70" />
-            </button>
-          </div>
-
-          <div className="grid lg:grid-cols-2 gap-10 items-end">
-            {/* Left: headline + search */}
+        <div className="mx-auto max-w-7xl">
+          <div className="grid items-center gap-12 lg:grid-cols-[1.2fr_0.8fr]">
+            {/* Left */}
             <div>
-              <div className="inline-flex items-center gap-2 bg-white/10 text-white text-xs font-semibold px-3 py-1.5 rounded-full mb-4 border border-white/20">
-                <Zap className="h-3.5 w-3.5 text-amber-300" />
-                Serving Rawalpindi &amp; Islamabad now
+              <div className="mb-6">
+                <button
+                  onClick={() => setShowPicker(true)}
+                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white/90 backdrop-blur-sm transition-colors hover:bg-white/20"
+                >
+                  <MapPin className="h-4 w-4" />
+
+                  <span className="max-w-[220px] truncate text-sm font-medium">
+                    {location.shortLabel || location.label || "Set your location"}
+                  </span>
+
+                  <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                </button>
               </div>
-              <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight mb-3">
-                Expert home services,<br />
-                <span className="text-emerald-200">at your doorstep</span>
+
+              <h1 className="text-4xl font-extrabold leading-tight text-white sm:text-5xl">
+                Expert home services,
+                <br />
+                <span className="text-emerald-200">
+                  at your doorstep
+                </span>
               </h1>
               <p className="text-white/70 text-lg mb-8 max-w-lg leading-relaxed">
                 Book verified electricians, plumbers, AC technicians and 100+ more services in Rawalpindi and Islamabad — we’ll be in more cities soon.
@@ -231,24 +238,40 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
             </div>
 
             {/* Right: hero maintenance slider */}
-            <div className="rounded-3xl border border-white/20 bg-white/10 backdrop-blur-sm p-5 shadow-2xl">
+            <div className="rounded-3xl border border-white/20 bg-white/10 p-5 shadow-2xl backdrop-blur-sm">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white">
+                <Zap className="h-3.5 w-3.5 text-amber-300" />
+                Serving Rawalpindi &amp; Islamabad now
+              </div>
+
               <div className="flex items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-2 rounded-full bg-amber-400/90 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-amber-950">
                   <Sparkles className="h-3.5 w-3.5" />
-                  Maintenance plans
+                  Featured Service
                 </span>
+
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setHeroSlideIndex((current) => (current - 1 + heroMaintenanceSlides.length) % heroMaintenanceSlides.length)}
+                    onClick={() =>
+                      setHeroSlideIndex(
+                        (current) =>
+                          (current - 1 + initialServices.length) % initialServices.length
+                      )
+                    }
                     className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
                     aria-label="Previous slide"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
+
                   <button
                     type="button"
-                    onClick={() => setHeroSlideIndex((current) => (current + 1) % heroMaintenanceSlides.length)}
+                    onClick={() =>
+                      setHeroSlideIndex(
+                        (current) => (current + 1) % initialServices.length
+                      )
+                    }
                     className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
                     aria-label="Next slide"
                   >
@@ -257,16 +280,48 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
                 </div>
               </div>
 
+              {featuredImg && (
+                <div className="mt-5 overflow-hidden rounded-2xl">
+                  <img
+                    src={featuredImg}
+                    alt={activeHeroSlide?.title}
+                    className="h-52 w-full object-cover"
+                  />
+                </div>
+              )}
+
               <div className="mt-5 rounded-2xl border border-white/20 bg-gradient-to-br from-white/20 to-white/5 p-5">
                 <span className="inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-100">
-                  {activeHeroSlide.badge}
+                  {activeHeroSlide?.badge || activeHeroSlide?.serviceType || "Professional Service"}
                 </span>
-                <h3 className="mt-3 text-xl font-bold text-white">{activeHeroSlide.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-white/75">{activeHeroSlide.description}</p>
+
+                <h3 className="mt-3 text-xl font-bold text-white">
+                  {activeHeroSlide?.title}
+                </h3>
+
+                <p className="mt-2 line-clamp-3 text-sm leading-6 text-white/75">
+                  {activeHeroSlide?.description}
+                </p>
+
                 <div className="mt-5 flex items-center justify-between">
-                  <span className="text-2xl font-black text-white">Rs {activeHeroSlide.price}</span>
-                  <Link href="/services" className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-primary">
-                    Explore now <ArrowRight className="h-4 w-4" />
+                  <div>
+                    <span className="text-2xl font-black text-white">
+                      Rs {activeHeroSlide?.price}
+                    </span>
+
+                    {activeHeroSlide?.originalPrice && (
+                      <span className="ml-2 text-sm text-white/60 line-through">
+                        Rs {activeHeroSlide.originalPrice}
+                      </span>
+                    )}
+                  </div>
+
+                  <Link
+                    href="/services"
+                    className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-primary transition hover:bg-slate-100"
+                  >
+                    Explore now
+                    <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>
               </div>
