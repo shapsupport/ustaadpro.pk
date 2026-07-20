@@ -1,6 +1,6 @@
 "use client";
 
-import { Wallet, CreditCard, FileImage, ShieldCheck, UploadCloud } from "lucide-react";
+import { Wallet, CreditCard, FileImage, ShieldCheck } from "lucide-react";
 import type { PaymentMethod } from "../types";
 
 interface PaymentSectionProps {
@@ -23,7 +23,6 @@ const PAYMENT_NUMBERS: Record<string, string> = {
 
 export function PaymentSection({
   paymentMethod,
-  screenshotName,
   onPaymentChange,
   onScreenshotChange,
 }: PaymentSectionProps) {
@@ -81,39 +80,13 @@ export function PaymentSection({
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
           <div className="flex items-center gap-2 text-sm font-bold text-amber-900">
             <FileImage className="h-4 w-4" />
-            Upload payment screenshot
+            Pay after the work is completed
           </div>
           <p className="text-xs leading-5 text-amber-700">
-            Send{" "}
-            <span className="font-semibold">
-              PKR to {paymentLabel} — {PAYMENT_NUMBERS[paymentMethod]}
-            </span>{" "}
-            then upload your confirmation screenshot below. Our team will verify and confirm your booking.
+            Do not pay during checkout. After the service is marked completed, send the final amount to{" "}
+            <span className="font-semibold">{paymentLabel} — {PAYMENT_NUMBERS[paymentMethod]}</span>{" "}
+            and upload the receipt from Track Booking for verification.
           </p>
-          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-amber-300 bg-white py-5 px-4 transition hover:bg-amber-50/60">
-            <input
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                onScreenshotChange(file?.name ?? "");
-              }}
-            />
-            {screenshotName ? (
-              <p className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
-                <ShieldCheck className="h-4 w-4" />
-                {screenshotName}
-              </p>
-            ) : (
-              <>
-                <UploadCloud className="h-6 w-6 text-amber-400" />
-                <span className="text-xs font-semibold text-amber-700">
-                  Tap to choose screenshot
-                </span>
-              </>
-            )}
-          </label>
         </div>
       ) : (
         <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">

@@ -52,7 +52,7 @@ export function ServiceDetailClient({ service }: { service: ApiService }) {
     originalPrice > service.price
       ? Math.round(((originalPrice - service.price) / originalPrice) * 100)
       : 0;
-  const bookingHref = `/checkout?serviceId=${service.id}&serviceTitle=${encodeURIComponent(service.title)}&servicePrice=${bookingPrice}&workTitle=${encodeURIComponent(selectedWork?.title || "")}`;
+  const bookingHref = `/checkout?serviceId=${service.id}&serviceTitle=${encodeURIComponent(service.title)}&servicePrice=${bookingPrice}&workTitle=${encodeURIComponent(selectedWork?.title || "")}&workPriceId=${selectedWork?.id || ""}`;
 
   return (
     <div className="min-h-screen bg-slate-50">

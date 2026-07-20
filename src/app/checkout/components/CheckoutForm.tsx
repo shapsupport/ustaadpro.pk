@@ -7,7 +7,7 @@ import {
   useCallback,
   useState,
 } from "react";
-import { Clock3, MessageSquare, User, Phone, AlertCircle, Loader2 } from "lucide-react";
+import { CalendarDays, Clock3, MessageSquare, User, Phone, AlertCircle, Loader2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +15,10 @@ import { LocationSection } from "./LocationSection";
 import { PaymentSection } from "./PaymentSection";
 import { useLocation } from "@/context/LocationContext";
 import type { FormData, PaymentMethod } from "../types";
+
+function pakistanToday() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
 
 interface CheckoutFormProps {
   initialName: string;
@@ -25,6 +29,8 @@ interface CheckoutFormProps {
     screenshotName: string
   ) => void;
   isSubmitting: boolean;
+  isShop?: boolean;
+  submitError?: string;
 }
 
 export function CheckoutForm({
@@ -32,6 +38,8 @@ export function CheckoutForm({
   initialPhone,
   onSubmit,
   isSubmitting,
+  isShop = false,
+  submitError = "",
 }: CheckoutFormProps) {
   const { location } = useLocation();
 
@@ -40,6 +48,7 @@ export function CheckoutForm({
     phone: initialPhone,
     houseNumber: "",
     landmark: "",
+    preferredDate: "",
     preferredTime: "",
     notes: "",
   });
@@ -76,9 +85,20 @@ export function CheckoutForm({
       setError("Please add a house number or landmark so the technician can find you.");
       return;
     }
-    if ((paymentMethod === "easypaisa" || paymentMethod === "jazzcash") && !screenshotName) {
-      setError("Please upload a payment screenshot to complete your booking.");
-      return;
+    if (!isShop) {
+      if (!formData.preferredDate || !formData.preferredTime) {
+        setError("Please choose both a service date and an arrival time.");
+        return;
+      }
+      const selected = new Date(`${formData.preferredDate}T${formData.preferredTime}:00+05:00`);
+      if (Number.isNaN(selected.getTime()) || selected.getTime() <= Date.now()) {
+        setError("Please choose a date and time in the future.");
+        return;
+      }
+      if (formData.preferredTime < "07:00" || formData.preferredTime > "23:00") {
+        setError("Available booking hours are 7:00 AM to 11:00 PM Pakistan time.");
+        return;
+      }
     }
 
     onSubmit(formData, paymentMethod, screenshotName);
@@ -125,7 +145,7 @@ export function CheckoutForm({
       </Section>
 
       {/* ─── 2. Address ─────────────────────────────────────── */}
-      <Section step={2} label="Address" description="Where should the technician arrive?">
+      <Section step={2} label="Address" description={isShop ? "Where should we deliver the product?" : "Where should the technician arrive?"}>
         <LocationSection
           houseNumber={formData.houseNumber}
           landmark={formData.landmark}
@@ -135,28 +155,45 @@ export function CheckoutForm({
       </Section>
 
       {/* ─── 3. Preferred Time ──────────────────────────────── */}
-      <Section
-        step={3}
-        label="Preferred time"
-        description="Let us know when works best for you."
-      >
-        <Field label="Date & time" htmlFor="preferredTime">
-          <div className="relative">
-            <Clock3 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              id="preferredTime"
-              name="preferredTime"
-              type="datetime-local"
-              value={formData.preferredTime}
-              onChange={handleChange}
-              className="rounded-2xl border-slate-200 bg-slate-50 py-5 pl-10 text-sm focus-visible:ring-primary"
-            />
+      {!isShop && (
+        <Section
+          step={3}
+          label="Schedule your visit"
+          description="Choose a future date and a separate arrival time."
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Service date" htmlFor="preferredDate" required>
+              <div className="relative">
+                <CalendarDays className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input id="preferredDate" name="preferredDate" type="date"
+                  min={pakistanToday()}
+                  value={formData.preferredDate} onChange={handleChange}
+                  className="rounded-2xl border-slate-200 bg-slate-50 py-5 pl-10 text-sm focus-visible:ring-primary" required />
+              </div>
+            </Field>
+            <Field label="Arrival time" htmlFor="preferredTime" required>
+              <div className="relative">
+                <Clock3 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input id="preferredTime" name="preferredTime" type="time" step="900"
+                  min="07:00" max="23:00"
+                  value={formData.preferredTime} onChange={handleChange}
+                  className="rounded-2xl border-slate-200 bg-slate-50 py-5 pl-10 text-sm focus-visible:ring-primary" required />
+              </div>
+            </Field>
           </div>
-        </Field>
-      </Section>
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Popular times</p>
+            <div className="flex flex-wrap gap-2">{["09:00", "12:00", "15:00", "18:00", "21:00"].map((time) => <button key={time} type="button" onClick={() => setFormData((current) => ({ ...current, preferredTime: time }))} className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${formData.preferredTime === time ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300"}`}>{new Date(`2000-01-01T${time}`).toLocaleTimeString("en-PK", { hour: "numeric", minute: "2-digit" })}</button>)}</div>
+          </div>
+          <div className="flex gap-3 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div><p className="font-bold">Bookings are available from 7:00 AM to 11:00 PM PKT.</p><p className="mt-1 leading-5 text-amber-800">Past times cannot be booked. Your selected slot is a request and our team will confirm it after checkout.</p></div>
+          </div>
+        </Section>
+      )}
 
       {/* ─── 4. Payment ─────────────────────────────────────── */}
-      <Section step={4} label="Payment" description="Choose how you'd like to pay.">
+      <Section step={isShop ? 3 : 4} label="Payment" description="Choose how you'd like to pay.">
         <PaymentSection
           paymentMethod={paymentMethod}
           screenshotName={screenshotName}
@@ -167,9 +204,9 @@ export function CheckoutForm({
 
       {/* ─── 5. Special Instructions ────────────────────────── */}
       <Section
-        step={5}
+        step={isShop ? 4 : 5}
         label="Special instructions"
-        description="Optional — parking, access codes, anything we should know."
+        description={isShop ? "Optional — delivery notes, gate codes, etc." : "Optional — parking, access codes, anything we should know."}
         optional
       >
         <div className="relative">
@@ -179,17 +216,18 @@ export function CheckoutForm({
             name="notes"
             value={formData.notes}
             onChange={handleChange}
-            placeholder="Parking available? Entry gate code? Mention floor number…"
+            placeholder={isShop ? "Entry instructions? Landmark? Leave package at front door?" : "Parking available? Entry gate code? Mention floor number…"}
             className="min-h-[90px] rounded-2xl border-slate-200 bg-slate-50 pl-10 text-sm focus-visible:ring-primary"
           />
         </div>
       </Section>
 
+
       {/* ─── Error ──────────────────────────────────────────── */}
-      {error ? (
+      {error || submitError ? (
         <div className="flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-          <p>{error}</p>
+          <p>{error || submitError}</p>
         </div>
       ) : null}
 

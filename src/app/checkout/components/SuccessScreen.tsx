@@ -20,7 +20,7 @@ interface SuccessScreenProps {
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
-  cash: "Cash on Delivery",
+  cash: "Cash",
   easypaisa: "EasyPaisa",
   jazzcash: "JazzCash",
 };
