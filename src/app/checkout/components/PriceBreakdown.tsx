@@ -2,6 +2,7 @@
 
 import { useMemo, type ReactNode } from "react";
 import { Separator } from "@/components/ui/separator";
+import { Info } from "lucide-react";
 import type { AdminSettings } from "../types";
 
 interface PriceBreakdownProps {
@@ -11,10 +12,11 @@ interface PriceBreakdownProps {
   settings: AdminSettings;
   paymentMethod: "cash" | "easypaisa" | "jazzcash";
   selectedAddress: string;
+  isShop?: boolean;
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
-  cash: "Cash on Delivery",
+  cash: "Cash",
   easypaisa: "EasyPaisa",
   jazzcash: "JazzCash",
 };
@@ -26,15 +28,16 @@ export function PriceBreakdown({
   settings,
   paymentMethod,
   selectedAddress,
+  isShop = false,
 }: PriceBreakdownProps) {
   const subtotal = servicePrice;
   const taxAmount = useMemo(
-    () => subtotal * (settings.serviceTaxPercent / 100),
-    [subtotal, settings.serviceTaxPercent]
+    () => isShop ? 0 : subtotal * (settings.serviceTaxPercent / 100),
+    [subtotal, settings.serviceTaxPercent, isShop]
   );
   const total = useMemo(
-    () => subtotal + taxAmount + settings.inspectionFee + settings.shippingCost,
-    [subtotal, taxAmount, settings.inspectionFee, settings.shippingCost]
+    () => subtotal + taxAmount + (isShop ? 0 : settings.inspectionFee) + (isShop ? settings.shippingCost : 0),
+    [subtotal, taxAmount, settings.inspectionFee, settings.shippingCost, isShop]
   );
   const rewardPoints = useMemo(
     () => Math.floor(subtotal / settings.rewardPointValue),
@@ -48,7 +51,7 @@ export function PriceBreakdown({
       {/* Service info */}
       <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-          Service
+          {isShop ? "Product" : "Service"}
         </p>
         <p className="mt-1 font-bold text-slate-900">{serviceTitle}</p>
         {workTitle ? (
@@ -61,13 +64,15 @@ export function PriceBreakdown({
       <div className="rounded-2xl border border-slate-100 bg-white p-4 text-sm">
         <p className="font-semibold text-slate-900">Charges breakdown</p>
         <div className="mt-3 space-y-2 text-slate-600">
-          <Row label="Service subtotal" value={fmt(subtotal)} />
-          <Row label="Inspection fee" value={fmt(settings.inspectionFee)} />
-          <Row
-            label={`Tax (${settings.serviceTaxPercent}%)`}
-            value={fmt(taxAmount)}
-          />
-          <Row label="Shipping" value={fmt(settings.shippingCost)} />
+          <Row label={isShop ? "Product subtotal" : "Service subtotal"} value={fmt(subtotal)} />
+          {!isShop && <Row label="Inspection fee" value={fmt(settings.inspectionFee)} />}
+          {!isShop && (
+            <Row
+              label={`Tax (${settings.serviceTaxPercent}%)`}
+              value={fmt(taxAmount)}
+            />
+          )}
+          {isShop && <Row label="Shipping" value={fmt(settings.shippingCost)} />}
         </div>
         <Separator className="my-3" />
         <div className="flex items-center justify-between font-bold text-slate-900">
@@ -75,6 +80,15 @@ export function PriceBreakdown({
           <span className="text-lg">{fmt(total)}</span>
         </div>
       </div>
+
+      {!isShop && (
+        <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4 text-xs text-blue-800 flex items-start gap-2.5">
+          <Info className="h-4 w-4 shrink-0 text-blue-500 mt-0.5" />
+          <p className="leading-normal">
+            <strong>Note:</strong> If the work is confirmed, the inspection fee will be adjusted in the service provided. If the work is not closed, {fmt(settings.inspectionFee)} service charges are to be paid.
+          </p>
+        </div>
+      )}
 
       {/* Meta */}
       <div className="rounded-2xl border border-slate-100 bg-white p-4 text-sm text-slate-600 space-y-2.5">

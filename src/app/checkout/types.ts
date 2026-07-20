@@ -20,6 +20,7 @@ export type FormData = {
   phone: string;
   houseNumber: string;
   landmark: string;
+  preferredDate: string;
   preferredTime: string;
   notes: string;
 };

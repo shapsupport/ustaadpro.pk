@@ -12,17 +12,12 @@ import { MotionWrapper } from "@/components/motion/MotionWrapper";
 import { NewsletterForm } from "@/components/shared/NewsletterForm";
 import type { ApiProduct, ApiShopResponse } from "@/lib/api-types";
 import {
-  ArrowRight,
   Bell,
   Filter,
   Package,
   Search,
-  Shield,
   ShoppingBag,
   SlidersHorizontal,
-  Sparkles,
-  Star,
-  Truck,
   X,
 } from "lucide-react";
 
@@ -41,17 +36,25 @@ function formatPrice(price?: number | string) {
 
 export default function StorePageClient() {
   const [products, setProducts] = useState<ApiProduct[]>([]);
-  const [categories, setCategories] = useState<ApiShopResponse["categories"]>([]);
-  const [loading, setLoading] = useState(true);
+  const [searchResults, setSearchResults] = useState<ApiProduct[]>([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [categories, setCategories] = useState<ApiShopResponse["categories"]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [sortOrder, setSortOrder] = useState("featured");
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const pageSize = 15;
 
   const loadProducts = useCallback(async () => {
+    await Promise.resolve();
+    setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/shop/products?limit=100`, {
+      const params = new URLSearchParams({ limit: String(pageSize), offset: String((page - 1) * pageSize) });
+      if (selectedCategory !== "all") params.set("category", selectedCategory);
+      const res = await fetch(`${API_BASE_URL}/api/shop/products?${params}`, {
         cache: "no-store",
       });
 
@@ -67,6 +70,7 @@ export default function StorePageClient() {
       const normalizedProducts = allProducts.filter((product: ApiProduct) => product?.id);
       setProducts(normalizedProducts);
       setCategories(Array.isArray(data?.categories) ? data.categories : []);
+      setTotal(Number(data?.total || normalizedProducts.length));
     } catch (error) {
       console.error("Failed to load store products:", error);
       setProducts([]);
@@ -74,118 +78,74 @@ export default function StorePageClient() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedCategory, page]);
 
   useEffect(() => {
-    let mounted = true;
-
-    const runLoad = async () => {
-      if (mounted && products.length === 0) {
-        setLoading(true);
-      }
-
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/shop/products?limit=100`, {
-          cache: "no-store",
-        });
-
-        if (!res.ok) throw new Error("Unable to load products");
-
-        const data = await res.json();
-        const allProducts = Array.isArray(data?.products)
-          ? data.products
-          : Array.isArray(data?.data)
-            ? data.data
-            : [];
-
-        if (mounted) {
-          setProducts(allProducts.filter((product: ApiProduct) => product?.id));
-          setCategories(Array.isArray(data?.categories) ? data.categories : []);
-        }
-      } catch (error) {
-        console.error("Failed to load store products:", error);
-        if (mounted) {
-          setProducts([]);
-          setCategories([]);
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void runLoad();
-
-    const handleFocus = () => {
-      void runLoad();
-    };
-
-    const intervalId = window.setInterval(() => {
-      void runLoad();
-    }, 60000);
-
-    window.addEventListener("focus", handleFocus);
-
-    return () => {
-      mounted = false;
-      window.removeEventListener("focus", handleFocus);
-      window.clearInterval(intervalId);
-    };
-  }, [products.length]);
+    if (debouncedSearch) return;
+    // Fetch the selected API category whenever the filter changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadProducts();
+  }, [loadProducts, debouncedSearch]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearch(search);
-    }, 300);
-
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => window.clearTimeout(timer);
   }, [search]);
 
+  useEffect(() => {
+    if (!debouncedSearch) {
+      // Clear the derived result set when returning to normal API pagination.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSearchResults([]);
+      return;
+    }
+    let active = true;
+    async function searchAllProducts() {
+      setSearching(true);
+      try {
+        const catalog: ApiProduct[] = [];
+        let offset = 0;
+        let hasMore = true;
+        while (hasMore && active) {
+          const params = new URLSearchParams({ limit: "30", offset: String(offset) });
+          if (selectedCategory !== "all") params.set("category", selectedCategory);
+          const response = await fetch(`${API_BASE_URL}/api/shop/products?${params}`, { cache: "no-store" });
+          if (!response.ok) throw new Error("Search could not load the catalog");
+          const data = await response.json();
+          const batch: ApiProduct[] = Array.isArray(data?.products) ? data.products : [];
+          catalog.push(...batch);
+          hasMore = Boolean(data?.hasMore);
+          offset += 30;
+        }
+        const keyword = debouncedSearch.toLocaleLowerCase();
+        const matches = catalog.filter((product) => [product.title, product.category, product.description].filter(Boolean).join(" ").toLocaleLowerCase().includes(keyword));
+        if (active) setSearchResults(matches);
+      } catch { if (active) setSearchResults([]); }
+      finally { if (active) setSearching(false); }
+    }
+    void searchAllProducts();
+    return () => { active = false; };
+  }, [debouncedSearch, selectedCategory]);
+
   const categoryItems = useMemo(() => {
-    const baseItems = [{ name: "all", total: products.length }];
+    const allTotal = categories.reduce((sum, item) => sum + Number(item.total || 0), 0);
+    const baseItems = [{ name: "all", total: selectedCategory === "all" ? total : allTotal }];
     return [...baseItems, ...categories.map((item) => ({ name: item.name, total: item.total }))];
-  }, [categories, products.length]);
-
-  const filteredProducts = useMemo(() => {
-    const keyword = debouncedSearch.trim().toLowerCase();
-
-    const matches = products.filter((product) => {
-      const haystack = [product.title, product.category, product.description]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      const matchesKeyword = !keyword || haystack.includes(keyword);
-      const matchesCategory =
-        selectedCategory === "all" ||
-        product.category?.toLowerCase() === selectedCategory.toLowerCase();
-
-      return matchesKeyword && matchesCategory;
-    });
-
-    const sorted = [...matches];
-    sorted.sort((left, right) => {
-      if (sortOrder === "price-asc") return Number(left.price) - Number(right.price);
-      if (sortOrder === "price-desc") return Number(right.price) - Number(left.price);
-      if (sortOrder === "newest") {
-        return (right.createdAt || "").localeCompare(left.createdAt || "");
-      }
-      return 0;
-    });
-
-    return sorted;
-  }, [products, debouncedSearch, selectedCategory, sortOrder]);
+  }, [categories, selectedCategory, total]);
 
   const clearFilters = useCallback(() => {
+    setSelectedCategory("all");
     setSearch("");
     setDebouncedSearch("");
-    setSelectedCategory("all");
-    setSortOrder("featured");
+    setPage(1);
     setShowMobileFilters(false);
   }, []);
 
-  const activeFilters = Boolean(debouncedSearch || selectedCategory !== "all" || sortOrder !== "featured");
+  const activeFilters = selectedCategory !== "all" || Boolean(debouncedSearch);
+  const visibleTotal = debouncedSearch ? searchResults.length : total;
+  const pageCount = Math.max(1, Math.ceil(visibleTotal / pageSize));
+  const visibleProducts = debouncedSearch ? searchResults.slice((page - 1) * pageSize, page * pageSize) : products;
+  const chooseCategory = useCallback((category: string) => { setSelectedCategory(category); setPage(1); }, []);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -206,7 +166,7 @@ export default function StorePageClient() {
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <div className="rounded-full border border-lime-200 bg-lime-50 px-3 py-2 text-sm font-semibold text-lime-700">
-                {products.length} products available
+                {total} products available
               </div>
               <div className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600">
                 Fast delivery • Verified stock
@@ -226,18 +186,13 @@ export default function StorePageClient() {
 
             <div className="mt-5 space-y-5">
               <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Search</label>
+                <label htmlFor="store-search" className="mb-2 block text-sm font-semibold text-slate-700">Search all products</label>
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search products"
-                    className="h-10 rounded-2xl border-slate-200 pl-9"
-                  />
+                  <Input id="store-search" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Name, category, description…" className="h-11 rounded-2xl border-slate-200 pl-9" />
                 </div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">Searches the complete {selectedCategory === "all" ? "shop catalog" : selectedCategory + " category"}.</p>
               </div>
-
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <p className="text-sm font-semibold text-slate-700">Categories</p>
@@ -250,7 +205,7 @@ export default function StorePageClient() {
                       <button
                         key={item.name}
                         type="button"
-                        onClick={() => setSelectedCategory(item.name)}
+                        onClick={() => chooseCategory(item.name)}
                         className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2.5 text-left text-sm font-medium transition ${
                           isActive
                             ? "border-lime-500 bg-lime-50 text-lime-700"
@@ -265,27 +220,9 @@ export default function StorePageClient() {
                 </div>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Sort by</label>
-                <div className="rounded-2xl border border-slate-200 bg-white p-2">
-                  <select
-                    value={sortOrder}
-                    onChange={(event) => setSortOrder(event.target.value)}
-                    className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none"
-                  >
-                    <option value="featured">Featured</option>
-                    <option value="newest">Newest</option>
-                    <option value="price-asc">Price: Low to high</option>
-                    <option value="price-desc">Price: High to low</option>
-                  </select>
-                </div>
-              </div>
-
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-sm font-semibold text-slate-900">{filteredProducts.length} products</p>
-                <p className="mt-1 text-sm text-slate-600">
-                  {debouncedSearch ? `Matching “${debouncedSearch}”` : "Ready to explore"}
-                </p>
+                <p className="text-sm font-semibold text-slate-900">{visibleTotal.toLocaleString("en-PK")} products</p>
+                <p className="mt-1 text-sm text-slate-600">{debouncedSearch ? `Matching “${debouncedSearch}”` : selectedCategory === "all" ? "All categories" : selectedCategory}</p>
               </div>
 
               {activeFilters ? (
@@ -300,15 +237,10 @@ export default function StorePageClient() {
             <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm lg:hidden">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search products"
-                  className="h-11 rounded-2xl border-slate-200 pl-9"
-                />
+                <Input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search all products" className="h-11 rounded-2xl border-slate-200 pl-9" />
               </div>
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-slate-600">{filteredProducts.length} products</p>
+                <p className="text-sm font-medium text-slate-600">{searching ? "Searching full catalog…" : `${visibleTotal} results · Page ${page} of ${pageCount}`}</p>
                 <Button type="button" variant="outline" className="gap-2" onClick={() => setShowMobileFilters(true)}>
                   <Filter className="h-4 w-4" />
                   Filter
@@ -323,30 +255,31 @@ export default function StorePageClient() {
                   <h2 className="mt-1 text-xl font-semibold text-slate-900">Find the right product faster</h2>
                 </div>
                 <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">
-                  Sorted by {sortOrder === "featured" ? "featured" : sortOrder === "newest" ? "newest" : sortOrder === "price-asc" ? "price low to high" : "price high to low"}
+                  Page {page} of {pageCount}
                 </div>
               </div>
             </div>
 
-            {loading ? (
+            {loading || searching ? (
               <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
                 {Array.from({ length: 6 }).map((_, index) => (
                   <div key={index} className="h-80 animate-pulse rounded-3xl border border-slate-200 bg-slate-100" />
                 ))}
               </div>
-            ) : filteredProducts.length > 0 ? (
+            ) : visibleProducts.length > 0 ? (
               <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-                {filteredProducts.map((product) => (
+                {visibleProducts.map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}
               </div>
             ) : (
               <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
                 <Package className="mx-auto h-10 w-10 text-slate-400" />
-                <h3 className="mt-4 text-lg font-semibold text-slate-900">No products match your search</h3>
-                <p className="mt-2 text-sm text-slate-600">Try another keyword or adjust your filters to see more results.</p>
-              </div>
+                <h3 className="mt-4 text-lg font-semibold text-slate-900">No products found</h3>
+                  <p className="mt-2 text-sm text-slate-600">Try a different product name or choose another category.</p>
+                </div>
             )}
+            {!loading && pageCount > 1 ? <Pagination page={page} pageCount={pageCount} onPage={setPage} /> : null}
           </div>
         </div>
       </div>
@@ -375,7 +308,7 @@ export default function StorePageClient() {
                         key={item.name}
                         type="button"
                         onClick={() => {
-                          setSelectedCategory(item.name);
+                          chooseCategory(item.name);
                           setShowMobileFilters(false);
                         }}
                         className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2.5 text-left text-sm font-medium transition ${
@@ -389,22 +322,6 @@ export default function StorePageClient() {
                       </button>
                     );
                   })}
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Sort by</label>
-                <div className="rounded-2xl border border-slate-200 bg-white p-2">
-                  <select
-                    value={sortOrder}
-                    onChange={(event) => setSortOrder(event.target.value)}
-                    className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none"
-                  >
-                    <option value="featured">Featured</option>
-                    <option value="newest">Newest</option>
-                    <option value="price-asc">Price: Low to high</option>
-                    <option value="price-desc">Price: High to low</option>
-                  </select>
                 </div>
               </div>
 
@@ -498,12 +415,26 @@ export default function StorePageClient() {
   );
 }
 
+function Pagination({ page, pageCount, onPage }: { page: number; pageCount: number; onPage: (page: number) => void }) {
+  const pages = Array.from({ length: pageCount }, (_, index) => index + 1).filter(
+    (item) => item === 1 || item === pageCount || Math.abs(item - page) <= 2,
+  );
+  return <nav aria-label="Shop pages" className="flex flex-wrap items-center justify-center gap-2 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+    <Button type="button" variant="outline" disabled={page === 1} onClick={() => onPage(page - 1)}>Previous</Button>
+    {pages.map((item, index) => <span key={item} className="contents">
+      {index > 0 && item - pages[index - 1] > 1 ? <span className="px-1 text-slate-400">…</span> : null}
+      <Button type="button" variant={item === page ? "default" : "outline"} aria-current={item === page ? "page" : undefined} onClick={() => onPage(item)} className="min-w-10">{item}</Button>
+    </span>)}
+    <Button type="button" variant="outline" disabled={page === pageCount} onClick={() => onPage(page + 1)}>Next</Button>
+  </nav>;
+}
+
 function ProductCard({ product }: { product: ApiProduct }) {
   const imageSrc = buildImageUrl(product.imageUrl);
   const hasDiscount = Boolean(product.originalPrice && Number(product.originalPrice) > Number(product.price));
 
   return (
-    <Link href={`/store/${product.id}`}>
+    <Link href={`/store/${product.id}`} onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch {} }}>
       <Card className="group h-full overflow-hidden border border-slate-200 transition-all hover:-translate-y-1 hover:border-lime-200 hover:shadow-xl">
         <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
           {imageSrc ? (
@@ -536,9 +467,7 @@ function ProductCard({ product }: { product: ApiProduct }) {
           </h3>
 
           <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
-            <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-            <span className="font-semibold text-slate-700">4.8</span>
-            <span>• In stock</span>
+            <span>{product.stock > 0 ? `${product.stock.toLocaleString("en-PK")} in stock` : "Out of stock"}</span>
           </div>
 
           <div className="mt-4 flex items-center gap-2">
