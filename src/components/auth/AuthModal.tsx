@@ -68,8 +68,8 @@ function InputRow({ icon, hasError, suffix, ...rest }: InputRowProps) {
   return (
     <div
       className={`flex items-center gap-2 bg-slate-50 border rounded-2xl px-4 py-1.5 transition-all focus-within:ring-1 ${hasError
-          ? "border-red-400 focus-within:border-red-400 focus-within:ring-red-400"
-          : "border-slate-200 focus-within:border-primary focus-within:ring-primary"
+        ? "border-red-400 focus-within:border-red-400 focus-within:ring-red-400"
+        : "border-slate-200 focus-within:border-primary focus-within:ring-primary"
         }`}
     >
       <span className="text-slate-400 shrink-0">{icon}</span>
@@ -341,8 +341,8 @@ export function AuthModal() {
                     type="button"
                     onClick={() => setVerificationChannel("email")}
                     className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 text-center transition-all ${verificationChannel === "email"
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-slate-200 hover:border-slate-300 text-slate-500"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-slate-200 hover:border-slate-300 text-slate-500"
                       }`}
                   >
                     <Mail className="h-5 w-5 mb-1" />
@@ -353,8 +353,8 @@ export function AuthModal() {
                     type="button"
                     onClick={() => setVerificationChannel("phone")}
                     className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 text-center transition-all ${verificationChannel === "phone"
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-slate-200 hover:border-slate-300 text-slate-500"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-slate-200 hover:border-slate-300 text-slate-500"
                       }`}
                   >
                     <Phone className="h-5 w-5 mb-1" />
