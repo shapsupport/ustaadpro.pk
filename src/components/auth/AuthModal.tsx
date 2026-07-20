@@ -101,6 +101,7 @@ export function AuthModal() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [verificationChannel, setVerificationChannel] = useState<"email" | "phone">("email");
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -111,6 +112,7 @@ export function AuthModal() {
   const resetForm = useCallback(() => {
     setName(""); setEmail(""); setPhone(""); setPassword("");
     setErrors({}); setApiError(""); setShowPassword(false);
+    setVerificationChannel("email");
   }, []);
 
   const switchMode = useCallback(
@@ -180,7 +182,7 @@ export function AuthModal() {
           email,
           phone,
           password,
-          verificationChannel: "email",
+          verificationChannel,
         };
         await signup(payload);
         resetForm();
@@ -327,6 +329,43 @@ export function AuthModal() {
                   }
                 />
               </Field>
+            )}
+
+            {/* ── Channel Selector (signup only) ── */}
+            {authModalMode === "signup" && (
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Verification Channel
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setVerificationChannel("email")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 text-center transition-all ${
+                      verificationChannel === "email"
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-slate-200 hover:border-slate-300 text-slate-500"
+                    }`}
+                  >
+                    <Mail className="h-5 w-5 mb-1" />
+                    <span className="text-sm font-bold">Email</span>
+                    <span className="text-[10px] text-slate-400">OTP via Email</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVerificationChannel("phone")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 text-center transition-all ${
+                      verificationChannel === "phone"
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-slate-200 hover:border-slate-300 text-slate-500"
+                    }`}
+                  >
+                    <Phone className="h-5 w-5 mb-1" />
+                    <span className="text-sm font-bold">SMS</span>
+                    <span className="text-[10px] text-slate-400">OTP via SMS</span>
+                  </button>
+                </div>
+              </div>
             )}
 
             {/* ── Forgot password link (login mode) ── */}

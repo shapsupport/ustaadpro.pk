@@ -106,13 +106,13 @@ export function OtpModal() {
 
       if (otpModal.mode === "signup-verify") {
         // await authService.signupUser(pendingSignup)
-        setResendSuccess("A new verification code has been sent.");
+        setResendSuccess(`A new verification code has been sent to your ${otpModal.verificationChannel === "phone" ? "phone" : "email"}.`);
       } else if (otpModal.mode === "forgot-password-verify") {
         await requestPasswordResetOtp({
           email: otpModal.email,
-          channel: "email",
+          channel: otpModal.verificationChannel,
         });
-        setResendSuccess("A new code has been sent to your email.");
+        setResendSuccess(`A new code has been sent to your ${otpModal.verificationChannel === "phone" ? "phone" : "email"}.`);
       }
     } catch (err) {
       setApiError(extractApiError(err));
@@ -271,10 +271,10 @@ export function OtpModal() {
             </div>
           )}
 
-          {/* Email delivery warning — shown when SMTP failed, OTP is in backend console */}
+          {/* Email/SMS delivery warning — shown when delivery failed, OTP is in backend console */}
           {otpModal.emailWarning && (
             <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-300 rounded-2xl text-sm text-amber-800 font-medium">
-              ⚠️ {otpModal.emailWarning}
+              ⚠️ {otpModal.emailWarning.replace("email", otpModal.verificationChannel === "phone" ? "SMS" : "email")}
             </div>
           )}
 
