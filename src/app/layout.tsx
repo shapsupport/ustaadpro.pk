@@ -8,6 +8,7 @@ import { LocationProvider } from "@/context/LocationContext";
 import { LocationModal } from "@/components/location/LocationModal";
 import { AuthProvider } from "@/context/AuthContext";
 import { AuthModal } from "@/components/auth/AuthModal";
+import { OtpModal } from "@/components/auth/OtpModal";
 import { WhatsAppBot } from "@/components/shared/WhatsAppBot";
 import { siteConfig } from "@/lib/constants";
 import "./globals.css";
@@ -101,6 +102,7 @@ export default function RootLayout({
             <Navbar />
             <LocationModal />
             <AuthModal />
+            <OtpModal />
             <MainWrapper>{children}</MainWrapper>
             <WhatsAppBot />
             <Footer />

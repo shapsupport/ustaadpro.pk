@@ -117,11 +117,10 @@ export function ServiceDetailClient({ service }: { service: ApiService }) {
                       <button
                         key={wp.id}
                         onClick={() => setSelectedWork(wp)}
-                        className={`flex items-start gap-3 text-left p-4 rounded-2xl border-2 transition-all ${
-                          isSelected
+                        className={`flex items-start gap-3 text-left p-4 rounded-2xl border-2 transition-all ${isSelected
                             ? "border-primary bg-emerald-50 shadow-sm"
                             : "border-slate-200 bg-white hover:border-primary/40 hover:bg-slate-50"
-                        }`}
+                          }`}
                       >
                         {wpImg && (
                           <div className="relative h-14 w-14 rounded-xl overflow-hidden shrink-0 bg-slate-100">
@@ -181,45 +180,45 @@ export function ServiceDetailClient({ service }: { service: ApiService }) {
             {/* ── Includes / Excludes ── */}
             {((service.includes?.length ?? 0) > 0 ||
               (service.excludes?.length ?? 0) > 0) && (
-              <div className="grid sm:grid-cols-2 gap-4">
-                {service.includes?.length > 0 && (
-                  <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-5">
-                    <h3 className="text-sm font-bold text-emerald-800 mb-3 flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4" /> What&apos;s Included
-                    </h3>
-                    <ul className="space-y-2">
-                      {service.includes.map((item, i) => (
-                        <li
-                          key={i}
-                          className="flex items-start gap-2 text-sm text-emerald-700"
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0 text-emerald-500" />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {service.excludes?.length > 0 && (
-                  <div className="bg-red-50 border border-red-100 rounded-3xl p-5">
-                    <h3 className="text-sm font-bold text-red-800 mb-3 flex items-center gap-2">
-                      <XCircle className="h-4 w-4" /> Not Included
-                    </h3>
-                    <ul className="space-y-2">
-                      {service.excludes.map((item, i) => (
-                        <li
-                          key={i}
-                          className="flex items-start gap-2 text-sm text-red-700"
-                        >
-                          <XCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-red-400" />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {service.includes?.length > 0 && (
+                    <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-5">
+                      <h3 className="text-sm font-bold text-emerald-800 mb-3 flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4" /> What&apos;s Included
+                      </h3>
+                      <ul className="space-y-2">
+                        {service.includes.map((item, i) => (
+                          <li
+                            key={i}
+                            className="flex items-start gap-2 text-sm text-emerald-700"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0 text-emerald-500" />
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {service.excludes?.length > 0 && (
+                    <div className="bg-red-50 border border-red-100 rounded-3xl p-5">
+                      <h3 className="text-sm font-bold text-red-800 mb-3 flex items-center gap-2">
+                        <XCircle className="h-4 w-4" /> Not Included
+                      </h3>
+                      <ul className="space-y-2">
+                        {service.excludes.map((item, i) => (
+                          <li
+                            key={i}
+                            className="flex items-start gap-2 text-sm text-red-700"
+                          >
+                            <XCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-red-400" />
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
           </div>
 
           {/* ── RIGHT: sticky booking card ── */}
