@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useLocation } from "@/context/LocationContext";
+import { createBooking } from "@/services/bookingService";
 
 import { CheckoutHeader } from "./components/CheckoutHeader";
 import { CheckoutForm } from "./components/CheckoutForm";
@@ -130,29 +131,62 @@ export default function CheckoutPageClient() {
           };
 
       try {
-        let token = "";
-        try {
-          const storedToken = localStorage.getItem("ustaadpro_token");
-          if (storedToken) token = storedToken;
-        } catch {}
+        let orderId = "";
+        if (isShop) {
+          const url = `${API_BASE_URL}/api/shop/checkout`;
+          const payload = {
+            items: [{ productId, quantity }],
+            address,
+            paymentMethod: paymentMethod === "easypaisa" ? "Easypaisa" : (paymentMethod === "jazzcash" ? "Jazzcash" : "Cash"),
+            useRewardPoints: false,
+          };
+          let token = "";
+          try {
+            const storedToken = localStorage.getItem("ustaadpro_token");
+            if (storedToken) token = storedToken;
+          } catch {}
 
-        const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (token) headers.Authorization = `Bearer ${token}`;
-        const res = await fetch(url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(payload),
-        });
+          const headers: Record<string, string> = { "Content-Type": "application/json" };
+          if (token) headers.Authorization = `Bearer ${token}`;
+          const res = await fetch(url, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(payload),
+          });
 
-        if (!res.ok) {
-          const responseBody = await res.json().catch(() => null) as { message?: string; error?: string } | null;
-          throw new Error(responseBody?.message || responseBody?.error || `The server could not place this order (${res.status}).`);
+          if (!res.ok) {
+            const responseBody = await res.json().catch(() => null) as { message?: string; error?: string } | null;
+            throw new Error(responseBody?.message || responseBody?.error || `The server could not place this order (${res.status}).`);
+          }
+          const data = await res.json();
+          orderId = data.order?.id || `BK-${Date.now()}`;
+        } else {
+          const resData = await createBooking({
+            name: formData.fullName,
+            phone: formData.phone,
+            address,
+            date: formData.preferredDate,
+            time: formData.preferredTime,
+            requirements: formData.notes,
+            items: [
+              {
+                serviceId,
+                serviceTitle,
+                servicePrice,
+                workPriceId,
+                workTitle,
+                quantity: 1,
+              },
+            ],
+            paymentMethod: paymentMethod === "easypaisa" ? "Easypaisa After Work Done" : (paymentMethod === "jazzcash" ? "Jazzcash After Work Done" : "Cash After Work Done"),
+            inspectionFee: settings.inspectionFee,
+            tax: taxAmount,
+          });
+          orderId = resData.order?.id || `BK-${Date.now()}`;
         }
 
-        const data = await res.json();
-
         const record: BookingRecord = {
-          id: data.order?.id || `BK-${Date.now()}`,
+          id: orderId,
           serviceTitle: checkoutTitle,
           workTitle: isShop ? "" : workTitle,
           servicePrice: checkoutPrice,

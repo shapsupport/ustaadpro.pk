@@ -17,6 +17,7 @@ import {
   Layers,
 } from "lucide-react";
 import type { ApiService, WorkPrice } from "@/lib/api-types";
+import BookingModal from "@/components/booking/BookingModal";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
@@ -42,6 +43,7 @@ export function ServiceDetailClient({ service }: { service: ApiService }) {
   const [selectedWork, setSelectedWork] = useState<WorkPrice | null>(
     service.workPrices?.[0] ?? null,
   );
+  const [isBookingOpen, setIsBookingOpen] = useState(false);
 
   const displayImage = imgSrc(service.image_url || service.imageUrl);
   const originalPrice = Number(
@@ -302,13 +304,14 @@ export function ServiceDetailClient({ service }: { service: ApiService }) {
                 </div>
 
                 {/* CTA */}
-                <Link
-                  href={bookingHref}
+                <button
+                  type="button"
+                  onClick={() => setIsBookingOpen(true)}
                   className="flex items-center justify-center gap-2 w-full bg-primary hover:bg-emerald-700 text-white font-bold py-4 rounded-2xl text-base transition-colors shadow-lg shadow-primary/20"
                 >
                   <ShoppingBag className="h-5 w-5" />
                   Book Now
-                </Link>
+                </button>
                 <a
                   href={`https://wa.me/${process.env.NEXT_PUBLIC_WA_NUM}`}
                   target="_blank"
@@ -346,6 +349,19 @@ export function ServiceDetailClient({ service }: { service: ApiService }) {
           </div>
         </div>
       </div>
+
+      {/* Booking Form Modal */}
+      <BookingModal
+        isOpen={isBookingOpen}
+        onClose={() => setIsBookingOpen(false)}
+        service={{
+          id: service.id,
+          title: service.title,
+          price: bookingPrice,
+          selectedWorkPriceId: selectedWork?.id ? Number(selectedWork.id) : undefined,
+          selectedWorkTitle: selectedWork?.title || undefined,
+        }}
+      />
     </div>
   );
 }

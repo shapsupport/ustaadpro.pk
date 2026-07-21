@@ -103,11 +103,37 @@ function BookingCard({ booking }: { booking: Booking }) {
 }
 
 function BookingActions({ booking, completed }: { booking: Booking; completed: boolean }) {
-  const [panel, setPanel] = useState<"review" | "issue" | null>(null);
+  const [panel, setPanel] = useState<"review" | "issue" | "receipt" | null>(null);
+  const isEasyPaisa = booking.paymentMethod?.toLowerCase().includes("easypaisa");
+
   return <div className="mt-5"><div className="flex flex-wrap gap-2">
     {completed && booking.kind !== "shop" && <Button onClick={() => setPanel(panel === "review" ? null : "review")}><Star className="mr-2 h-4 w-4" />Write review</Button>}
+    {isEasyPaisa && <Button variant="outline" onClick={() => setPanel(panel === "receipt" ? null : "receipt")}><Camera className="mr-2 h-4 w-4 text-emerald-600" />Upload Payment Receipt</Button>}
     <Button variant="outline" onClick={() => setPanel(panel === "issue" ? null : "issue")}><MessageSquareWarning className="mr-2 h-4 w-4" />Raise an issue</Button>
-  </div>{panel === "review" && <ReviewForm booking={booking} />}{panel === "issue" && <IssueForm booking={booking} />}</div>;
+  </div>{panel === "review" && <ReviewForm booking={booking} />}{panel === "receipt" && <UploadReceiptForm booking={booking} />}{panel === "issue" && <IssueForm booking={booking} />}</div>;
+}
+
+function UploadReceiptForm({ booking }: { booking: Booking }) {
+  const [dataUrl, setDataUrl] = useState(""), [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
+  async function submit() {
+    if (!dataUrl) { setMessage("Please select a valid receipt image."); return; }
+    setBusy(true); setMessage("");
+    try {
+      const res = await fetch(`${API_BASE}/api/orders/${booking.id}/payment-receipt`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ dataUrl, amount: booking.servicePrice || 0 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Receipt upload failed.");
+      setMessage("Receipt uploaded successfully! Admin will verify your payment.");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Receipt upload failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <div className="mt-4 space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4"><p className="font-bold text-slate-900">Upload EasyPaisa Proof of Payment</p><ImagePicker onChange={(urls) => setDataUrl(urls[0] || "")} />{message && <p className="text-sm font-medium text-slate-700">{message}</p>}<Button onClick={() => void submit()} disabled={busy}>{busy ? "Uploading…" : "Upload receipt screenshot"}</Button></div>;
 }
 
 function ReviewForm({ booking }: { booking: Booking }) {
