@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { footerLinks, socialLinks, siteConfig } from "@/lib/constants";
 import { Separator } from "@/components/ui/separator";
 import { NewsletterForm } from "@/components/shared/NewsletterForm";
@@ -47,13 +48,14 @@ export function Footer() {
 
       <div className="container-wide grid gap-10 px-4 py-14 sm:grid-cols-2 md:px-6 lg:grid-cols-5 lg:gap-8 lg:px-8">
         <div className="lg:col-span-2">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-lime-500">
-              <span className="text-lg font-black text-white">U</span>
-            </div>
-            <span className="text-xl font-bold text-white">
-              Ustaad <span className="text-lime-400">Pro</span>
-            </span>
+          <Link href="/" aria-label="Ustaad Pro Home" className="inline-flex rounded-2xl bg-white p-2 shadow-lg shadow-black/20">
+            <Image
+              src="/brand/ustaad-pro-logo.webp"
+              alt="Ustaad Pro — Expert Service Every Time"
+              width={144}
+              height={144}
+              className="h-32 w-32 object-contain"
+            />
           </Link>
           <p className="mt-4 max-w-xs text-sm leading-7 text-slate-400">
             {siteConfig.tagline}. Book reliable professionals for repairs, maintenance, renovations, and everyday home support in Pakistan.

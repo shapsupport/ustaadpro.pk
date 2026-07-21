@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -65,9 +66,14 @@ export function Navbar() {
             className="flex shrink-0 items-center gap-3"
             aria-label="Ustaad Pro Home"
           >
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-emerald-700 shadow-md shadow-primary/20">
-              <span className="text-xl font-black text-white">U</span>
-            </div>
+            <Image
+              src="/brand/ustaad-pro-mark.webp"
+              alt=""
+              width={48}
+              height={48}
+              priority
+              className="h-12 w-12 rounded-2xl object-contain shadow-md shadow-primary/15"
+            />
 
             <span className="text-2xl font-black tracking-tight text-slate-900">
               Ustaad<span className="font-bold text-primary">Pro</span>
