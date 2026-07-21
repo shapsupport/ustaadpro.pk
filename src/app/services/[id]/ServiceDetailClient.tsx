@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Star,
@@ -17,6 +18,7 @@ import {
   Layers,
 } from "lucide-react";
 import type { ApiService, WorkPrice } from "@/lib/api-types";
+import { StickyCheckoutBar } from "@/components/shared/StickyCheckoutBar";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
@@ -39,9 +41,12 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 export function ServiceDetailClient({ service }: { service: ApiService }) {
+  const router = useRouter();
   const [selectedWork, setSelectedWork] = useState<WorkPrice | null>(
     service.workPrices?.[0] ?? null,
   );
+  const [showStickyCheckout, setShowStickyCheckout] = useState(false);
+  const bookingButtonRef = useRef<HTMLAnchorElement>(null);
 
   const displayImage = imgSrc(service.image_url || service.imageUrl);
   const originalPrice = Number(
@@ -54,20 +59,37 @@ export function ServiceDetailClient({ service }: { service: ApiService }) {
       : 0;
   const bookingHref = `/checkout?serviceId=${service.id}&serviceTitle=${encodeURIComponent(service.title)}&servicePrice=${bookingPrice}&workTitle=${encodeURIComponent(selectedWork?.title || "")}&workPriceId=${selectedWork?.id || ""}`;
 
+  useEffect(() => {
+    const updateStickyCheckout = () => {
+      const button = bookingButtonRef.current;
+      setShowStickyCheckout(Boolean(button && button.getBoundingClientRect().bottom < 0));
+    };
+
+    updateStickyCheckout();
+    window.addEventListener("scroll", updateStickyCheckout, { passive: true });
+    window.addEventListener("resize", updateStickyCheckout);
+    return () => {
+      window.removeEventListener("scroll", updateStickyCheckout);
+      window.removeEventListener("resize", updateStickyCheckout);
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* ── Back bar ── */}
-      <div className="sticky top-20 z-30 bg-white/90 backdrop-blur-md border-b border-slate-100 px-4 py-3">
+      <div className="border-b border-slate-100 bg-white/90 px-4 py-3 backdrop-blur-md">
         <div className="max-w-6xl mx-auto flex items-center gap-3">
-          <Link
-            href="/"
-            className="flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-primary transition-colors"
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="flex shrink-0 items-center gap-2 rounded-xl px-2 py-1.5 text-base font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-primary sm:text-lg"
+            aria-label="Go back to the previous page"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Home
-          </Link>
-          <ChevronRight className="h-4 w-4 text-slate-300" />
-          <span className="text-sm text-slate-400">{service.title}</span>
+            <ArrowLeft className="h-5 w-5 sm:h-6 sm:w-6" />
+            Back
+          </button>
+          <ChevronRight className="h-5 w-5 shrink-0 text-slate-300" />
+          <span className="truncate text-base font-medium text-slate-500 sm:text-lg">{service.title}</span>
         </div>
       </div>
 
@@ -303,13 +325,7 @@ export function ServiceDetailClient({ service }: { service: ApiService }) {
                 </div>
 
                 {/* CTA */}
-                <Link
-                  href={bookingHref}
-                  className="flex items-center justify-center gap-2 w-full bg-primary hover:bg-emerald-700 text-white font-bold py-4 rounded-2xl text-base transition-colors shadow-lg shadow-primary/20"
-                >
-                  <ShoppingBag className="h-5 w-5" />
-                  Book Now
-                </Link>
+                <Link ref={bookingButtonRef} href={bookingHref} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-3 py-4 text-base font-bold text-white shadow-lg shadow-primary/20 transition-colors hover:bg-emerald-700"><ShoppingBag className="h-5 w-5" />Book Now</Link>
                 <a
                   href={`https://wa.me/${process.env.NEXT_PUBLIC_WA_NUM}`}
                   target="_blank"
@@ -347,6 +363,13 @@ export function ServiceDetailClient({ service }: { service: ApiService }) {
           </div>
         </div>
       </div>
+      <StickyCheckoutBar
+        visible={showStickyCheckout}
+        href={bookingHref}
+        label="Book Now"
+        title={selectedWork?.title || service.title}
+        price={`Rs ${bookingPrice.toLocaleString()}`}
+      />
     </div>
   );
 }

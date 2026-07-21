@@ -15,6 +15,7 @@ import { useLocation } from "@/context/LocationContext";
 import { useAuth } from "@/context/AuthContext";
 import { UserProfileModal } from "@/components/auth/UserProfileModal";
 import { useRef } from "react";
+import { searchApi } from "@/lib/search";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
@@ -41,8 +42,20 @@ const CAT_ICONS: Record<string, LucideIcon> = {
   subscriptions: Calendar,
 };
 
-// Priority order — these appear first
-const PRIORITY_CATS = ["electrician", "plumbers", "carpenter", "home-cleaning", "ac-services"];
+const CATEGORY_PRIORITY = [
+  ["electrician", "electrical"],
+  ["plumber", "plumbing"],
+  ["carpenter", "carpentry"],
+  ["home service", "home-service", "home_services"],
+] as const;
+
+function categoryPriority(category: ApiCategory) {
+  const searchable = `${category.id} ${category.title}`.toLowerCase();
+  const priority = CATEGORY_PRIORITY.findIndex((keywords) =>
+    keywords.some((keyword) => searchable.includes(keyword)),
+  );
+  return priority === -1 ? CATEGORY_PRIORITY.length : priority;
+}
 
 const heroMaintenanceSlides = [
   {
@@ -71,8 +84,11 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [profileOpen, setProfileOpen] = useState(false);
   const [heroSlideIndex, setHeroSlideIndex] = useState(0);
+  const [serviceSearchResults, setServiceSearchResults] = useState<ApiService[]>([]);
+  const [searching, setSearching] = useState(false);
 
   const tabsRef = useRef<HTMLDivElement>(null);
+  const servicesRef = useRef<HTMLDivElement>(null);
 
   const scrollTabs = (direction: "left" | "right") => {
     if (!tabsRef.current) return;
@@ -89,80 +105,48 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
     return catIds.map((id) => {
       const found = categories.find((c) => c.id === id);
       return found ?? { id, title: id.replace(/-/g, " "), subtitle: "", icon: "", tint: "#059669" };
-    });
+    }).sort((a, b) => categoryPriority(a) - categoryPriority(b));
   }, [initialServices, categories]);
 
-  const categoryTabs = useMemo(() => {
-    const tabs = [{ id: "all", label: "All Services", icon: Layers }];
-    const requested = [
-      { id: "subscriptions", label: "Subscriptions", icon: Calendar },
-      { id: "ac-services", label: "HVAC Services", icon: Snowflake },
-      { id: "cctv", label: "CCTV Services", icon: Camera },
-      { id: "welder-fabricator", label: "Welder & Fabricator", icon: Flame },
-      { id: "carpenter", label: "Carpenter", icon: Hammer },
-      { id: "painters", label: "Painters", icon: Paintbrush },
-      { id: "plumbers", label: "Plumber", icon: Wrench },
-      { id: "home-cleaning", label: "Home Cleaning", icon: Sparkles },
-      { id: "electrician", label: "Electrician", icon: Zap },
-    ];
+  const categoryTabs = useMemo(() => [
+    { id: "all", label: "All Services", icon: Layers },
+    ...allCategories.map((category) => ({
+      id: category.id,
+      label: category.title,
+      icon: CAT_ICONS[category.id] || Wrench,
+    })),
+  ], [allCategories]);
 
-    const seen = new Set<string>();
-    requested.forEach((tab) => {
-      const known = allCategories.find((cat) => cat.id === tab.id);
-      if (!seen.has(tab.id) && (known || tab.id === "all")) {
-        tabs.push({ id: tab.id, label: tab.label, icon: tab.icon });
-        seen.add(tab.id);
-      }
+  const selectCategory = (categoryId: string) => {
+    setActiveCategory(categoryId);
+    window.requestAnimationFrame(() => {
+      servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-
-    allCategories.forEach((cat) => {
-      if (!seen.has(cat.id)) {
-        tabs.push({ id: cat.id, label: cat.title, icon: CAT_ICONS[cat.id] || Wrench });
-        seen.add(cat.id);
-      }
-    });
-
-    return tabs;
-  }, [allCategories]);
-
-  const matchesCategory = (service: ApiService, category: string) => {
-    if (category === "all") return true;
-    const normalized = category.toLowerCase();
-    const serviceCategory = service.category_id?.toLowerCase() || "";
-    const title = service.title.toLowerCase();
-    const aliases: Record<string, string[]> = {
-      electrician: ["electrician"],
-      plumbers: ["plumbers", "plumber"],
-      "home-cleaning": ["home-cleaning", "cleaning"],
-      "ac-services": ["ac-services", "hvac", "air-conditioner", "ac"],
-      cctv: ["cctv", "security"],
-      subscriptions: ["subscriptions", "subscription"],
-      "welder-fabricator": ["welder", "fabricator", "welder-fabricator"],
-      carpenter: ["carpenter"],
-      painters: ["painters", "painting"],
-    };
-
-    return (aliases[normalized] ?? [normalized]).some((alias) => serviceCategory.includes(alias) || title.includes(alias));
   };
 
-  // Filter + search, then sort by priority
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setSearching(true);
+      try { setServiceSearchResults(await searchApi(query, "service", controller.signal)); }
+      catch { if (!controller.signal.aborted) setServiceSearchResults([]); }
+      finally { if (!controller.signal.aborted) setSearching(false); }
+    }, 300);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [searchQuery]);
+
+  // Global search is restricted to service results on the homepage.
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    const base = initialServices.filter((s) => {
-      const matchCat = matchesCategory(s, activeCategory);
-      const matchQ = !q || s.title.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
-      return matchCat && matchQ;
+    const source = q ? serviceSearchResults : initialServices;
+    const base = source.filter((s) => {
+      const matchCat = activeCategory === "all" || s.category_id === activeCategory;
+      return matchCat;
     });
-    // Sort: priority cats first, then alphabetical by title
-    return base.sort((a, b) => {
-      const ai = PRIORITY_CATS.indexOf(a.category_id);
-      const bi = PRIORITY_CATS.indexOf(b.category_id);
-      if (ai !== -1 && bi === -1) return -1;
-      if (bi !== -1 && ai === -1) return 1;
-      if (ai !== -1 && bi !== -1) return ai - bi;
-      return a.title.localeCompare(b.title);
-    });
-  }, [initialServices, activeCategory, searchQuery]);
+    return base;
+  }, [initialServices, serviceSearchResults, activeCategory, searchQuery]);
 
   const featuredService = initialServices[heroSlideIndex];
 
@@ -229,7 +213,12 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
                   <Search className="h-5 w-5 text-slate-400 mr-3 shrink-0" />
                   <input
                     value={searchQuery}
-                    onChange={(e) => { setSearchQuery(e.target.value); setActiveCategory("all"); }}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSearchQuery(value);
+                      setActiveCategory("all");
+                      if (!value.trim()) { setServiceSearchResults([]); setSearching(false); }
+                    }}
                     placeholder="Search services (e.g. AC service, wiring…)"
                     className="w-full bg-transparent h-14 outline-none text-base text-slate-800 placeholder:text-slate-400"
                   />
@@ -334,15 +323,6 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
       <div className="bg-white border-b border-slate-100 sticky top-22 z-20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="relative">
-            {/* Left Arrow */}
-            <button
-              onClick={() => scrollTabs("left")}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow rounded-full p-2 hover:bg-slate-100"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-
-            {/* Tabs */}
             <div className="relative">
               {/* Left Arrow */}
               <button
@@ -363,7 +343,7 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveCategory(tab.id)}
+                      onClick={() => selectCategory(tab.id)}
                       className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors shrink-0 ${activeCategory === tab.id
                         ? "bg-primary text-white shadow-sm"
                         : "text-slate-600 hover:bg-slate-100"
@@ -385,22 +365,15 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
               </button>
             </div>
 
-            {/* Right Arrow */}
-            <button
-              onClick={() => scrollTabs("right")}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow rounded-full p-2 hover:bg-slate-100"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
           </div>
         </div>
       </div>
 
       {/* ── Service slider ── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <div ref={servicesRef} className="max-w-7xl mx-auto scroll-mt-36 px-4 sm:px-6 lg:px-8 py-10">
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-slate-900">Our Services</h2>
-          <p className="mt-1 text-sm text-slate-500">{filtered.length} service{filtered.length !== 1 ? "s" : ""} available in Rawalpindi &amp; Islamabad right now</p>
+          <p className="mt-1 text-sm text-slate-500">{searching ? "Searching all services…" : `${filtered.length} service${filtered.length !== 1 ? "s" : ""} available in Rawalpindi & Islamabad right now`}</p>
         </div>
 
         {filtered.length === 0 ? (

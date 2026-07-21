@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -14,7 +14,6 @@ import {
   Layers,
   Paintbrush,
   Search,
-  ShieldCheck,
   Snowflake,
   Sparkles,
   Star,
@@ -26,6 +25,7 @@ import {
 } from "lucide-react";
 import type { ApiCategory, ApiService } from "@/lib/api-types";
 import { useRef } from "react";
+import { searchApi } from "@/lib/search";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
@@ -47,8 +47,6 @@ const CAT_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   subscriptions: Calendar,
 };
 
-const PRIORITY_CATS = ["electrician", "plumbers", "carpenter", "home-cleaning", "ac-services"];
-
 interface ServicesPageContentProps {
   initialServices: ApiService[];
   initialCategories: ApiCategory[];
@@ -57,8 +55,11 @@ interface ServicesPageContentProps {
 export function ServicesPageContent({ initialServices, initialCategories }: ServicesPageContentProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [serviceSearchResults, setServiceSearchResults] = useState<ApiService[]>([]);
+  const [searching, setSearching] = useState(false);
 
   const tabsRef = useRef<HTMLDivElement>(null);
+  const servicesRef = useRef<HTMLDivElement>(null);
 
   const scrollTabs = (direction: "left" | "right") => {
     tabsRef.current?.scrollBy({
@@ -75,23 +76,52 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
     });
   }, [initialServices, initialCategories]);
 
+  const selectCategory = (categoryId: string, updateUrl = false) => {
+    setActiveCategory(categoryId);
+    if (updateUrl) {
+      window.history.replaceState(null, "", categoryId === "all" ? "/services" : `/services#${categoryId}`);
+    }
+    window.requestAnimationFrame(() => {
+      servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  useEffect(() => {
+    const selectFromHash = () => {
+      const categoryId = window.location.hash.slice(1);
+      if (categoryId && allCategories.some((category) => category.id === categoryId)) {
+        selectCategory(categoryId);
+      }
+    };
+
+    selectFromHash();
+    window.addEventListener("hashchange", selectFromHash);
+    return () => window.removeEventListener("hashchange", selectFromHash);
+  }, [allCategories]);
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setSearching(true);
+      try { setServiceSearchResults(await searchApi(query, "service", controller.signal)); }
+      catch { if (!controller.signal.aborted) setServiceSearchResults([]); }
+      finally { if (!controller.signal.aborted) setSearching(false); }
+    }, 300);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [searchQuery]);
+
   const filtered = useMemo(() => {
-    const q = searchQuery.toLowerCase();
-    const base = initialServices.filter((s) => {
+    const q = searchQuery.trim();
+    const source = q ? serviceSearchResults : initialServices;
+    const base = source.filter((s) => {
       const matchCat = activeCategory === "all" || s.category_id === activeCategory;
-      const matchQ = !q || s.title.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
-      return matchCat && matchQ;
+      return matchCat;
     });
 
-    return base.sort((a, b) => {
-      const ai = PRIORITY_CATS.indexOf(a.category_id);
-      const bi = PRIORITY_CATS.indexOf(b.category_id);
-      if (ai !== -1 && bi === -1) return -1;
-      if (bi !== -1 && ai === -1) return 1;
-      if (ai !== -1 && bi !== -1) return ai - bi;
-      return a.title.localeCompare(b.title);
-    });
-  }, [initialServices, activeCategory, searchQuery]);
+    return base;
+  }, [initialServices, serviceSearchResults, activeCategory, searchQuery]);
 
   return (
     <div className="min-h-screen bg-slate-50 pt-0">
@@ -118,8 +148,10 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
                   placeholder="Search services, e.g. AC or painter"
                   value={searchQuery}
                   onChange={(e) => {
-                    setSearchQuery(e.target.value);
+                    const value = e.target.value;
+                    setSearchQuery(value);
                     setActiveCategory("all");
+                    if (!value.trim()) { setServiceSearchResults([]); setSearching(false); }
                   }}
                   className="h-12 w-full bg-transparent text-base text-slate-800 outline-none placeholder:text-slate-400"
                 />
@@ -175,7 +207,7 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
               className="flex gap-2 overflow-x-auto px-14 py-3 hide-scrollbar scroll-smooth"
             >
               <button
-                onClick={() => setActiveCategory("all")}
+                onClick={() => selectCategory("all", true)}
                 className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition ${activeCategory === "all"
                   ? "bg-primary text-white shadow-sm"
                   : "text-slate-600 hover:bg-slate-100"
@@ -190,7 +222,7 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
                 return (
                   <button
                     key={cat.id}
-                    onClick={() => setActiveCategory(cat.id)}
+                    onClick={() => selectCategory(cat.id, true)}
                     className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition ${activeCategory === cat.id
                       ? "bg-primary text-white shadow-sm"
                       : "text-slate-600 hover:bg-slate-100"
@@ -215,12 +247,12 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <div ref={servicesRef} className="mx-auto max-w-7xl scroll-mt-36 px-4 py-10 sm:px-6 lg:px-8">
         <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-slate-900">Service shortlist</h2>
             <p className="text-sm text-slate-500">
-              {filtered.length} option{filtered.length !== 1 ? "s" : ""} ready for your next booking.
+              {searching ? "Searching all services…" : `${filtered.length} option${filtered.length !== 1 ? "s" : ""} ready for your next booking.`}
             </p>
           </div>
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm">

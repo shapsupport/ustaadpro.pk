@@ -22,7 +22,6 @@ export const quickAccessMenu = [
   { label: "My Profile", href: "/profile", icon: "User" },
   { label: "My Bookings", href: "/track-booking", icon: "Calendar" },
   { label: "My Store Orders", href: "/store/orders", icon: "Package" },
-  { label: "Cart", href: "/cart", icon: "ShoppingCart" },
   { label: "Privacy Policy", href: "/privacy-policy", icon: "FileText" },
 ] as const;
 
@@ -41,11 +40,11 @@ export const footerLinks = {
     { label: "FAQs", href: "/#faqs" },
   ],
   services: [
-    { label: "Electrical", href: "/services#electrical" },
-    { label: "Plumbing", href: "/services#plumbing" },
-    { label: "AC & HVAC", href: "/services#hvac" },
-    { label: "Painting", href: "/services#painting" },
-    { label: "Cleaning", href: "/services#cleaning" },
+    { label: "Electrical", href: "/services#electrician" },
+    { label: "Plumbing", href: "/services#plumbers" },
+    { label: "AC & HVAC", href: "/services#ac-services" },
+    { label: "Painting", href: "/services#painters" },
+    { label: "Cleaning", href: "/services#home-cleaning" },
     { label: "View All", href: "/services" },
   ],
   store: [

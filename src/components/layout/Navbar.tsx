@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { Menu, MapPin, ChevronDown, UserRound, LogIn, LogOut, Settings } from "lucide-react";
+import { Menu, MapPin, ChevronDown, UserRound } from "lucide-react";
 import { MobileNav } from "./MobileNav";
 import { useLocation } from "@/context/LocationContext";
 import { useAuth } from "@/context/AuthContext";
@@ -15,24 +15,41 @@ export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [navHidden, setNavHidden] = useState(false);
+  const lastScrollY = useRef(0);
 
   const pathname = usePathname();
   const { location, setShowPicker } = useLocation();
   const { user, setAuthModalMode } = useAuth();
+  const isDetailPage = /^\/(services|store)\/[^/]+$/.test(pathname);
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 10);
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      setScrolled(currentScrollY > 10);
 
+      if (!isDetailPage || currentScrollY <= 80) {
+        setNavHidden(false);
+      } else if (Math.abs(currentScrollY - lastScrollY.current) > 8) {
+        setNavHidden(currentScrollY > lastScrollY.current);
+      }
+      lastScrollY.current = currentScrollY;
+    };
+
+    lastScrollY.current = window.scrollY;
     window.addEventListener("scroll", handleScroll, { passive: true });
 
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [isDetailPage]);
 
   return (
     <>
       <header
         className={cn(
           "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
+          isDetailPage && navHidden && !mobileOpen && !profileOpen
+            ? "-translate-y-full"
+            : "translate-y-0",
           scrolled
             ? "border-b border-slate-100 bg-white/95 shadow-sm backdrop-blur-md py-1"
             : "bg-white/80 backdrop-blur-sm py-2"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { SectionHeader } from "@/components/shared/SectionHeader";
 import { MotionWrapper } from "@/components/motion/MotionWrapper";
 import { NewsletterForm } from "@/components/shared/NewsletterForm";
 import type { ApiProduct, ApiShopResponse } from "@/lib/api-types";
+import { searchApi } from "@/lib/search";
 import {
   Bell,
   Filter,
@@ -47,6 +48,7 @@ export default function StorePageClient() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const pageSize = 15;
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   const loadProducts = useCallback(async () => {
     await Promise.resolve();
@@ -97,35 +99,22 @@ export default function StorePageClient() {
       // Clear the derived result set when returning to normal API pagination.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSearchResults([]);
+      setSearching(false);
       return;
     }
     let active = true;
+    const controller = new AbortController();
     async function searchAllProducts() {
       setSearching(true);
       try {
-        const catalog: ApiProduct[] = [];
-        let offset = 0;
-        let hasMore = true;
-        while (hasMore && active) {
-          const params = new URLSearchParams({ limit: "30", offset: String(offset) });
-          if (selectedCategory !== "all") params.set("category", selectedCategory);
-          const response = await fetch(`${API_BASE_URL}/api/shop/products?${params}`, { cache: "no-store" });
-          if (!response.ok) throw new Error("Search could not load the catalog");
-          const data = await response.json();
-          const batch: ApiProduct[] = Array.isArray(data?.products) ? data.products : [];
-          catalog.push(...batch);
-          hasMore = Boolean(data?.hasMore);
-          offset += 30;
-        }
-        const keyword = debouncedSearch.toLocaleLowerCase();
-        const matches = catalog.filter((product) => [product.title, product.category, product.description].filter(Boolean).join(" ").toLocaleLowerCase().includes(keyword));
+        const matches = await searchApi(debouncedSearch, "shop_product", controller.signal);
         if (active) setSearchResults(matches);
       } catch { if (active) setSearchResults([]); }
       finally { if (active) setSearching(false); }
     }
     void searchAllProducts();
-    return () => { active = false; };
-  }, [debouncedSearch, selectedCategory]);
+    return () => { active = false; controller.abort(); };
+  }, [debouncedSearch]);
 
   const categoryItems = useMemo(() => {
     const allTotal = categories.reduce((sum, item) => sum + Number(item.total || 0), 0);
@@ -142,10 +131,15 @@ export default function StorePageClient() {
   }, []);
 
   const activeFilters = selectedCategory !== "all" || Boolean(debouncedSearch);
-  const visibleTotal = debouncedSearch ? searchResults.length : total;
+  const filteredSearchResults = useMemo(() => selectedCategory === "all" ? searchResults : searchResults.filter((product) => product.category === selectedCategory), [searchResults, selectedCategory]);
+  const visibleTotal = debouncedSearch ? filteredSearchResults.length : total;
   const pageCount = Math.max(1, Math.ceil(visibleTotal / pageSize));
-  const visibleProducts = debouncedSearch ? searchResults.slice((page - 1) * pageSize, page * pageSize) : products;
+  const visibleProducts = debouncedSearch ? filteredSearchResults.slice((page - 1) * pageSize, page * pageSize) : products;
   const chooseCategory = useCallback((category: string) => { setSelectedCategory(category); setPage(1); }, []);
+  const choosePage = useCallback((nextPage: number) => {
+    setPage(nextPage);
+    window.requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -233,7 +227,7 @@ export default function StorePageClient() {
             </div>
           </aside>
 
-          <div className="space-y-6">
+          <div ref={resultsRef} className="scroll-mt-28 space-y-6">
             <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm lg:hidden">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -279,7 +273,7 @@ export default function StorePageClient() {
                   <p className="mt-2 text-sm text-slate-600">Try a different product name or choose another category.</p>
                 </div>
             )}
-            {!loading && pageCount > 1 ? <Pagination page={page} pageCount={pageCount} onPage={setPage} /> : null}
+            {!loading && pageCount > 1 ? <Pagination page={page} pageCount={pageCount} onPage={choosePage} /> : null}
           </div>
         </div>
       </div>
