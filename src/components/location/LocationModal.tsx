@@ -3,18 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { MapPin, Navigation, Search, X, Loader2, AlertCircle } from "lucide-react";
 import { useLocation } from "@/context/LocationContext";
-import { searchLocations, type LocationSuggestion } from "@/lib/location";
-
-const POPULAR_AREAS = [
-  { label: "Bahria Town", sublabel: "Rawalpindi", query: "Bahria Town, Rawalpindi, Pakistan" },
-  { label: "DHA Phase 2", sublabel: "Islamabad", query: "DHA Phase 2, Islamabad, Pakistan" },
-  { label: "Satellite Town", sublabel: "Rawalpindi", query: "Satellite Town, Rawalpindi, Pakistan" },
-  { label: "F-10 Markaz", sublabel: "Islamabad", query: "F-10 Islamabad, Pakistan" },
-  { label: "G-9", sublabel: "Islamabad", query: "G-9 Islamabad, Pakistan" },
-  { label: "Saddar", sublabel: "Rawalpindi", query: "Saddar, Rawalpindi, Pakistan" },
-  { label: "Blue Area", sublabel: "Islamabad", query: "Blue Area Islamabad, Pakistan" },
-  { label: "Chaklala", sublabel: "Rawalpindi", query: "Chaklala, Rawalpindi, Pakistan" },
-];
+import { searchLocations, TWIN_CITY_LOCALITIES, type LocationSuggestion } from "@/lib/location";
 
 export function LocationModal() {
   const {
@@ -31,6 +20,7 @@ export function LocationModal() {
   const [fetching, setFetching] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const [selecting, setSelecting] = useState(false);
+  const [selectedCity, setSelectedCity] = useState<keyof typeof TWIN_CITY_LOCALITIES>("Islamabad");
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -47,11 +37,11 @@ export function LocationModal() {
 
     setFetching(true);
     debounceRef.current = setTimeout(async () => {
-      const results = await searchLocations(value);
+      const results = await searchLocations(value, selectedCity);
       setSuggestions(results);
       setFetching(false);
     }, 350);
-  }, []);
+  }, [selectedCity]);
 
   const handleSelect = (s: LocationSuggestion) => {
     setSelecting(true);
@@ -63,14 +53,14 @@ export function LocationModal() {
     setSelecting(false);
   };
 
-  const handlePopular = async (q: string, city: string, label: string) => {
+  const handlePopular = async (locality: string, city: keyof typeof TWIN_CITY_LOCALITIES) => {
     setSelecting(true);
-    const results = await searchLocations(q.split(",")[0]);
+    const results = await searchLocations(locality, city);
     if (results.length > 0) {
-      setManualLocation(results[0].coords, label, city, label.split(",")[0]);
+      setManualLocation(results[0].coords, `${locality}, ${city}`, city, locality);
     } else {
-      // Fallback coords for the twin cities center if geocoding fails
-      setManualLocation({ lat: 33.6007, lng: 73.0679 }, label, city, label.split(",")[0]);
+      const coords = city === "Islamabad" ? { lat: 33.7285, lng: 73.0938 } : { lat: 33.6007, lng: 73.0679 };
+      setManualLocation(coords, `${locality}, ${city}`, city, locality);
     }
     setSelecting(false);
   };
@@ -98,7 +88,7 @@ export function LocationModal() {
         role="dialog"
         aria-modal="true"
         aria-label="Select your location"
-        className="fixed inset-x-4 top-1/2 z-[70] max-w-md mx-auto -translate-y-1/2 bg-white rounded-3xl shadow-2xl overflow-hidden"
+        className="fixed inset-x-4 top-1/2 z-[70] mx-auto max-h-[90vh] max-w-lg -translate-y-1/2 overflow-y-auto rounded-3xl bg-white shadow-2xl"
       >
         {/* Header */}
         <div className="bg-gradient-to-br from-primary to-emerald-700 p-6 text-white relative">
@@ -141,10 +131,16 @@ export function LocationModal() {
         </div>
 
         <div className="p-5 space-y-4">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Choose city</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(["Islamabad", "Rawalpindi"] as const).map((city) => <button key={city} type="button" onClick={() => { if (debounceRef.current) clearTimeout(debounceRef.current); setSelectedCity(city); setQuery(""); setSuggestions([]); setFetching(false); }} className={`rounded-xl border px-4 py-2.5 text-sm font-bold transition ${selectedCity === city ? "border-primary bg-emerald-50 text-primary" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>{city}</button>)}
+            </div>
+          </div>
           {/* ── Autocomplete search ── */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-              Search your area in Rawalpindi or Islamabad
+              Search locality in {selectedCity}
             </p>
 
             <div className="relative">
@@ -156,7 +152,7 @@ export function LocationModal() {
                   value={query}
                   onChange={(e) => handleQueryChange(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Type area, sector or colony…"
+                  placeholder={`Type an area in ${selectedCity}…`}
                   autoComplete="off"
                   className="flex-1 bg-transparent h-11 text-sm outline-none placeholder:text-slate-400 text-slate-800"
                   aria-autocomplete="list"
@@ -193,7 +189,7 @@ export function LocationModal() {
               {!fetching && query.length >= 2 && suggestions.length === 0 && (
                 <p className="flex items-center gap-1.5 text-xs text-slate-400 mt-2 px-1">
                   <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                  No areas found in Rawalpindi / Islamabad for &ldquo;{query}&rdquo;
+                  No locality found in {selectedCity} for &ldquo;{query}&rdquo;
                 </p>
               )}
             </div>
@@ -202,20 +198,20 @@ export function LocationModal() {
           {/* ── Popular quick picks ── */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-              Popular areas in the twin cities
+              Localities in {selectedCity}
             </p>
-            <div className="grid grid-cols-2 gap-2">
-              {POPULAR_AREAS.map((area) => (
+            <div className="grid max-h-44 grid-cols-2 gap-2 overflow-y-auto pr-1">
+              {TWIN_CITY_LOCALITIES[selectedCity].map((locality) => (
                 <button
-                  key={area.label}
-                  onClick={() => handlePopular(area.query, area.sublabel, `${area.label}, ${area.sublabel}`)}
+                  key={locality}
+                  onClick={() => handlePopular(locality, selectedCity)}
                   disabled={selecting || isLoading}
                   className="flex items-start gap-2 text-left bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 rounded-xl px-3 py-2.5 transition-all disabled:opacity-50 group"
                 >
                   <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400 group-hover:text-primary mt-0.5 transition-colors" />
                   <div>
-                    <p className="text-xs font-semibold text-slate-700 group-hover:text-primary transition-colors leading-tight">{area.label}</p>
-                    <p className="text-[10px] text-slate-400">{area.sublabel}</p>
+                    <p className="text-xs font-semibold text-slate-700 group-hover:text-primary transition-colors leading-tight">{locality}</p>
+                    <p className="text-[10px] text-slate-400">{selectedCity}</p>
                   </div>
                 </button>
               ))}

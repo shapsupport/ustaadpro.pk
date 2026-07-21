@@ -26,6 +26,8 @@ import {
 import type { ApiCategory, ApiService } from "@/lib/api-types";
 import { useRef } from "react";
 import { searchApi } from "@/lib/search";
+import { orderCategories, orderServices } from "@/lib/service-order";
+import { SearchSuggestions } from "@/components/search/SearchSuggestions";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
@@ -70,10 +72,10 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
 
   const allCategories = useMemo(() => {
     const catIds = [...new Set(initialServices.map((s) => s.category_id))];
-    return catIds.map((id) => {
+    return orderCategories(catIds.map((id) => {
       const found = initialCategories.find((c) => c.id === id);
       return found ?? { id, title: id.replace(/-/g, " "), subtitle: "", icon: "", tint: "#059669" };
-    });
+    }));
   }, [initialServices, initialCategories]);
 
   const selectCategory = (categoryId: string, updateUrl = false) => {
@@ -114,7 +116,7 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim();
-    const source = q ? serviceSearchResults : initialServices;
+    const source = orderServices(q ? serviceSearchResults : initialServices);
     const base = source.filter((s) => {
       const matchCat = activeCategory === "all" || s.category_id === activeCategory;
       return matchCat;
@@ -141,7 +143,7 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
             </p>
 
             <div className="mt-8 flex flex-col gap-3 rounded-3xl border border-white/20 bg-white/10 p-4 shadow-xl backdrop-blur-sm sm:flex-row sm:items-center">
-              <div className="flex flex-1 items-center rounded-2xl bg-white px-4 shadow-sm">
+              <div className="relative flex flex-1 items-center rounded-2xl bg-white px-4 shadow-sm">
                 <Search className="mr-3 h-5 w-5 text-slate-400" />
                 <input
                   type="text"
@@ -153,8 +155,15 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
                     setActiveCategory("all");
                     if (!value.trim()) { setServiceSearchResults([]); setSearching(false); }
                   }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }
+                  }}
                   className="h-12 w-full bg-transparent text-base text-slate-800 outline-none placeholder:text-slate-400"
                 />
+                <SearchSuggestions query={searchQuery} scope="service" services={initialServices} />
               </div>
               <button
                 onClick={() => {
@@ -295,12 +304,13 @@ function ServiceCardLarge({ service }: { service: ApiService }) {
   return (
     <Link href={`/services/${service.id}`} className="group block">
       <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-        <div className="relative h-52 shrink-0 bg-slate-100">
+        <div className="relative h-60 shrink-0 bg-slate-100 sm:h-64">
           {src ? (
             <Image
               src={src}
               alt={service.title}
               fill
+              unoptimized
               className="object-cover transition-transform duration-500 group-hover:scale-105"
               sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
             />
@@ -327,15 +337,15 @@ function ServiceCardLarge({ service }: { service: ApiService }) {
         </div>
 
         <div className="flex flex-1 flex-col p-6">
-          <h3 className="text-lg font-bold text-slate-900 transition-colors group-hover:text-primary">{service.title}</h3>
-          <p className="mt-2 flex-1 text-sm leading-6 text-slate-500">
+          <h3 className="text-xl font-bold leading-snug text-slate-900 transition-colors group-hover:text-primary sm:text-2xl">{service.title}</h3>
+          <p className="mt-2 flex-1 text-base leading-7 text-slate-500">
             {service.detail_description || service.description}
           </p>
 
           <div className="mt-5 flex items-center gap-2">
-            <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-            <span className="text-sm font-bold text-slate-700">{service.rating}</span>
-            <span className="text-xs text-slate-400">({service.reviews} reviews)</span>
+            <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+            <span className="text-base font-bold text-slate-700">{service.rating}</span>
+            <span className="text-sm text-slate-400">({service.reviews} reviews)</span>
             {service.workPrices && service.workPrices.length > 0 ? (
               <span className="ml-auto flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-primary">
                 <BadgeCheck className="h-3.5 w-3.5" />
@@ -348,12 +358,12 @@ function ServiceCardLarge({ service }: { service: ApiService }) {
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Starting from</p>
               <div className="mt-1 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-slate-900">Rs {service.price.toLocaleString()}</span>
+                <span className="text-3xl font-black text-slate-900">Rs {service.price.toLocaleString()}</span>
                 {discount > 0 ? <span className="text-xs text-slate-400 line-through">Rs {originalPrice.toLocaleString()}</span> : null}
               </div>
             </div>
-            <span className="flex items-center gap-1.5 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-md shadow-primary/20 transition hover:bg-emerald-700">
-              Book <ArrowRight className="h-4 w-4" />
+            <span className="flex items-center gap-2 rounded-2xl bg-primary px-5 py-3.5 text-base font-bold text-white shadow-md shadow-primary/20 transition hover:bg-emerald-700">
+              Book <ArrowRight className="h-5 w-5" />
             </span>
           </div>
         </div>

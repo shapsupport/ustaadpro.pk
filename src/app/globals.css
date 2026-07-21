@@ -218,3 +218,51 @@
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+.shop-category-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #84cc16 #f1f5f9;
+}
+
+.shop-category-scrollbar::-webkit-scrollbar {
+  height: 7px;
+}
+
+.shop-category-scrollbar::-webkit-scrollbar-track {
+  border-radius: 9999px;
+  background: #f1f5f9;
+}
+
+.shop-category-scrollbar::-webkit-scrollbar-thumb {
+  border: 1px solid #f1f5f9;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #84cc16, #10b981);
+}
+
+.shop-category-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #65a30d;
+}
+
+.search-results-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 transparent;
+}
+
+.search-results-scrollbar::-webkit-scrollbar {
+  width: 7px;
+}
+
+.search-results-scrollbar::-webkit-scrollbar-track {
+  margin-block: 10px;
+  background: transparent;
+}
+
+.search-results-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid white;
+  border-radius: 9999px;
+  background: #94a3b8;
+}
+
+.search-results-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}

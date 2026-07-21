@@ -37,7 +37,7 @@ export const footerLinks = {
   quickLinks: [
     { label: "Home", href: "/" },
     { label: "Contact", href: "/contact" },
-    { label: "FAQs", href: "/#faqs" },
+    { label: "FAQs", href: "/faqs" },
   ],
   services: [
     { label: "Electrical", href: "/services#electrician" },

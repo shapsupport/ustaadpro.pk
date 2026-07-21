@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useState, useMemo, useEffect } from "react";
 import {
-  Search, MapPin, ChevronDown, ChevronRight, ChevronLeft, Star, UserRound,
+  Search, MapPin, ChevronDown, ChevronRight, ChevronLeft, Star,
   Clock, Layers, BadgeCheck, ArrowRight, Zap,
   Snowflake, Wrench, Sparkles, Shirt, Paintbrush,
   Hammer, Camera, Flame, Calendar,
@@ -12,10 +12,10 @@ import {
 } from "lucide-react";
 import type { ApiService, ApiCategory } from "@/lib/api-types";
 import { useLocation } from "@/context/LocationContext";
-import { useAuth } from "@/context/AuthContext";
-import { UserProfileModal } from "@/components/auth/UserProfileModal";
 import { useRef } from "react";
 import { searchApi } from "@/lib/search";
+import { orderCategories, orderServices } from "@/lib/service-order";
+import { SearchSuggestions } from "@/components/search/SearchSuggestions";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
@@ -42,47 +42,10 @@ const CAT_ICONS: Record<string, LucideIcon> = {
   subscriptions: Calendar,
 };
 
-const CATEGORY_PRIORITY = [
-  ["electrician", "electrical"],
-  ["plumber", "plumbing"],
-  ["carpenter", "carpentry"],
-  ["home service", "home-service", "home_services"],
-] as const;
-
-function categoryPriority(category: ApiCategory) {
-  const searchable = `${category.id} ${category.title}`.toLowerCase();
-  const priority = CATEGORY_PRIORITY.findIndex((keywords) =>
-    keywords.some((keyword) => searchable.includes(keyword)),
-  );
-  return priority === -1 ? CATEGORY_PRIORITY.length : priority;
-}
-
-const heroMaintenanceSlides = [
-  {
-    title: "Office maintenance",
-    description: "Fast support for electrical fixes, AC upkeep, plumbing issues, and preventive care for offices and commercial spaces.",
-    price: "4,500",
-    badge: "Popular",
-  },
-  {
-    title: "Corporate cleaning",
-    description: "Scheduled cleaning, sanitization, and facility refreshes that keep workspaces presentable and productive.",
-    price: "6,000",
-    badge: "Flexible",
-  },
-  {
-    title: "Facility support",
-    description: "Reliable handyman and maintenance coverage for urgent repairs, installations, and small office upgrades.",
-    price: "3,200",
-    badge: "Same day",
-  },
-];
-
 export function AppLayout({ initialServices, categories }: AppLayoutProps) {
   const { location, setShowPicker } = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
-  const [profileOpen, setProfileOpen] = useState(false);
   const [heroSlideIndex, setHeroSlideIndex] = useState(0);
   const [serviceSearchResults, setServiceSearchResults] = useState<ApiService[]>([]);
   const [searching, setSearching] = useState(false);
@@ -102,11 +65,13 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
   // De-dup categories from services + API categories
   const allCategories = useMemo(() => {
     const catIds = [...new Set(initialServices.map((s) => s.category_id))];
-    return catIds.map((id) => {
+    return orderCategories(catIds.map((id) => {
       const found = categories.find((c) => c.id === id);
       return found ?? { id, title: id.replace(/-/g, " "), subtitle: "", icon: "", tint: "#059669" };
-    }).sort((a, b) => categoryPriority(a) - categoryPriority(b));
+    }));
   }, [initialServices, categories]);
+
+  const orderedServices = useMemo(() => orderServices(initialServices), [initialServices]);
 
   const categoryTabs = useMemo(() => [
     { id: "all", label: "All Services", icon: Layers },
@@ -140,15 +105,15 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
   // Global search is restricted to service results on the homepage.
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    const source = q ? serviceSearchResults : initialServices;
+    const source = orderServices(q ? serviceSearchResults : orderedServices);
     const base = source.filter((s) => {
       const matchCat = activeCategory === "all" || s.category_id === activeCategory;
       return matchCat;
     });
     return base;
-  }, [initialServices, serviceSearchResults, activeCategory, searchQuery]);
+  }, [orderedServices, serviceSearchResults, activeCategory, searchQuery]);
 
-  const featuredService = initialServices[heroSlideIndex];
+  const featuredService = orderedServices[heroSlideIndex];
 
   const featuredImg = imgSrc(
     featuredService?.image_url || featuredService?.imageUrl
@@ -157,16 +122,16 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
   const activeHeroSlide = featuredService;
 
   useEffect(() => {
-    if (!initialServices.length) return;
+    if (!orderedServices.length) return;
 
     const timer = window.setInterval(() => {
       setHeroSlideIndex(
-        (current) => (current + 1) % initialServices.length
+        (current) => (current + 1) % orderedServices.length
       );
     }, 5000);
 
     return () => window.clearInterval(timer);
-  }, [initialServices]);
+  }, [orderedServices]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -209,7 +174,7 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
 
               {/* Search */}
               <div className="flex items-center gap-3">
-                <div className="flex-1 flex items-center bg-white rounded-2xl px-4 shadow-xl focus-within:ring-2 focus-within:ring-emerald-300 transition-all">
+                <div className="relative flex flex-1 items-center rounded-2xl bg-white px-4 shadow-xl transition-all focus-within:ring-2 focus-within:ring-emerald-300">
                   <Search className="h-5 w-5 text-slate-400 mr-3 shrink-0" />
                   <input
                     value={searchQuery}
@@ -219,9 +184,16 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
                       setActiveCategory("all");
                       if (!value.trim()) { setServiceSearchResults([]); setSearching(false); }
                     }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }
+                    }}
                     placeholder="Search services (e.g. AC service, wiring…)"
                     className="w-full bg-transparent h-14 outline-none text-base text-slate-800 placeholder:text-slate-400"
                   />
+                  <SearchSuggestions query={searchQuery} scope="service" services={initialServices} />
                 </div>
               </div>
             </div>
@@ -245,7 +217,7 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
                     onClick={() =>
                       setHeroSlideIndex(
                         (current) =>
-                          (current - 1 + initialServices.length) % initialServices.length
+                          (current - 1 + orderedServices.length) % orderedServices.length
                       )
                     }
                     className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
@@ -258,7 +230,7 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
                     type="button"
                     onClick={() =>
                       setHeroSlideIndex(
-                        (current) => (current + 1) % initialServices.length
+                        (current) => (current + 1) % orderedServices.length
                       )
                     }
                     className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
@@ -270,11 +242,14 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
               </div>
 
               {featuredImg && (
-                <div className="mt-5 overflow-hidden rounded-2xl">
-                  <img
+                <div className="relative mt-5 h-52 overflow-hidden rounded-2xl">
+                  <Image
                     src={featuredImg}
-                    alt={activeHeroSlide?.title}
-                    className="h-52 w-full object-cover"
+                    alt={activeHeroSlide?.title || "Featured service"}
+                    fill
+                    unoptimized
+                    sizes="(max-width: 1024px) 100vw, 40vw"
+                    className="object-cover"
                   />
                 </div>
               )}
@@ -396,7 +371,6 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
         )}
       </div>
 
-      <UserProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
     </div>
   );
 }
@@ -412,12 +386,13 @@ function ServiceCardLarge({ service }: { service: ApiService }) {
     <Link href={`/services/${service.id}`} className="group block">
       <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col h-full">
         {/* Bigger image container */}
-        <div className="relative h-56 bg-slate-100 overflow-hidden shrink-0">
+        <div className="relative h-60 bg-slate-100 overflow-hidden shrink-0 sm:h-64">
           {src ? (
             <Image
               src={src}
               alt={service.title}
               fill
+              unoptimized
               className="object-cover group-hover:scale-105 transition-transform duration-500"
               sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
             />
@@ -453,18 +428,18 @@ function ServiceCardLarge({ service }: { service: ApiService }) {
 
         {/* Content */}
         <div className="p-6 flex flex-col flex-1">
-          <h3 className="font-bold text-slate-900 text-lg mb-2 group-hover:text-primary transition-colors line-clamp-1">
+          <h3 className="mb-2 line-clamp-2 text-xl font-bold leading-snug text-slate-900 transition-colors group-hover:text-primary sm:text-2xl">
             {service.title}
           </h3>
-          <p className="text-sm text-slate-500 leading-relaxed line-clamp-3 mb-6 flex-1">
+          <p className="mb-6 line-clamp-3 flex-1 text-base leading-7 text-slate-500">
             {service.detail_description || service.description}
           </p>
 
           {/* Rating */}
           <div className="flex items-center gap-2 mb-6">
-            <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-            <span className="text-sm font-bold text-slate-700">{service.rating}</span>
-            <span className="text-xs text-slate-400">({service.reviews} reviews)</span>
+            <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+            <span className="text-base font-bold text-slate-700">{service.rating}</span>
+            <span className="text-sm text-slate-400">({service.reviews} reviews)</span>
             {service.workPrices && service.workPrices.length > 0 && (
               <span className="ml-auto flex items-center gap-1 text-xs text-primary font-bold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
                 <BadgeCheck className="h-3.5 w-3.5" />
@@ -478,14 +453,14 @@ function ServiceCardLarge({ service }: { service: ApiService }) {
             <div>
               <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Starting from</p>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-slate-900">Rs {service.price.toLocaleString()}</span>
+                <span className="text-3xl font-black text-slate-900">Rs {service.price.toLocaleString()}</span>
                 {discount > 0 && (
                   <span className="text-xs text-slate-400 line-through">Rs {originalPrice.toLocaleString()}</span>
                 )}
               </div>
             </div>
-            <span className="flex items-center gap-1.5 bg-primary hover:bg-emerald-700 text-white text-sm font-bold px-4 py-3 rounded-2xl transition-all shadow-md shadow-primary/20">
-              Book <ArrowRight className="h-4 w-4" />
+            <span className="flex items-center gap-2 bg-primary hover:bg-emerald-700 text-white text-base font-bold px-5 py-3.5 rounded-2xl transition-all shadow-md shadow-primary/20">
+              Book <ArrowRight className="h-5 w-5" />
             </span>
           </div>
         </div>

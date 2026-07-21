@@ -40,8 +40,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
       const saved = localStorage.getItem(LOCATION_STORAGE_KEY);
       if (saved) {
         const parsed: LocationState = JSON.parse(saved);
-        setLocation(parsed);
-        return;
+        const restoreTimer = setTimeout(() => setLocation(parsed), 0);
+        return () => clearTimeout(restoreTimer);
       }
     } catch {}
     // No saved location — show the picker after a short delay
@@ -117,11 +117,15 @@ export function LocationProvider({ children }: { children: ReactNode }) {
     setShowPicker(true);
   }, []);
 
-  // Skip = treat user as serviceable (we can't verify), hide modal, don't persist
+  // Closing a later picker keeps the user's saved selection. First-time skips are
+  // persisted too, so navigation into checkout never loses the chosen state.
   const skipLocation = useCallback(() => {
     setShowPicker(false);
-    setLocation({ status: "serviceable", label: "Rawalpindi / Islamabad" });
-  }, []);
+    if (location.label) return;
+    const fallback: LocationState = { status: "serviceable", city: "Rawalpindi / Islamabad", label: "Rawalpindi / Islamabad", shortLabel: "Rawalpindi / Islamabad" };
+    setLocation(fallback);
+    try { localStorage.setItem(LOCATION_STORAGE_KEY, JSON.stringify(fallback)); } catch {}
+  }, [location.label]);
 
   return (
     <LocationContext.Provider

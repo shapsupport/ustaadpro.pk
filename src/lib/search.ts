@@ -2,32 +2,71 @@ import type { ApiProduct, ApiService } from "@/lib/api-types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "";
 
-type SearchResult = Partial<ApiService & ApiProduct> & {
+export type SearchResult = Partial<ApiService & ApiProduct> & {
   resultType: "service" | "shop_product";
+  suggestionId?: string;
   category_id?: string;
   categoryId?: string;
 };
+
+function searchTerms(query: string) {
+  const value = query.trim();
+  const terms = [value];
+  if (/\bac\b/i.test(value)) terms.push(value.replace(/\bac\b/gi, "HVAC"));
+  if (/\bhvac\b/i.test(value)) terms.push(value.replace(/\bhvac\b/gi, "AC"));
+  return [...new Set(terms)];
+}
+
+function uniqueResults(results: SearchResult[]) {
+  return [...new Map(results.map((result) => [`${result.resultType}-${result.id}`, result])).values()];
+}
+
+export async function searchSuggestions(
+  query: string,
+  scope: "all" | SearchResult["resultType"] = "all",
+  signal?: AbortSignal,
+): Promise<SearchResult[]> {
+  const resultGroups = await Promise.all(searchTerms(query).map(async (term) => {
+    const params = new URLSearchParams({ q: term, limit: "30", offset: "0" });
+    const response = await fetch(`${API_BASE_URL}/api/search?${params}`, { cache: "no-store", signal });
+    if (!response.ok) throw new Error(`Search returned HTTP ${response.status}`);
+    const data = await response.json();
+    return (Array.isArray(data?.results) ? data.results : []) as SearchResult[];
+  }));
+  const results = uniqueResults(resultGroups.flat());
+  if (scope === "all") {
+    return [
+      ...results.filter((result) => result.resultType === "service").slice(0, 4),
+      ...results.filter((result) => result.resultType === "shop_product").slice(0, 4),
+    ];
+  }
+
+  return results.filter((result) => result.resultType === scope).slice(0, 8);
+}
 
 export async function searchApi(query: string, resultType: "service", signal?: AbortSignal): Promise<ApiService[]>;
 export async function searchApi(query: string, resultType: "shop_product", signal?: AbortSignal): Promise<ApiProduct[]>;
 export async function searchApi(query: string, resultType: SearchResult["resultType"], signal?: AbortSignal): Promise<ApiService[] | ApiProduct[]> {
   const matches: SearchResult[] = [];
-  let offset = 0;
-  let hasMore = true;
-
-  while (hasMore && offset < 5_000) {
-    const params = new URLSearchParams({ q: query, limit: "50", offset: String(offset) });
-    const response = await fetch(`${API_BASE_URL}/api/search?${params}`, { cache: "no-store", signal });
-    if (!response.ok) throw new Error(`Search returned HTTP ${response.status}`);
-    const data = await response.json();
-    const results: SearchResult[] = Array.isArray(data?.results) ? data.results : [];
-    matches.push(...results.filter((result) => result.resultType === resultType));
-    hasMore = Boolean(data?.hasMore);
-    offset += Number(data?.limit || 50);
+  for (const term of searchTerms(query)) {
+    let offset = 0;
+    let hasMore = true;
+    while (hasMore && offset < 5_000) {
+      const params = new URLSearchParams({ q: term, limit: "50", offset: String(offset) });
+      const response = await fetch(`${API_BASE_URL}/api/search?${params}`, { cache: "no-store", signal });
+      if (!response.ok) throw new Error(`Search returned HTTP ${response.status}`);
+      const data = await response.json();
+      const results: SearchResult[] = Array.isArray(data?.results) ? data.results : [];
+      matches.push(...results.filter((result) => result.resultType === resultType));
+      hasMore = Boolean(data?.hasMore);
+      offset += Number(data?.limit || 50);
+    }
   }
 
+  const deduplicatedMatches = uniqueResults(matches);
+
   if (resultType === "shop_product") {
-    return matches.map((result) => ({
+    return deduplicatedMatches.map((result) => ({
       id: String(result.id || ""),
       title: result.title || "Untitled product",
       category: result.category || "Other",
@@ -41,7 +80,7 @@ export async function searchApi(query: string, resultType: SearchResult["resultT
     } satisfies ApiProduct));
   }
 
-  return matches.map((result) => ({
+  return deduplicatedMatches.map((result) => ({
     ...result,
     id: String(result.id || ""),
     category_id: result.category_id || result.categoryId || "",
