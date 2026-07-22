@@ -146,7 +146,7 @@ export async function createBooking(data: CreateBookingPayload): Promise<Booking
     return res.data;
   } catch (err: any) {
     const serverMessage = err.response?.data?.message || err.response?.data?.error || err.message || "";
-    
+
     // If backend reports work price ID not found in DB, retry without workPriceId
     if (serverMessage.includes("work price") || serverMessage.includes("Selected service work price")) {
       const sanitizedCart = payload.cart.map((cartItem) => {

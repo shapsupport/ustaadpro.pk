@@ -61,11 +61,19 @@ export default function TrackBookingPage() {
     } finally { setLoading(false); }
   }, [user]);
 
+  // Initial load
   useEffect(() => {
-    // Initial remote synchronization for this client-only account page.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  // Auto-refresh every 30 seconds for real-time status updates
+  useEffect(() => {
+    if (!user?.email) return;
+    const interval = setInterval(() => {
+      load();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [user, load]);
 
   if (!user) return <SignIn onLogin={() => setAuthModalMode("login")} />;
 
@@ -84,37 +92,67 @@ export default function TrackBookingPage() {
 function BookingCard({ booking }: { booking: Booking }) {
   const [open, setOpen] = useState(false);
   const normalized = booking.status.toLowerCase().replace(/\s+/g, "_");
-  const active = Math.max(0, statusSteps.indexOf(normalized));
+  const isCancelled = normalized === "cancelled";
+  const active = isCancelled ? -1 : Math.max(0, statusSteps.indexOf(normalized));
+
   return <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
     <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between gap-4 p-5 text-left">
       <div className="min-w-0"><div className="flex items-center gap-2"><Package className="h-5 w-5 shrink-0 text-primary" /><p className="truncate text-lg font-semibold text-slate-900">{booking.serviceTitle}</p></div><p className="mt-1 text-sm text-slate-500">#{booking.id} · {new Date(booking.createdAt).toLocaleDateString("en-PK", { dateStyle: "medium" })}</p></div>
-      <div className="flex shrink-0 items-center gap-3"><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold capitalize text-emerald-700">{normalized.replaceAll("_", " ")}</span><ChevronDown className={`h-5 w-5 text-slate-400 transition ${open ? "rotate-180" : ""}`} /></div>
+      <div className="flex shrink-0 items-center gap-3">
+        <span className={`rounded-full px-3 py-1.5 text-xs font-bold capitalize ${isCancelled ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
+          {normalized.replaceAll("_", " ")}
+        </span>
+        <ChevronDown className={`h-5 w-5 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+      </div>
     </button>
     {open && <div className="border-t border-slate-100 p-5">
-      {booking.kind !== "shop" && <div className="mb-6 grid grid-cols-4 gap-1">{statusSteps.map((step, i) => <div key={step} className="text-center"><div className={`mx-auto h-2 rounded-full ${i <= active ? "bg-emerald-500" : "bg-slate-200"}`} /><p className="mt-2 text-[10px] font-semibold capitalize text-slate-500">{step.replace("_", " ")}</p></div>)}</div>}
+      {!isCancelled && booking.kind !== "shop" && <div className="mb-6 grid grid-cols-4 gap-1">{statusSteps.map((step, i) => <div key={step} className="text-center"><div className={`mx-auto h-2 rounded-full ${i <= active ? "bg-emerald-500" : "bg-slate-200"}`} /><p className="mt-2 text-[10px] font-semibold capitalize text-slate-500">{step.replace("_", " ")}</p></div>)}</div>}
+      {isCancelled && (
+        <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-center">
+          <p className="text-sm font-bold text-red-700">This order has been cancelled</p>
+        </div>
+      )}
       <div className="grid gap-3 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700 sm:grid-cols-2">
         <p><strong>Payment:</strong> {booking.paymentMethod}</p><p><strong>Amount:</strong> PKR {Number(booking.servicePrice || 0).toLocaleString("en-PK")}</p>
         {booking.preferredTime && <p className="flex gap-2"><CalendarDays className="h-4 w-4 text-slate-400" />{new Date(booking.preferredTime).toLocaleString("en-PK", { dateStyle: "medium", timeStyle: "short" })}</p>}
         {booking.address && <p className="flex gap-2"><MapPin className="h-4 w-4 text-slate-400" />{booking.address}</p>}
       </div>
-      <BookingActions booking={booking} completed={normalized === "completed" || normalized === "delivered"} />
+      <BookingActions booking={booking} completed={normalized === "completed" || normalized === "delivered"} isCancelled={isCancelled} />
     </div>}
   </article>;
 }
 
-function BookingActions({ booking, completed }: { booking: Booking; completed: boolean }) {
+function BookingActions({ booking, completed, isCancelled }: { booking: Booking; completed: boolean; isCancelled: boolean }) {
   const [panel, setPanel] = useState<"review" | "issue" | "receipt" | null>(null);
   const isEasyPaisa = booking.paymentMethod?.toLowerCase().includes("easypaisa");
 
+  if (isCancelled) {
+    return <div className="mt-5"><div className="flex flex-wrap gap-2">
+      <Button variant="outline" onClick={() => setPanel(panel === "issue" ? null : "issue")}><MessageSquareWarning className="mr-2 h-4 w-4" />Raise an issue</Button>
+    </div>{panel === "issue" && <IssueForm booking={booking} />}</div>;
+  }
+
   return <div className="mt-5"><div className="flex flex-wrap gap-2">
     {completed && booking.kind !== "shop" && <Button onClick={() => setPanel(panel === "review" ? null : "review")}><Star className="mr-2 h-4 w-4" />Write review</Button>}
-    {isEasyPaisa && <Button variant="outline" onClick={() => setPanel(panel === "receipt" ? null : "receipt")}><Camera className="mr-2 h-4 w-4 text-emerald-600" />Upload Payment Receipt</Button>}
+    {completed && isEasyPaisa && <Button variant="outline" onClick={() => setPanel(panel === "receipt" ? null : "receipt")}><Camera className="mr-2 h-4 w-4 text-emerald-600" />Upload Payment Receipt</Button>}
     <Button variant="outline" onClick={() => setPanel(panel === "issue" ? null : "issue")}><MessageSquareWarning className="mr-2 h-4 w-4" />Raise an issue</Button>
   </div>{panel === "review" && <ReviewForm booking={booking} />}{panel === "receipt" && <UploadReceiptForm booking={booking} />}{panel === "issue" && <IssueForm booking={booking} />}</div>;
 }
 
 function UploadReceiptForm({ booking }: { booking: Booking }) {
-  const [dataUrl, setDataUrl] = useState(""), [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
+  const EASYPAISA_NUMBER = "03485838593";
+  const EASYPAISA_TITLE = "Muhammad Ikram";
+  const [dataUrl, setDataUrl] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyNumber = () => {
+    navigator.clipboard.writeText(EASYPAISA_NUMBER);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
   async function submit() {
     if (!dataUrl) { setMessage("Please select a valid receipt image."); return; }
     setBusy(true); setMessage("");
@@ -133,13 +171,56 @@ function UploadReceiptForm({ booking }: { booking: Booking }) {
       setBusy(false);
     }
   }
-  return <div className="mt-4 space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4"><p className="font-bold text-slate-900">Upload EasyPaisa Proof of Payment</p><ImagePicker onChange={(urls) => setDataUrl(urls[0] || "")} />{message && <p className="text-sm font-medium text-slate-700">{message}</p>}<Button onClick={() => void submit()} disabled={busy}>{busy ? "Uploading…" : "Upload receipt screenshot"}</Button></div>;
+
+  return (
+    <div className="mt-4 space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5">
+      <p className="font-bold text-slate-900 text-base">Upload EasyPaisa Proof of Payment</p>
+
+      <div className="rounded-xl border border-emerald-200 bg-white p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-emerald-900">EasyPaisa Account Details</span>
+          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">Active</span>
+        </div>
+
+        <div className="flex items-center justify-between bg-emerald-50/50 rounded-lg p-3">
+          <div>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase">Account Title</p>
+            <p className="text-sm font-bold text-slate-800">{EASYPAISA_TITLE}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase">Account Number</p>
+            <p className="text-lg font-black text-emerald-700 tracking-wider">{EASYPAISA_NUMBER}</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleCopyNumber}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition"
+        >
+          {copied ? "✓ Account Number Copied!" : `Copy Account Number (${EASYPAISA_NUMBER})`}
+        </button>
+      </div>
+
+      <ImagePicker onChange={(urls) => setDataUrl(urls[0] || "")} />
+
+      {message && (
+        <p className={`text-sm font-medium ${message.includes("successfully") ? "text-emerald-700" : "text-red-600"}`}>
+          {message}
+        </p>
+      )}
+
+      <Button onClick={() => void submit()} disabled={busy} className="w-full">
+        {busy ? "Uploading…" : "Upload Receipt Screenshot"}
+      </Button>
+    </div>
+  );
 }
 
 function ReviewForm({ booking }: { booking: Booking }) {
   const [rating, setRating] = useState(5), [comment, setComment] = useState(""), [images, setImages] = useState<string[]>([]), [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
   async function submit() { if (!booking.serviceId || !comment.trim()) { setMessage("A service reference and comment are required."); return; } setBusy(true); setMessage(""); try { const res = await fetch(`${API_BASE}/api/reviews`, { method: "POST", headers: authHeaders(), body: JSON.stringify({ serviceId: booking.serviceId, orderId: booking.id, rating, comment: comment.trim(), ...(images.length ? { images } : {}) }) }); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.message || "Review could not be submitted."); setMessage(data.message || "Review submitted successfully."); } catch (e) { setMessage(e instanceof Error ? e.message : "Review could not be submitted."); } finally { setBusy(false); } }
-  return <div className="mt-4 space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4"><p className="font-bold text-slate-900">Review this service</p><div className="flex gap-1">{[1,2,3,4,5].map(n => <button type="button" key={n} onClick={() => setRating(n)} aria-label={`${n} stars`}><Star className={`h-7 w-7 ${n <= rating ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /></button>)}</div><Textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="What went well? Help other customers know what to expect." /><ImagePicker onChange={setImages} /><p className="text-xs text-amber-700">Photo fields are sent with the review, but the current review API must add image storage support before they can be guaranteed to appear publicly.</p>{message && <p className="text-sm font-medium text-slate-700">{message}</p>}<Button onClick={() => void submit()} disabled={busy}>{busy ? "Submitting…" : "Submit review"}</Button></div>;
+  return <div className="mt-4 space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4"><p className="font-bold text-slate-900">Review this service</p><div className="flex gap-1">{[1, 2, 3, 4, 5].map(n => <button type="button" key={n} onClick={() => setRating(n)} aria-label={`${n} stars`}><Star className={`h-7 w-7 ${n <= rating ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /></button>)}</div><Textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="What went well? Help other customers know what to expect." /><ImagePicker onChange={setImages} /><p className="text-xs text-amber-700">Photo fields are sent with the review, but the current review API must add image storage support before they can be guaranteed to appear publicly.</p>{message && <p className="text-sm font-medium text-slate-700">{message}</p>}<Button onClick={() => void submit()} disabled={busy}>{busy ? "Submitting…" : "Submit review"}</Button></div>;
 }
 
 function IssueForm({ booking }: { booking: Booking }) {
