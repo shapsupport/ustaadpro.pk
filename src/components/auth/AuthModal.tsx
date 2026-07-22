@@ -83,7 +83,7 @@ export function AuthModal() {
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Abdullah Siraj"
+                      placeholder="e.g. Muhammad Ali"
                       className="flex-1 bg-transparent h-11 text-sm outline-none text-slate-800 placeholder:text-slate-400"
                     />
                   </div>

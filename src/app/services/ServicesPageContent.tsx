@@ -20,12 +20,18 @@ import {
   Shirt,
   Wrench,
   Zap,
+  MapPin,
+  ChevronDown,
+  ShieldCheck,
+  Headphones,
+  CircleCheck,
 } from "lucide-react";
 import type { ApiCategory, ApiService } from "@/lib/api-types";
 import { useRef } from "react";
 import { searchApi } from "@/lib/search";
 import { orderCategories, orderServices } from "@/lib/service-order";
 import { SearchSuggestions } from "@/components/search/SearchSuggestions";
+import { useLocation } from "@/context/LocationContext";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
@@ -53,6 +59,7 @@ interface ServicesPageContentProps {
 }
 
 export function ServicesPageContent({ initialServices, initialCategories }: ServicesPageContentProps) {
+  const { location, setShowPicker } = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [serviceSearchResults, setServiceSearchResults] = useState<ApiService[]>([]);
@@ -115,74 +122,44 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
     return base;
   }, [initialServices, serviceSearchResults, activeCategory, searchQuery]);
 
+  const startingPrice = initialServices.length ? Math.min(...initialServices.map((service) => service.price).filter((price) => price > 0)) : 0;
+  const reviewedServices = initialServices.filter((service) => service.reviews > 0).length;
+
   return (
     <div className="min-h-screen bg-slate-50 pt-0">
-      <section className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.2),_transparent_35%),linear-gradient(135deg,_#052e16_0%,_#0f766e_45%,_#059669_100%)] px-4 py-16 text-white sm:px-6 lg:px-8">
-        <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,rgba(255,255,255,0.08)_50%,transparent_100%)] opacity-30" />
-        <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
-          <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-emerald-100">
-              <Sparkles className="h-3.5 w-3.5" />
-              Curated service catalog
-            </span>
-            <h1 className="mt-5 text-3xl font-black tracking-tight sm:text-5xl">
-              Browse a better service experience for your home and office.
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-emerald-50/85 sm:text-lg">
-              Find verified experts for repairs, maintenance, installations, and deep cleaning with clear pricing and faster booking.
-            </p>
+      <section className="relative overflow-hidden border-b border-emerald-100 bg-[radial-gradient(circle_at_68%_20%,#d1fae5_0,transparent_28%),linear-gradient(108deg,#fff_0%,#f7fffb_58%,#059669_58%,#047857_100%)]">
+        <div className="absolute right-0 top-0 hidden h-full w-[42%] opacity-20 lg:block" style={{ backgroundImage: "radial-gradient(#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }} />
+        <div className="relative mx-auto grid min-h-[570px] max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[1.08fr_.92fr] lg:items-center lg:px-8">
+          <div className="relative z-10">
+            <button type="button" onClick={() => setShowPicker(true)} className="flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-100">
+              <MapPin className="h-4 w-4" /><span className="max-w-56 truncate">{location.shortLabel || location.label || "Rawalpindi & Islamabad"}</span><ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            <span className="mt-6 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-emerald-600"><Sparkles className="h-4 w-4" /> Services built around your day</span>
+            <h1 className="mt-3 max-w-2xl text-4xl font-black leading-[1.06] tracking-tight text-slate-950 sm:text-5xl xl:text-6xl">Find the right expert.<span className="mt-2 block text-emerald-600">Get the job done right.</span></h1>
+            <p className="mt-5 max-w-xl text-base leading-7 text-slate-600 sm:text-lg">Explore repairs, maintenance, installations, cleaning, and specialist work with clear service details and straightforward booking.</p>
 
-            <div className="mt-8 flex flex-col gap-3 rounded-3xl border border-white/20 bg-white/10 p-4 shadow-xl backdrop-blur-sm sm:flex-row sm:items-center">
-              <div className="relative flex flex-1 items-center rounded-2xl bg-white px-4 shadow-sm">
-                <Search className="mr-3 h-5 w-5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search services, e.g. AC or painter"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setSearchQuery(value);
-                    setActiveCategory("all");
-                    if (!value.trim()) { setServiceSearchResults([]); setSearching(false); }
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                    }
-                  }}
-                  className="h-12 w-full bg-transparent text-base text-slate-800 outline-none placeholder:text-slate-400"
-                />
-                <SearchSuggestions query={searchQuery} scope="service" services={initialServices} />
+            <div className="relative mt-7 max-w-2xl">
+              <div className="flex h-16 items-center rounded-2xl border border-slate-200 bg-white p-1.5 pl-4 shadow-xl shadow-slate-900/10 focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100">
+                <Search className="mr-3 h-5 w-5 shrink-0 text-slate-400" />
+                <input type="text" placeholder="What service do you need?" value={searchQuery} onChange={(e) => { const value = e.target.value; setSearchQuery(value); setActiveCategory("all"); if (!value.trim()) { setServiceSearchResults([]); setSearching(false); } }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); } }} className="h-full min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 sm:text-base" />
+                <button type="button" onClick={() => servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className="flex h-12 shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-4 font-bold text-white transition hover:bg-emerald-700 sm:px-6"><Search className="h-4 w-4" /><span className="hidden sm:inline">Search</span></button>
               </div>
-              <button
-                onClick={() => {
-                  setSearchQuery("");
-                  setActiveCategory("all");
-                }}
-                className="rounded-2xl border border-white/20 bg-white/15 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
-              >
-                Clear search
-              </button>
+              <SearchSuggestions query={searchQuery} scope="service" services={initialServices} />
             </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500"><span className="font-bold">Popular:</span>{allCategories.slice(0, 5).map((category) => <button key={category.id} type="button" onClick={() => selectCategory(category.id, true)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 transition hover:border-emerald-300 hover:text-emerald-700">{category.title}</button>)}</div>
           </div>
 
-          <div className="rounded-[28px] border border-white/20 bg-white/10 p-5 shadow-2xl backdrop-blur-md">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/15 bg-slate-950/20 p-4">
-                <p className="text-3xl font-black">100+</p>
-                <p className="mt-1 text-sm text-emerald-50/80">Verified service options</p>
+          <div className="relative z-10 lg:pl-8">
+            <div className="rounded-3xl border border-white/70 bg-white/95 p-5 shadow-2xl backdrop-blur sm:p-7">
+              <div className="flex items-center justify-between gap-3"><div><span className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Live service catalogue</span><h2 className="mt-1 text-2xl font-black text-slate-950">Everything your space needs</h2></div><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700"><Wrench className="h-6 w-6" /></span></div>
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-slate-50 p-4"><strong className="block text-2xl font-black text-slate-950">{initialServices.length}</strong><span className="text-xs text-slate-500">Bookable services</span></div>
+                <div className="rounded-2xl bg-slate-50 p-4"><strong className="block text-2xl font-black text-slate-950">{allCategories.length}</strong><span className="text-xs text-slate-500">Service categories</span></div>
+                <div className="rounded-2xl bg-slate-50 p-4"><strong className="block text-2xl font-black text-slate-950">{startingPrice ? `Rs ${startingPrice.toLocaleString()}` : "—"}</strong><span className="text-xs text-slate-500">Lowest starting price</span></div>
+                <div className="rounded-2xl bg-slate-50 p-4"><strong className="block text-2xl font-black text-slate-950">{reviewedServices}</strong><span className="text-xs text-slate-500">Services with reviews</span></div>
               </div>
-              <div className="rounded-2xl border border-white/15 bg-slate-950/20 p-4">
-                <p className="text-3xl font-black">24/7</p>
-                <p className="mt-1 text-sm text-emerald-50/80">Booking support</p>
-              </div>
-              <div className="rounded-2xl border border-white/15 bg-slate-950/20 p-4 sm:col-span-2">
-                <p className="text-sm font-semibold uppercase tracking-[0.25em] text-emerald-200">Why customers choose us</p>
-                <p className="mt-2 text-sm leading-6 text-emerald-50/80">
-                  Transparent pricing, skilled professionals, and a smoother booking flow that keeps your plans moving.
-                </p>
-              </div>
+              <div className="mt-5 space-y-3 border-t border-slate-100 pt-5">{[{ icon: ShieldCheck, text: "Clear scope and pricing before booking" }, { icon: CircleCheck, text: "Real customer ratings from completed orders" }, { icon: Headphones, text: "Support for bookings and service concerns" }].map(({ icon: Icon, text }) => <div key={text} className="flex items-center gap-3 text-sm font-medium text-slate-600"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"><Icon className="h-4 w-4" /></span>{text}</div>)}</div>
+              <button type="button" onClick={() => servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-emerald-700">Browse all services <ArrowRight className="h-4 w-4" /></button>
             </div>
           </div>
         </div>
