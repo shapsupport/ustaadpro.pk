@@ -1,31 +1,26 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
-import { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Search, MapPin, ChevronDown, ChevronRight, ChevronLeft, Star, UserRound,
-  Clock, Layers, BadgeCheck, ArrowRight, Zap,
-  Snowflake, Wrench, Sparkles, Shirt, Paintbrush,
-  Hammer, Camera, Flame, Calendar,
-  type LucideIcon
+  ArrowRight, BadgeCheck, CalendarCheck, Camera, CheckCircle2, ChevronDown,
+  ChevronLeft, ChevronRight, Clock3, Flame, Hammer, Layers3, MapPin,
+  Paintbrush, Search, ShieldCheck, Shirt, Snowflake, Sparkles, Star,
+  Timer, UserCheck, WalletCards, Wrench, Zap, type LucideIcon,
 } from "lucide-react";
-import type { ApiService, ApiCategory } from "@/lib/api-types";
+import type { ApiCategory, ApiService } from "@/lib/api-types";
 import { useLocation } from "@/context/LocationContext";
-import { useAuth } from "@/context/AuthContext";
-import { UserProfileModal } from "@/components/auth/UserProfileModal";
-import { useRef } from "react";
+import { searchApi } from "@/lib/search";
+import { orderCategories, orderServices } from "@/lib/service-order";
+import { SearchSuggestions } from "@/components/search/SearchSuggestions";
+import { testimonials } from "@/data/testimonials";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
-function imgSrc(url: string | undefined) {
+function imgSrc(url?: string) {
   if (!url) return null;
   return url.startsWith("http") ? url : `${API_BASE}${url}`;
-}
-
-interface AppLayoutProps {
-  initialServices: ApiService[];
-  categories: ApiCategory[];
 }
 
 const CAT_ICONS: Record<string, LucideIcon> = {
@@ -38,485 +33,249 @@ const CAT_ICONS: Record<string, LucideIcon> = {
   carpenter: Hammer,
   cctv: Camera,
   "welder-fabricator": Flame,
-  subscriptions: Calendar,
 };
 
-// Priority order — these appear first
-const PRIORITY_CATS = ["electrician", "plumbers", "carpenter", "home-cleaning", "ac-services"];
-
-const heroMaintenanceSlides = [
-  {
-    title: "Office maintenance",
-    description: "Fast support for electrical fixes, AC upkeep, plumbing issues, and preventive care for offices and commercial spaces.",
-    price: "4,500",
-    badge: "Popular",
-  },
-  {
-    title: "Corporate cleaning",
-    description: "Scheduled cleaning, sanitization, and facility refreshes that keep workspaces presentable and productive.",
-    price: "6,000",
-    badge: "Flexible",
-  },
-  {
-    title: "Facility support",
-    description: "Reliable handyman and maintenance coverage for urgent repairs, installations, and small office upgrades.",
-    price: "3,200",
-    badge: "Same day",
-  },
+const trustItems = [
+  { icon: WalletCards, title: "Upfront pricing", text: "No hidden charges" },
+  { icon: ShieldCheck, title: "Skilled professionals", text: "Carefully selected pros" },
+  { icon: Timer, title: "On-time service", text: "Punctual & reliable" },
+  { icon: CheckCircle2, title: "Customer support", text: "We’re here to help" },
 ];
+
+interface AppLayoutProps {
+  initialServices: ApiService[];
+  categories: ApiCategory[];
+}
 
 export function AppLayout({ initialServices, categories }: AppLayoutProps) {
   const { location, setShowPicker } = useLocation();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState<string>("all");
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [heroSlideIndex, setHeroSlideIndex] = useState(0);
+  const [query, setQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [remoteResults, setRemoteResults] = useState<ApiService[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [featuredIndex, setFeaturedIndex] = useState(0);
+  const servicesRef = useRef<HTMLElement>(null);
 
-  const tabsRef = useRef<HTMLDivElement>(null);
-
-  const scrollTabs = (direction: "left" | "right") => {
-    if (!tabsRef.current) return;
-
-    tabsRef.current.scrollBy({
-      left: direction === "left" ? -250 : 250,
-      behavior: "smooth",
-    });
-  };
-
-  // De-dup categories from services + API categories
-  const allCategories = useMemo(() => {
-    const catIds = [...new Set(initialServices.map((s) => s.category_id))];
-    return catIds.map((id) => {
-      const found = categories.find((c) => c.id === id);
-      return found ?? { id, title: id.replace(/-/g, " "), subtitle: "", icon: "", tint: "#059669" };
-    });
-  }, [initialServices, categories]);
-
-  const categoryTabs = useMemo(() => {
-    const tabs = [{ id: "all", label: "All Services", icon: Layers }];
-    const requested = [
-      { id: "subscriptions", label: "Subscriptions", icon: Calendar },
-      { id: "ac-services", label: "HVAC Services", icon: Snowflake },
-      { id: "cctv", label: "CCTV Services", icon: Camera },
-      { id: "welder-fabricator", label: "Welder & Fabricator", icon: Flame },
-      { id: "carpenter", label: "Carpenter", icon: Hammer },
-      { id: "painters", label: "Painters", icon: Paintbrush },
-      { id: "plumbers", label: "Plumber", icon: Wrench },
-      { id: "home-cleaning", label: "Home Cleaning", icon: Sparkles },
-      { id: "electrician", label: "Electrician", icon: Zap },
-    ];
-
-    const seen = new Set<string>();
-    requested.forEach((tab) => {
-      const known = allCategories.find((cat) => cat.id === tab.id);
-      if (!seen.has(tab.id) && (known || tab.id === "all")) {
-        tabs.push({ id: tab.id, label: tab.label, icon: tab.icon });
-        seen.add(tab.id);
-      }
-    });
-
-    allCategories.forEach((cat) => {
-      if (!seen.has(cat.id)) {
-        tabs.push({ id: cat.id, label: cat.title, icon: CAT_ICONS[cat.id] || Wrench });
-        seen.add(cat.id);
-      }
-    });
-
-    return tabs;
-  }, [allCategories]);
-
-  const matchesCategory = (service: ApiService, category: string) => {
-    if (category === "all") return true;
-    const normalized = category.toLowerCase();
-    const serviceCategory = service.category_id?.toLowerCase() || "";
-    const title = service.title.toLowerCase();
-    const aliases: Record<string, string[]> = {
-      electrician: ["electrician"],
-      plumbers: ["plumbers", "plumber"],
-      "home-cleaning": ["home-cleaning", "cleaning"],
-      "ac-services": ["ac-services", "hvac", "air-conditioner", "ac"],
-      cctv: ["cctv", "security"],
-      subscriptions: ["subscriptions", "subscription"],
-      "welder-fabricator": ["welder", "fabricator", "welder-fabricator"],
-      carpenter: ["carpenter"],
-      painters: ["painters", "painting"],
-    };
-
-    return (aliases[normalized] ?? [normalized]).some((alias) => serviceCategory.includes(alias) || title.includes(alias));
-  };
-
-  // Filter + search, then sort by priority
-  const filtered = useMemo(() => {
-    const q = searchQuery.toLowerCase();
-    const base = initialServices.filter((s) => {
-      const matchCat = matchesCategory(s, activeCategory);
-      const matchQ = !q || s.title.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
-      return matchCat && matchQ;
-    });
-    // Sort: priority cats first, then alphabetical by title
-    return base.sort((a, b) => {
-      const ai = PRIORITY_CATS.indexOf(a.category_id);
-      const bi = PRIORITY_CATS.indexOf(b.category_id);
-      if (ai !== -1 && bi === -1) return -1;
-      if (bi !== -1 && ai === -1) return 1;
-      if (ai !== -1 && bi !== -1) return ai - bi;
-      return a.title.localeCompare(b.title);
-    });
-  }, [initialServices, activeCategory, searchQuery]);
-
-  const featuredService = initialServices[heroSlideIndex];
-
-  const featuredImg = imgSrc(
-    featuredService?.image_url || featuredService?.imageUrl
-  );
-
-  const activeHeroSlide = featuredService;
+  const orderedServices = useMemo(() => orderServices(initialServices), [initialServices]);
+  const categoryList = useMemo(() => {
+    const ids = [...new Set(orderedServices.map((service) => service.category_id))];
+    return orderCategories(ids.map((id) => categories.find((category) => category.id === id) ?? {
+      id, title: id.replace(/-/g, " "), subtitle: "", icon: "", tint: "#059669",
+    }));
+  }, [categories, orderedServices]);
 
   useEffect(() => {
-    if (!initialServices.length) return;
+    const cleaned = query.trim();
+    if (!cleaned) {
+      setRemoteResults([]);
+      setSearching(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setSearching(true);
+      try { setRemoteResults(await searchApi(cleaned, "service", controller.signal)); }
+      catch { if (!controller.signal.aborted) setRemoteResults([]); }
+      finally { if (!controller.signal.aborted) setSearching(false); }
+    }, 300);
+    return () => { window.clearTimeout(timeout); controller.abort(); };
+  }, [query]);
 
-    const timer = window.setInterval(() => {
-      setHeroSlideIndex(
-        (current) => (current + 1) % initialServices.length
-      );
-    }, 5000);
-
+  useEffect(() => {
+    if (orderedServices.length < 2) return;
+    const timer = window.setInterval(() => setFeaturedIndex((index) => (index + 1) % orderedServices.length), 6000);
     return () => window.clearInterval(timer);
-  }, [initialServices]);
+  }, [orderedServices.length]);
+
+  const filtered = useMemo(() => {
+    const source = query.trim() ? orderServices(remoteResults) : orderedServices;
+    return source.filter((service) => activeCategory === "all" || service.category_id === activeCategory);
+  }, [activeCategory, orderedServices, query, remoteResults]);
+
+  const featured = orderedServices[featuredIndex];
+  const popular = filtered.slice(0, 8);
+
+  function showCategory(id: string) {
+    setActiveCategory(id);
+    window.requestAnimationFrame(() => servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      {/* ── Hero Header ── */}
-      <section className="bg-gradient-to-br from-emerald-900 via-primary to-emerald-700 px-4 pt-24 pb-16 sm:px-6 lg:px-8 relative overflow-hidden">
-        {/* Background decoration */}
-        <div className="absolute inset-0 opacity-10 pointer-events-none">
-          <div className="absolute -top-20 -right-20 h-96 w-96 rounded-full bg-white blur-3xl" />
-          <div className="absolute bottom-0 left-1/4 h-64 w-64 rounded-full bg-emerald-300 blur-3xl" />
-        </div>
-        <div className="mx-auto max-w-7xl">
-          <div className="grid items-center gap-12 lg:grid-cols-[1.2fr_0.8fr]">
-            {/* Left */}
-            <div>
-              <div className="mb-6">
-                <button
-                  onClick={() => setShowPicker(true)}
-                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white/90 backdrop-blur-sm transition-colors hover:bg-white/20"
-                >
-                  <MapPin className="h-4 w-4" />
+    <div className="bg-white text-slate-900">
+      <section className="relative overflow-hidden border-b border-emerald-100 bg-[radial-gradient(circle_at_70%_25%,#d1fae5_0,transparent_32%),linear-gradient(110deg,#fff_0%,#f8fffc_56%,#059669_56%,#047857_100%)]">
+        <div className="absolute right-0 top-0 hidden h-full w-[44%] opacity-25 lg:block" style={{ backgroundImage: "radial-gradient(#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }} />
+        <div className="container-wide relative grid min-h-[590px] px-4 pt-9 sm:px-6 lg:grid-cols-[1.02fr_.98fr] lg:px-8 lg:pt-12">
+          <div className="relative z-20 flex flex-col justify-center pb-12 lg:pb-20">
+            <button type="button" onClick={() => setShowPicker(true)} className="mb-5 flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-100">
+              <MapPin className="h-4 w-4" />
+              <span className="max-w-52 truncate">{location.shortLabel || location.label || "Rawalpindi & Islamabad"}</span>
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
 
-                  <span className="max-w-[220px] truncate text-sm font-medium">
-                    {location.shortLabel || location.label || "Set your location"}
-                  </span>
+            <h1 className="max-w-xl text-4xl font-black leading-[1.06] tracking-tight text-slate-950 sm:text-5xl xl:text-6xl">
+              Expert home services,
+              <span className="mt-2 block text-emerald-600">at your doorstep</span>
+            </h1>
+            <p className="mt-5 max-w-lg text-base leading-7 text-slate-600 sm:text-lg">
+              Book skilled electricians, plumbers, AC technicians and more services across Rawalpindi and Islamabad.
+            </p>
 
-                  <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+            <div className="relative mt-7 max-w-xl">
+              <div className="flex h-14 items-center rounded-xl border border-slate-200 bg-white p-1.5 pl-4 shadow-xl shadow-slate-900/10 focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100">
+                <Search className="mr-3 h-5 w-5 shrink-0 text-slate-400" />
+                <input
+                  value={query}
+                  onChange={(event) => { setQuery(event.target.value); setActiveCategory("all"); }}
+                  onKeyDown={(event) => { if (event.key === "Enter") servicesRef.current?.scrollIntoView({ behavior: "smooth" }); }}
+                  className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
+                  placeholder="Search services (e.g. AC service, wiring...)"
+                  aria-label="Search services"
+                />
+                <button type="button" onClick={() => servicesRef.current?.scrollIntoView({ behavior: "smooth" })} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white transition hover:bg-emerald-700" aria-label="View search results">
+                  <Search className="h-5 w-5" />
                 </button>
               </div>
-
-              <h1 className="text-4xl font-extrabold leading-tight text-white sm:text-5xl">
-                Expert home services,
-                <br />
-                <span className="text-emerald-200">
-                  at your doorstep
-                </span>
-              </h1>
-              <p className="text-white/70 text-lg mb-8 max-w-lg leading-relaxed">
-                Book verified electricians, plumbers, AC technicians and 100+ more services in Rawalpindi and Islamabad — we’ll be in more cities soon.
-              </p>
-
-              {/* Search */}
-              <div className="flex items-center gap-3">
-                <div className="flex-1 flex items-center bg-white rounded-2xl px-4 shadow-xl focus-within:ring-2 focus-within:ring-emerald-300 transition-all">
-                  <Search className="h-5 w-5 text-slate-400 mr-3 shrink-0" />
-                  <input
-                    value={searchQuery}
-                    onChange={(e) => { setSearchQuery(e.target.value); setActiveCategory("all"); }}
-                    placeholder="Search services (e.g. AC service, wiring…)"
-                    className="w-full bg-transparent h-14 outline-none text-base text-slate-800 placeholder:text-slate-400"
-                  />
-                </div>
-              </div>
+              <SearchSuggestions query={query} scope="service" services={initialServices} />
             </div>
 
-            {/* Right: hero maintenance slider */}
-            <div className="rounded-3xl border border-white/20 bg-white/10 p-5 shadow-2xl backdrop-blur-sm">
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white">
-                <Zap className="h-3.5 w-3.5 text-amber-300" />
-                Serving Rawalpindi &amp; Islamabad now
-              </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className="font-semibold">Popular:</span>
+              {categoryList.slice(0, 5).map((category) => (
+                <button key={category.id} type="button" onClick={() => showCategory(category.id)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 transition hover:border-emerald-300 hover:text-emerald-700">{category.title}</button>
+              ))}
+            </div>
 
-              <div className="flex items-center justify-between gap-3">
-                <span className="inline-flex items-center gap-2 rounded-full bg-amber-400/90 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-amber-950">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Featured Service
-                </span>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setHeroSlideIndex(
-                        (current) =>
-                          (current - 1 + initialServices.length) % initialServices.length
-                      )
-                    }
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
-                    aria-label="Previous slide"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setHeroSlideIndex(
-                        (current) => (current + 1) % initialServices.length
-                      )
-                    }
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
-                    aria-label="Next slide"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
+            <div className="mt-7 grid max-w-xl grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                ["4.9", "Average rating"], ["Easy", "Online booking"], ["Local", "Service coverage"], ["Quick", "Response"],
+              ].map(([value, label]) => (
+                <div key={label} className="rounded-xl border border-slate-200 bg-white/90 px-3 py-3 shadow-sm">
+                  <strong className="block text-sm text-emerald-700">{value}</strong>
+                  <span className="text-[10px] font-medium text-slate-500">{label}</span>
                 </div>
-              </div>
+              ))}
+            </div>
+          </div>
 
-              {featuredImg && (
-                <div className="mt-5 overflow-hidden rounded-2xl">
-                  <img
-                    src={featuredImg}
-                    alt={activeHeroSlide?.title}
-                    className="h-52 w-full object-cover"
-                  />
-                </div>
-              )}
-
-              <div className="mt-5 rounded-2xl border border-white/20 bg-gradient-to-br from-white/20 to-white/5 p-5">
-                <span className="inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-100">
-                  {activeHeroSlide?.badge || activeHeroSlide?.serviceType || "Professional Service"}
-                </span>
-
-                <h3 className="mt-3 text-xl font-bold text-white">
-                  {activeHeroSlide?.title}
-                </h3>
-
-                <p className="mt-2 line-clamp-3 text-sm leading-6 text-white/75">
-                  {activeHeroSlide?.description}
-                </p>
-
-                <div className="mt-5 flex items-center justify-between">
-                  <div>
-                    <span className="text-2xl font-black text-white">
-                      Rs {activeHeroSlide?.price}
-                    </span>
-
-                    {activeHeroSlide?.originalPrice && (
-                      <span className="ml-2 text-sm text-white/60 line-through">
-                        Rs {activeHeroSlide.originalPrice}
-                      </span>
-                    )}
-                  </div>
-
-                  <Link
-                    href="/services"
-                    className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-primary transition hover:bg-slate-100"
-                  >
-                    Explore now
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </div>
-              </div>
+          <div className="relative z-10 hidden min-h-[560px] lg:block">
+            <Image src="/home/technician-hero-branded-v3.png" alt="Ustaad Pro home-service technician" fill priority sizes="50vw" className="z-10 -translate-x-36 object-contain object-bottom xl:-translate-x-44" />
+            {featured && <FeaturedCard service={featured} />}
+            <div className="absolute bottom-5 right-24 z-30 flex gap-1.5">
+              {orderedServices.slice(0, 3).map((service, index) => (
+                <button key={service.id} onClick={() => setFeaturedIndex(index)} aria-label={`Show ${service.title}`} className={`h-2 rounded-full transition-all ${index === featuredIndex ? "w-6 bg-white" : "w-2 bg-white/45"}`} />
+              ))}
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Category tabs ── */}
-      <div className="bg-white border-b border-slate-100 sticky top-22 z-20 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="relative">
-            {/* Left Arrow */}
-            <button
-              onClick={() => scrollTabs("left")}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow rounded-full p-2 hover:bg-slate-100"
-            >
-              <ChevronLeft className="h-5 w-5" />
+      <section className="border-b border-slate-100 bg-white py-7">
+        <div className="container-wide px-4 sm:px-6 lg:px-8">
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="text-lg font-extrabold">Browse by category</h2>
+            <button type="button" onClick={() => showCategory("all")} className="flex items-center gap-1 text-sm font-bold text-emerald-700">View all <ArrowRight className="h-4 w-4" /></button>
+          </div>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-10">
+            {categoryList.slice(0, 9).map((category) => {
+              const Icon = CAT_ICONS[category.id] || Wrench;
+              return (
+                <button key={category.id} type="button" onClick={() => showCategory(category.id)} className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border px-2 py-3 text-center transition hover:-translate-y-0.5 hover:shadow-md ${activeCategory === category.id ? "border-emerald-400 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700"}`}>
+                  <Icon className="h-6 w-6 text-emerald-600" />
+                  <span className="text-[11px] font-bold leading-tight capitalize">{category.title}</span>
+                </button>
+              );
+            })}
+            <button type="button" onClick={() => showCategory("all")} className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-3 transition hover:shadow-md">
+              <Layers3 className="h-6 w-6 text-emerald-600" /><span className="text-[11px] font-bold">More</span>
             </button>
+          </div>
+        </div>
+      </section>
 
-            {/* Tabs */}
-            <div className="relative">
-              {/* Left Arrow */}
-              <button
-                onClick={() => scrollTabs("left")}
-                className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow rounded-full p-2 hover:bg-slate-100"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-
-              {/* Tabs */}
-              <div
-                ref={tabsRef}
-                className="flex gap-1 overflow-x-auto hide-scrollbar py-3 px-10 scroll-smooth"
-              >
-                {categoryTabs.map((tab) => {
-                  const IconComponent = tab.icon || Wrench;
-
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveCategory(tab.id)}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors shrink-0 ${activeCategory === tab.id
-                        ? "bg-primary text-white shadow-sm"
-                        : "text-slate-600 hover:bg-slate-100"
-                        }`}
-                    >
-                      <IconComponent className="h-4 w-4" />
-                      {tab.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Right Arrow */}
-              <button
-                onClick={() => scrollTabs("right")}
-                className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow rounded-full p-2 hover:bg-slate-100"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
+      <section ref={servicesRef} id="popular-services" className="scroll-mt-28 bg-slate-50/70 py-12">
+        <div className="container-wide px-4 sm:px-6 lg:px-8">
+          <div className="mb-7 flex items-end justify-between gap-4">
+            <div><h2 className="text-2xl font-black">{query ? "Search results" : "Popular services"}</h2><p className="mt-1 text-sm text-slate-500">{searching ? "Searching services…" : `${filtered.length} service${filtered.length === 1 ? "" : "s"} available`}</p></div>
+            <Link href="/services" className="hidden items-center gap-1 text-sm font-bold text-emerald-700 sm:flex">View all services <ArrowRight className="h-4 w-4" /></Link>
+          </div>
+          {popular.length ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{popular.map((service) => <ServiceCard key={service.id} service={service} />)}</div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center">
+              <h3 className="font-bold">No services found</h3><p className="mt-1 text-sm text-slate-500">Try another search or category.</p>
+              <button onClick={() => { setQuery(""); setActiveCategory("all"); }} className="mt-5 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white">Show all services</button>
             </div>
+          )}
+        </div>
+      </section>
 
-            {/* Right Arrow */}
-            <button
-              onClick={() => scrollTabs("right")}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow rounded-full p-2 hover:bg-slate-100"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
+      <section className="bg-white pb-12">
+        <div className="container-wide px-4 sm:px-6 lg:px-8">
+          <div className="grid overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50/70 sm:grid-cols-2 lg:grid-cols-4">
+            {trustItems.map(({ icon: Icon, title, text }) => <div key={title} className="flex items-center gap-3 border-b border-emerald-100 p-5 last:border-0 sm:border-r lg:border-b-0"><Icon className="h-7 w-7 shrink-0 text-emerald-600" /><div><strong className="block text-sm">{title}</strong><span className="text-xs text-slate-500">{text}</span></div></div>)}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* ── Service slider ── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-slate-900">Our Services</h2>
-          <p className="mt-1 text-sm text-slate-500">{filtered.length} service{filtered.length !== 1 ? "s" : ""} available in Rawalpindi &amp; Islamabad right now</p>
+      <section id="how-it-works" className="scroll-mt-24 bg-white py-12">
+        <div className="container-wide px-4 text-center sm:px-6 lg:px-8">
+          <h2 className="text-2xl font-black">How it works</h2><p className="mt-1 text-sm text-slate-500">Book in three simple steps</p>
+          <div className="mx-auto mt-8 grid max-w-5xl gap-4 md:grid-cols-3">
+            {[
+              [CalendarCheck, "1", "Choose a service", "Select what you need from our service list."],
+              [UserCheck, "2", "Pick date & time", "Choose your preferred appointment details."],
+              [CheckCircle2, "3", "We’ll handle it", "A professional arrives and completes the work."],
+            ].map(([Icon, number, title, text]) => {
+              const StepIcon = Icon as LucideIcon;
+              return <div key={String(number)} className="relative flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-lg font-black text-white">{String(number)}</span><div><h3 className="font-bold">{String(title)}</h3><p className="mt-1 text-xs leading-5 text-slate-500">{String(text)}</p></div><StepIcon className="absolute right-4 top-4 h-4 w-4 text-emerald-200" /></div>;
+            })}
+          </div>
         </div>
+      </section>
 
-        {filtered.length === 0 ? (
-          <div className="text-center py-24">
-            <p className="text-2xl font-bold text-slate-400 mb-2">No services found</p>
-            <p className="text-slate-400 mb-6">Try a different search term.</p>
-            <button
-              onClick={() => { setSearchQuery(""); setActiveCategory("all"); }}
-              className="bg-primary text-white font-semibold px-6 py-3 rounded-xl hover:bg-emerald-700 transition-colors"
-            >
-              Show all services
-            </button>
+      <section className="bg-slate-50 py-14">
+        <div className="container-wide px-4 sm:px-6 lg:px-8">
+          <div className="text-center"><h2 className="text-2xl font-black">What our customers say</h2><p className="mt-1 text-sm text-slate-500">Experiences shared by Ustaad Pro customers</p></div>
+          <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {testimonials.slice(0, 4).map((review) => <article key={review.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex gap-0.5">{Array.from({ length: 5 }).map((_, index) => <Star key={index} className={`h-4 w-4 ${index < review.rating ? "fill-amber-400 text-amber-400" : "text-slate-200"}`} />)}</div><p className="mt-4 line-clamp-4 text-sm leading-6 text-slate-600">“{review.review}”</p><div className="mt-5 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-sm font-black text-emerald-700">{review.name[0]}</span><div><strong className="block text-xs">{review.name}</strong><span className="text-[11px] text-slate-400">{review.location}</span></div></div></article>)}
           </div>
-        ) : (
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((service) => (
-              <ServiceCardLarge key={service.id} service={service} />
-            ))}
-          </div>
-        )}
-      </div>
+        </div>
+      </section>
 
-      <UserProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <section className="bg-white py-12">
+        <div className="container-wide px-4 sm:px-6 lg:px-8">
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-800 px-6 py-9 text-white md:flex md:items-center md:justify-between md:px-12">
+            <div className="absolute -left-16 -top-20 h-48 w-48 rounded-full bg-lime-300/20 blur-2xl" />
+            <div className="relative"><h2 className="text-2xl font-black md:text-3xl">Need a professional at your doorstep?</h2><p className="mt-2 text-sm text-emerald-50/80">Browse available services and book the help you need.</p></div>
+            <Link href="/services" className="relative mt-6 inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 font-bold text-emerald-700 transition hover:bg-emerald-50 md:mt-0">Book now <ArrowRight className="h-4 w-4" /></Link>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
 
-function ServiceCardLarge({ service }: { service: ApiService }) {
-  const src = imgSrc(service.image_url || service.imageUrl);
-  const originalPrice = Number(service.original_price || service.originalPrice || 0);
-  const discount = originalPrice > service.price
-    ? Math.round(((originalPrice - service.price) / originalPrice) * 100)
-    : 0;
-
+function FeaturedCard({ service }: { service: ApiService }) {
   return (
-    <Link href={`/services/${service.id}`} className="group block">
-      <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col h-full">
-        {/* Bigger image container */}
-        <div className="relative h-56 bg-slate-100 overflow-hidden shrink-0">
-          {src ? (
-            <Image
-              src={src}
-              alt={service.title}
-              fill
-              className="object-cover group-hover:scale-105 transition-transform duration-500"
-              sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
-              <Layers className="h-14 w-14 text-slate-300" />
-            </div>
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" />
+    <div className="absolute right-0 top-24 z-20 w-72 overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-2xl backdrop-blur xl:w-80">
+      {imgSrc(service.image_url || service.imageUrl) && <div className="relative h-28"><Image src={imgSrc(service.image_url || service.imageUrl)!} alt="" fill unoptimized className="object-cover" sizes="320px" /></div>}
+      <div className="p-5"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">Featured service</span><h2 className="mt-3 line-clamp-1 text-lg font-black">{service.title}</h2><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-4 flex items-end justify-between"><div><span className="block text-[10px] text-slate-400">Starting from</span><strong className="text-xl">Rs {service.price.toLocaleString()}</strong></div><Link href={`/services/${service.id}`} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div><div className="mt-4 flex items-center gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span className="flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" /> {service.rating || "New"}</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div></div>
+    </div>
+  );
+}
 
-          {/* Badges overlay */}
-          <div className="absolute top-4 left-4 flex gap-2">
-            {service.badge && (
-              <span className="bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-full shadow">
-                {service.badge}
-              </span>
-            )}
-            {discount > 0 && (
-              <span className="bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow">
-                {discount}% OFF
-              </span>
-            )}
-          </div>
-
-          {/* Duration overlay */}
-          {service.duration && (
-            <div className="absolute bottom-4 right-4 flex items-center gap-1.5 bg-black/50 text-white text-xs font-medium px-3 py-1.5 rounded-full backdrop-blur-sm">
-              <Clock className="h-3.5 w-3.5" />
-              {service.duration}
-            </div>
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="p-6 flex flex-col flex-1">
-          <h3 className="font-bold text-slate-900 text-lg mb-2 group-hover:text-primary transition-colors line-clamp-1">
-            {service.title}
-          </h3>
-          <p className="text-sm text-slate-500 leading-relaxed line-clamp-3 mb-6 flex-1">
-            {service.detail_description || service.description}
-          </p>
-
-          {/* Rating */}
-          <div className="flex items-center gap-2 mb-6">
-            <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-            <span className="text-sm font-bold text-slate-700">{service.rating}</span>
-            <span className="text-xs text-slate-400">({service.reviews} reviews)</span>
-            {service.workPrices && service.workPrices.length > 0 && (
-              <span className="ml-auto flex items-center gap-1 text-xs text-primary font-bold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
-                <BadgeCheck className="h-3.5 w-3.5" />
-                {service.workPrices.length} types
-              </span>
-            )}
-          </div>
-
-          {/* Price + CTA */}
-          <div className="flex items-center justify-between pt-5 border-t border-slate-100">
-            <div>
-              <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Starting from</p>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-slate-900">Rs {service.price.toLocaleString()}</span>
-                {discount > 0 && (
-                  <span className="text-xs text-slate-400 line-through">Rs {originalPrice.toLocaleString()}</span>
-                )}
-              </div>
-            </div>
-            <span className="flex items-center gap-1.5 bg-primary hover:bg-emerald-700 text-white text-sm font-bold px-4 py-3 rounded-2xl transition-all shadow-md shadow-primary/20">
-              Book <ArrowRight className="h-4 w-4" />
-            </span>
-          </div>
-        </div>
-      </div>
-    </Link>
+function ServiceCard({ service }: { service: ApiService }) {
+  const source = imgSrc(service.image_url || service.imageUrl);
+  const original = Number(service.original_price || service.originalPrice || 0);
+  const discount = original > service.price ? Math.round(((original - service.price) / original) * 100) : 0;
+  return (
+    <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+      <Link href={`/services/${service.id}`} className="relative block h-44 overflow-hidden bg-slate-100">
+        {source ? <Image src={source} alt={service.title} fill unoptimized className="object-cover transition duration-500 group-hover:scale-105" sizes="(max-width:640px) 100vw,(max-width:1024px) 50vw,25vw" /> : <div className="flex h-full items-center justify-center"><Wrench className="h-10 w-10 text-slate-300" /></div>}
+        <div className="absolute left-3 top-3 flex gap-2">{service.badge && <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white">{service.badge}</span>}{discount > 0 && <span className="rounded-full bg-rose-500 px-2.5 py-1 text-[10px] font-bold text-white">{discount}% OFF</span>}</div>
+        {service.rating > 0 && <span className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold"><Star className="h-3 w-3 fill-amber-400 text-amber-400" /> {service.rating} ({service.reviews})</span>}
+      </Link>
+      <div className="flex flex-1 flex-col p-4"><Link href={`/services/${service.id}`}><h3 className="line-clamp-1 font-extrabold group-hover:text-emerald-700">{service.title}</h3></Link><p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-3 flex items-center gap-3 text-[10px] font-medium text-slate-500"><span className="flex items-center gap-1 text-emerald-700"><BadgeCheck className="h-3.5 w-3.5" /> Professional</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div><div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-3"><div><span className="block text-[9px] text-slate-400">Starting from</span><strong>Rs {service.price.toLocaleString()}</strong>{discount > 0 && <span className="ml-1 text-[10px] text-slate-400 line-through">Rs {original.toLocaleString()}</span>}</div><Link href={`/services/${service.id}`} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-emerald-700">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div></div>
+    </article>
   );
 }

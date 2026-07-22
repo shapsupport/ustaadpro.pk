@@ -88,26 +88,41 @@ export interface LocationSuggestion {
   coords: Coords;
 }
 
+export const TWIN_CITY_LOCALITIES = {
+  Islamabad: [
+    "Bani Gala", "Bara Kahu", "Blue Area", "Chak Shahzad", "D-12", "DHA Phase 2", "E-7", "E-11",
+    "F-6", "F-7", "F-8", "F-10", "F-11", "G-6", "G-7", "G-8", "G-9", "G-10", "G-11",
+    "G-13", "G-14", "H-8", "H-9", "I-8", "I-9", "I-10", "I-11", "Korang Town", "Naval Anchorage",
+    "Pakistan Town", "PWD Housing Society", "Soan Garden", "Tarnol",
+  ],
+  Rawalpindi: [
+    "Adiala Road", "Airport Housing Society", "Asghar Mall", "Bahria Town Phase 1-8", "Chaklala", "Chandni Chowk",
+    "Committee Chowk", "DHA Phase 1", "Dhok Hassu", "Dhok Kala Khan", "Faizabad", "Gulraiz Housing Scheme",
+    "Khanna Pul", "Lalazar", "Morgah", "Murree Road", "Peshawar Road", "Pir Wadhai", "Raja Bazaar", "Saddar",
+    "Satellite Town", "Shamsabad", "Swan Camp", "Westridge",
+  ],
+} as const;
+
 /**
  * Search for areas/localities within the Rawalpindi-Islamabad bounding box.
  * viewbox: west,south,east,north  (approx twin cities + buffer)
  */
-export async function searchLocations(query: string): Promise<LocationSuggestion[]> {
+export async function searchLocations(query: string, selectedCity?: keyof typeof TWIN_CITY_LOCALITIES): Promise<LocationSuggestion[]> {
   if (!query || query.length < 2) return [];
   try {
     const viewbox = "72.85,33.45,73.45,33.90";
     const url =
       `https://nominatim.openstreetmap.org/search` +
-      `?q=${encodeURIComponent(query)}` +
+      `?q=${encodeURIComponent(`${query}, ${selectedCity || "Rawalpindi Islamabad"}, Pakistan`)}` +
       `&format=json&limit=8&addressdetails=1&accept-language=en` +
       `&viewbox=${viewbox}&bounded=1`;
     const res = await fetch(url, {
       headers: { "User-Agent": "UstaadPro/1.0 (ustaadpro.pk)" },
     });
-    const data: any[] = await res.json();
+    const data: Array<{ address?: Record<string, string>; display_name: string; lat: string; lon: string }> = await res.json();
     if (!Array.isArray(data)) return [];
 
-    return data.map((item) => {
+    const apiResults = data.map((item) => {
       const a = item.address || {};
       const area = a.suburb || a.neighbourhood || a.village || a.road || a.quarter || "";
       const city = a.city || a.town || a.county || "Rawalpindi / Islamabad";
@@ -116,7 +131,22 @@ export async function searchLocations(query: string): Promise<LocationSuggestion
         sublabel: [city, a.state].filter(Boolean).join(", "),
         coords: { lat: parseFloat(item.lat), lng: parseFloat(item.lon) },
       };
-    }).filter((s) => s.label);
+    }).filter((s) => s.label && (!selectedCity || `${s.sublabel} ${s.label}`.toLowerCase().includes(selectedCity.toLowerCase())));
+
+    const cities = selectedCity ? [selectedCity] : (["Islamabad", "Rawalpindi"] as const);
+    const fallbackResults = cities.flatMap((city) =>
+      TWIN_CITY_LOCALITIES[city]
+        .filter((locality) => locality.toLowerCase().includes(query.toLowerCase()))
+        .map((locality) => ({
+          label: locality,
+          sublabel: `${city}, Punjab`,
+          coords: city === "Islamabad" ? ISLAMABAD_CENTRE : RAWALPINDI_CENTRE,
+        })),
+    );
+
+    return [...apiResults, ...fallbackResults]
+      .filter((result, index, all) => all.findIndex((candidate) => `${candidate.label}-${candidate.sublabel}` === `${result.label}-${result.sublabel}`) === index)
+      .slice(0, 12);
   } catch {
     return [];
   }

@@ -2,15 +2,20 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import type { ApiProduct } from "@/lib/api-types";
 import {
   ArrowLeft,
   BadgeCheck,
+  Minus,
   Package,
+  Plus,
   ShieldCheck,
   ShoppingBag,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { StickyCheckoutBar } from "@/components/shared/StickyCheckoutBar";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "";
 
@@ -26,21 +31,49 @@ function formatPrice(price?: number | string) {
 }
 
 export default function ProductDetailClient({ product }: { product: ApiProduct }) {
+  const router = useRouter();
+  const [showStickyCheckout, setShowStickyCheckout] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+  const buyButtonRef = useRef<HTMLAnchorElement>(null);
   const imageSrc = buildImageUrl(product.imageUrl);
   const hasDiscount = Boolean(
     product.originalPrice && Number(product.originalPrice) > Number(product.price),
   );
+  const maxQuantity = Math.max(0, product.stock);
+  const totalPrice = Number(product.price) * quantity;
+  const checkoutHref = `/checkout?productId=${product.id}&productTitle=${encodeURIComponent(product.title)}&productPrice=${product.price}&productImage=${encodeURIComponent(product.imageUrl || "")}&quantity=${quantity}`;
+
+  const updateQuantity = (nextQuantity: number) => {
+    setQuantity(Math.min(Math.max(1, nextQuantity), maxQuantity || 1));
+  };
+
+  useEffect(() => {
+    const updateStickyCheckout = () => {
+      const button = buyButtonRef.current;
+      setShowStickyCheckout(Boolean(button && button.getBoundingClientRect().bottom < 0));
+    };
+
+    updateStickyCheckout();
+    window.addEventListener("scroll", updateStickyCheckout, { passive: true });
+    window.addEventListener("resize", updateStickyCheckout);
+    return () => {
+      window.removeEventListener("scroll", updateStickyCheckout);
+      window.removeEventListener("resize", updateStickyCheckout);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <Link
-          href="/store"
-          className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm"
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-base font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-100 hover:text-slate-950 sm:text-lg"
+          aria-label="Go back to the previous page"
         >
-          <ArrowLeft className="h-4 w-4" />
-          Back to store
-        </Link>
+          <ArrowLeft className="h-5 w-5" />
+          Back
+        </button>
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
           <Card className="overflow-hidden border-slate-200 bg-white p-0 shadow-sm">
@@ -105,20 +138,64 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
                   Order summary
                 </div>
                 <p className="mt-2 text-sm text-slate-700">Product: {product.title}</p>
-                <p className="mt-1 text-sm text-slate-700">Price: {formatPrice(product.price)}</p>
+                <p className="mt-1 text-sm text-slate-700">Unit price: {formatPrice(product.price)}</p>
+                <p className="mt-1 text-sm font-bold text-slate-900">Total: {formatPrice(totalPrice)}</p>
               </div>
 
-              <Link
-                href={`/checkout?productId=${product.id}&productTitle=${encodeURIComponent(product.title)}&productPrice=${product.price}`}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-lime-500 hover:bg-lime-600 text-white font-bold py-4 text-base transition-colors shadow-lg shadow-lime-500/20"
-              >
-                <ShoppingBag className="h-5 w-5" />
-                Buy Now
-              </Link>
+              <div className="mt-5 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">Quantity</p>
+                  <p className="text-xs text-slate-500">Choose up to {product.stock.toLocaleString("en-PK")}</p>
+                </div>
+                <div className="flex items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => updateQuantity(quantity - 1)}
+                    disabled={quantity <= 1 || maxQuantity === 0}
+                    className="flex h-11 w-11 items-center justify-center text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-35"
+                    aria-label="Decrease quantity"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={maxQuantity || 1}
+                    value={quantity}
+                    onChange={(event) => updateQuantity(Number(event.target.value) || 1)}
+                    className="h-11 w-14 border-x border-slate-200 bg-white text-center text-base font-black text-slate-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    aria-label="Product quantity"
+                    disabled={maxQuantity === 0}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => updateQuantity(quantity + 1)}
+                    disabled={quantity >= maxQuantity}
+                    className="flex h-11 w-11 items-center justify-center text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-35"
+                    aria-label="Increase quantity"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <Link ref={buyButtonRef} href={checkoutHref} aria-disabled={maxQuantity === 0} tabIndex={maxQuantity === 0 ? -1 : undefined} onClick={(event) => maxQuantity === 0 && event.preventDefault()} className={`mt-6 flex w-full items-center justify-center gap-2 rounded-2xl px-3 py-4 text-base font-bold text-white shadow-lg transition-colors ${maxQuantity === 0 ? "cursor-not-allowed bg-slate-300 shadow-none" : "bg-lime-500 shadow-lime-500/20 hover:bg-lime-600"}`}><ShoppingBag className="h-5 w-5" />Buy Now</Link>
             </div>
           </Card>
         </div>
       </div>
+      <StickyCheckoutBar
+        visible={showStickyCheckout}
+        href={checkoutHref}
+        label="Buy Now"
+        title={`${product.title} × ${quantity}`}
+        price={formatPrice(totalPrice)}
+        tone="lime"
+        disabled={maxQuantity === 0}
+        quantity={quantity}
+        maxQuantity={maxQuantity}
+        onQuantityChange={updateQuantity}
+      />
     </div>
   );
 }

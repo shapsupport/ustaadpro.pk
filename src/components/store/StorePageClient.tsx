@@ -1,24 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { SectionHeader } from "@/components/shared/SectionHeader";
-import { MotionWrapper } from "@/components/motion/MotionWrapper";
-import { NewsletterForm } from "@/components/shared/NewsletterForm";
 import type { ApiProduct, ApiShopResponse } from "@/lib/api-types";
+import { searchApi } from "@/lib/search";
+import { SearchSuggestions } from "@/components/search/SearchSuggestions";
 import {
-  Bell,
-  Filter,
   Package,
   Search,
   ShoppingBag,
   SlidersHorizontal,
-  X,
 } from "lucide-react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "";
@@ -34,6 +30,34 @@ function formatPrice(price?: number | string) {
   return `Rs ${amount.toLocaleString("en-PK")}`;
 }
 
+const PREFERRED_CATEGORY_ORDER = ["Paints", "Tools", "Hardware"];
+const CATEGORY_BATCH_SIZE = 3;
+
+function mixedSlots(categories: ApiShopResponse["categories"], start: number, size: number) {
+  const ordered = [...categories].sort((a, b) => {
+    const aIndex = PREFERRED_CATEGORY_ORDER.indexOf(a.name);
+    const bIndex = PREFERRED_CATEGORY_ORDER.indexOf(b.name);
+    return (aIndex === -1 ? PREFERRED_CATEGORY_ORDER.length : aIndex) - (bIndex === -1 ? PREFERRED_CATEGORY_ORDER.length : bIndex);
+  });
+  const used = new Map(ordered.map((category) => [category.name, 0]));
+  const slots: Array<{ category: string; ordinal: number }> = [];
+  let globalIndex = 0;
+
+  while (slots.length < size && ordered.some((category) => (used.get(category.name) || 0) < category.total)) {
+    for (const category of ordered) {
+      for (let entry = 0; entry < CATEGORY_BATCH_SIZE; entry += 1) {
+        const ordinal = used.get(category.name) || 0;
+        if (ordinal >= category.total) break;
+        if (globalIndex >= start && slots.length < size) slots.push({ category: category.name, ordinal });
+        used.set(category.name, ordinal + 1);
+        globalIndex += 1;
+      }
+      if (slots.length >= size) break;
+    }
+  }
+  return slots;
+}
+
 export default function StorePageClient() {
   const [products, setProducts] = useState<ApiProduct[]>([]);
   const [searchResults, setSearchResults] = useState<ApiProduct[]>([]);
@@ -42,18 +66,47 @@ export default function StorePageClient() {
   const [searching, setSearching] = useState(false);
   const [categories, setCategories] = useState<ApiShopResponse["categories"]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadedCatalogKey, setLoadedCatalogKey] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const pageSize = 15;
+  const pageSize = 45;
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   const loadProducts = useCallback(async () => {
-    await Promise.resolve();
+    const requestKey = `${selectedCategory}:${page}`;
     setLoading(true);
     try {
+      if (selectedCategory === "all") {
+        const metadataResponse = await fetch(`${API_BASE_URL}/api/shop/products?limit=1&offset=0`, { cache: "no-store" });
+        if (!metadataResponse.ok) throw new Error("Unable to load product categories");
+        const metadata = await metadataResponse.json();
+        const catalogCategories: ApiShopResponse["categories"] = Array.isArray(metadata?.categories) ? metadata.categories : [];
+        const slots = mixedSlots(catalogCategories, (page - 1) * pageSize, pageSize);
+        const requests = [...new Set(slots.map((slot) => slot.category))].map(async (category) => {
+          const categorySlots = slots.filter((slot) => slot.category === category);
+          const offset = categorySlots[0]?.ordinal || 0;
+          const response = await fetch(`${API_BASE_URL}/api/shop/products?limit=${categorySlots.length}&offset=${offset}&category=${encodeURIComponent(category)}`, { cache: "no-store" });
+          if (!response.ok) throw new Error(`Unable to load ${category}`);
+          const data = await response.json();
+          return [category, Array.isArray(data?.products) ? data.products : []] as const;
+        });
+        const batches = new Map(await Promise.all(requests));
+        const cursors = new Map<string, number>();
+        const mixedProducts = slots.flatMap((slot) => {
+          const cursor = cursors.get(slot.category) || 0;
+          const product = batches.get(slot.category)?.[cursor];
+          cursors.set(slot.category, cursor + 1);
+          return product ? [product as ApiProduct] : [];
+        });
+        setProducts(mixedProducts);
+        setCategories(catalogCategories);
+        setTotal(catalogCategories.reduce((sum, category) => sum + Number(category.total || 0), 0));
+        return;
+      }
+
       const params = new URLSearchParams({ limit: String(pageSize), offset: String((page - 1) * pageSize) });
-      if (selectedCategory !== "all") params.set("category", selectedCategory);
+      params.set("category", selectedCategory);
       const res = await fetch(`${API_BASE_URL}/api/shop/products?${params}`, {
         cache: "no-store",
       });
@@ -76,6 +129,7 @@ export default function StorePageClient() {
       setProducts([]);
       setCategories([]);
     } finally {
+      setLoadedCatalogKey(requestKey);
       setLoading(false);
     }
   }, [selectedCategory, page]);
@@ -97,35 +151,22 @@ export default function StorePageClient() {
       // Clear the derived result set when returning to normal API pagination.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSearchResults([]);
+      setSearching(false);
       return;
     }
     let active = true;
+    const controller = new AbortController();
     async function searchAllProducts() {
       setSearching(true);
       try {
-        const catalog: ApiProduct[] = [];
-        let offset = 0;
-        let hasMore = true;
-        while (hasMore && active) {
-          const params = new URLSearchParams({ limit: "30", offset: String(offset) });
-          if (selectedCategory !== "all") params.set("category", selectedCategory);
-          const response = await fetch(`${API_BASE_URL}/api/shop/products?${params}`, { cache: "no-store" });
-          if (!response.ok) throw new Error("Search could not load the catalog");
-          const data = await response.json();
-          const batch: ApiProduct[] = Array.isArray(data?.products) ? data.products : [];
-          catalog.push(...batch);
-          hasMore = Boolean(data?.hasMore);
-          offset += 30;
-        }
-        const keyword = debouncedSearch.toLocaleLowerCase();
-        const matches = catalog.filter((product) => [product.title, product.category, product.description].filter(Boolean).join(" ").toLocaleLowerCase().includes(keyword));
+        const matches = await searchApi(debouncedSearch, "shop_product", controller.signal);
         if (active) setSearchResults(matches);
       } catch { if (active) setSearchResults([]); }
       finally { if (active) setSearching(false); }
     }
     void searchAllProducts();
-    return () => { active = false; };
-  }, [debouncedSearch, selectedCategory]);
+    return () => { active = false; controller.abort(); };
+  }, [debouncedSearch]);
 
   const categoryItems = useMemo(() => {
     const allTotal = categories.reduce((sum, item) => sum + Number(item.total || 0), 0);
@@ -138,14 +179,64 @@ export default function StorePageClient() {
     setSearch("");
     setDebouncedSearch("");
     setPage(1);
-    setShowMobileFilters(false);
   }, []);
 
   const activeFilters = selectedCategory !== "all" || Boolean(debouncedSearch);
-  const visibleTotal = debouncedSearch ? searchResults.length : total;
+  const filteredSearchResults = useMemo(() => selectedCategory === "all" ? searchResults : searchResults.filter((product) => product.category === selectedCategory), [searchResults, selectedCategory]);
+  const visibleTotal = debouncedSearch ? filteredSearchResults.length : total;
   const pageCount = Math.max(1, Math.ceil(visibleTotal / pageSize));
-  const visibleProducts = debouncedSearch ? searchResults.slice((page - 1) * pageSize, page * pageSize) : products;
-  const chooseCategory = useCallback((category: string) => { setSelectedCategory(category); setPage(1); }, []);
+  const visibleProducts = debouncedSearch ? filteredSearchResults.slice((page - 1) * pageSize, page * pageSize) : products;
+  const catalogLoading = loading || (!debouncedSearch && loadedCatalogKey !== `${selectedCategory}:${page}`);
+  const skeletonCount = Math.max(12, products.length, visibleProducts.length);
+  const handleSearchChange = useCallback((value: string) => {
+    const isStartingSearch = !search.trim() && Boolean(value.trim());
+    setSearch(value);
+    setPage(1);
+    if (value.trim()) {
+      setSearching(true);
+      if (isStartingSearch) {
+        const target = resultsRef.current;
+        if (target) {
+          const top = target.getBoundingClientRect().top + window.scrollY - 112;
+          window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+        }
+      }
+    }
+    else {
+      setSearching(false);
+      setDebouncedSearch("");
+    }
+  }, [search]);
+  const submitSearch = useCallback(() => {
+    const value = search.trim();
+    if (!value) return;
+    setSearching(true);
+    setDebouncedSearch(value);
+    setPage(1);
+    const target = resultsRef.current;
+    if (target) {
+      const top = target.getBoundingClientRect().top + window.scrollY - 112;
+      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    }
+  }, [search]);
+  const chooseCategory = useCallback((category: string) => {
+    if (!search.trim()) setLoading(true);
+    setSelectedCategory(category);
+    setPage(1);
+    const target = resultsRef.current;
+    if (target) {
+      const top = target.getBoundingClientRect().top + window.scrollY - 112;
+      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    }
+  }, [search]);
+  const choosePage = useCallback((nextPage: number) => {
+    const target = resultsRef.current;
+    if (target) {
+      const top = target.getBoundingClientRect().top + window.scrollY - 112;
+      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    }
+    setPage(nextPage);
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -177,28 +268,37 @@ export default function StorePageClient() {
       </section>
 
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-8">
-          <aside className="sticky top-24 hidden h-fit rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:block">
-            <div className="flex items-center gap-2">
+        <div className="space-y-6">
+          <aside className="sticky top-24 z-40 w-full min-w-0 self-start rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur">
+            <div className="flex items-center gap-2 lg:hidden">
               <SlidersHorizontal className="h-4 w-4 text-lime-600" />
               <h2 className="text-lg font-semibold text-slate-900">Filters</h2>
             </div>
 
-            <div className="mt-5 space-y-5">
-              <div>
-                <label htmlFor="store-search" className="mb-2 block text-sm font-semibold text-slate-700">Search all products</label>
-                <div className="relative">
+            <div className="mt-3 flex flex-col gap-3 lg:mt-0 lg:flex-row lg:items-center">
+              <div className="shrink-0 lg:w-80">
+                <label htmlFor="store-search" className="sr-only">Search all products</label>
+                <div className="relative z-50">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input id="store-search" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Name, category, description…" className="h-11 rounded-2xl border-slate-200 pl-9" />
+                  <Input
+                    id="store-search"
+                    type="search"
+                    value={search}
+                    onChange={(event) => handleSearchChange(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        submitSearch();
+                      }
+                    }}
+                    placeholder="Name, category, description…"
+                    className="h-11 rounded-2xl border-slate-200 pl-9"
+                  />
+                  <SearchSuggestions query={search} scope="shop_product" />
                 </div>
-                <p className="mt-2 text-xs leading-5 text-slate-500">Searches the complete {selectedCategory === "all" ? "shop catalog" : selectedCategory + " category"}.</p>
               </div>
-              <div>
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-700">Categories</p>
-                  <span className="text-xs font-medium text-slate-500">{categoryItems.length - 1} options</span>
-                </div>
-                <div className="space-y-2">
+              <div className="min-w-0 flex-1">
+                <div className="shop-category-scrollbar flex gap-2 overflow-x-auto overflow-y-hidden pb-2">
                   {categoryItems.map((item) => {
                     const isActive = selectedCategory === item.name;
                     return (
@@ -206,7 +306,7 @@ export default function StorePageClient() {
                         key={item.name}
                         type="button"
                         onClick={() => chooseCategory(item.name)}
-                        className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2.5 text-left text-sm font-medium transition ${
+                        className={`flex shrink-0 items-center gap-2 rounded-2xl border px-3 py-2.5 text-left text-sm font-medium transition ${
                           isActive
                             ? "border-lime-500 bg-lime-50 text-lime-700"
                             : "border-slate-200 bg-white text-slate-700 hover:border-lime-200 hover:text-lime-700"
@@ -220,34 +320,19 @@ export default function StorePageClient() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-sm font-semibold text-slate-900">{visibleTotal.toLocaleString("en-PK")} products</p>
-                <p className="mt-1 text-sm text-slate-600">{debouncedSearch ? `Matching “${debouncedSearch}”` : selectedCategory === "all" ? "All categories" : selectedCategory}</p>
+              <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="whitespace-nowrap text-sm font-semibold text-slate-900">{visibleTotal.toLocaleString("en-PK")} products</p>
               </div>
 
               {activeFilters ? (
-                <Button type="button" variant="outline" className="w-full" onClick={clearFilters}>
+                <Button type="button" variant="outline" className="shrink-0" onClick={clearFilters}>
                   Clear filters
                 </Button>
               ) : null}
             </div>
           </aside>
 
-          <div className="space-y-6">
-            <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm lg:hidden">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search all products" className="h-11 rounded-2xl border-slate-200 pl-9" />
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-slate-600">{searching ? "Searching full catalog…" : `${visibleTotal} results · Page ${page} of ${pageCount}`}</p>
-                <Button type="button" variant="outline" className="gap-2" onClick={() => setShowMobileFilters(true)}>
-                  <Filter className="h-4 w-4" />
-                  Filter
-                </Button>
-              </div>
-            </div>
-
+          <div ref={resultsRef} className="min-h-screen scroll-mt-28 space-y-6">
             <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -260,9 +345,9 @@ export default function StorePageClient() {
               </div>
             </div>
 
-            {loading || searching ? (
+            {catalogLoading || searching ? (
               <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-                {Array.from({ length: 6 }).map((_, index) => (
+                {Array.from({ length: skeletonCount }).map((_, index) => (
                   <div key={index} className="h-80 animate-pulse rounded-3xl border border-slate-200 bg-slate-100" />
                 ))}
               </div>
@@ -279,138 +364,11 @@ export default function StorePageClient() {
                   <p className="mt-2 text-sm text-slate-600">Try a different product name or choose another category.</p>
                 </div>
             )}
-            {!loading && pageCount > 1 ? <Pagination page={page} pageCount={pageCount} onPage={setPage} /> : null}
+            {!catalogLoading && !searching && pageCount > 1 ? <Pagination page={page} pageCount={pageCount} onPage={choosePage} /> : null}
           </div>
         </div>
       </div>
 
-      {showMobileFilters ? (
-        <div className="fixed inset-0 z-50 bg-slate-950/50 lg:hidden">
-          <div className="ml-auto flex h-full w-full max-w-sm flex-col bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
-              <div>
-                <p className="text-lg font-semibold text-slate-900">Filters</p>
-                <p className="text-sm text-slate-500">Refine the catalog</p>
-              </div>
-              <button type="button" onClick={() => setShowMobileFilters(false)} className="rounded-full p-2 text-slate-500 hover:bg-slate-100">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 space-y-5 overflow-auto p-4">
-              <div>
-                <p className="mb-2 text-sm font-semibold text-slate-700">Categories</p>
-                <div className="space-y-2">
-                  {categoryItems.map((item) => {
-                    const isActive = selectedCategory === item.name;
-                    return (
-                      <button
-                        key={item.name}
-                        type="button"
-                        onClick={() => {
-                          chooseCategory(item.name);
-                          setShowMobileFilters(false);
-                        }}
-                        className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2.5 text-left text-sm font-medium transition ${
-                          isActive
-                            ? "border-lime-500 bg-lime-50 text-lime-700"
-                            : "border-slate-200 bg-white text-slate-700"
-                        }`}
-                      >
-                        <span>{item.name === "all" ? "All Products" : item.name}</span>
-                        <span className="text-xs text-slate-500">{item.total}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {activeFilters ? (
-                <Button type="button" variant="outline" className="w-full" onClick={clearFilters}>
-                  Clear filters
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      <section className="bg-slate-900 py-14">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.25em] text-lime-400">Why shop with us</p>
-              <h2 className="mt-3 text-3xl font-bold text-white">A smarter way to buy home project essentials</h2>
-              <p className="mt-3 text-sm leading-7 text-slate-400">
-                From tools to finishing materials, our store helps customers find dependable products with clear pricing and fast support.
-              </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {[
-                { title: "Live availability", description: "Products are pulled directly from the shop API." },
-                { title: "Premium selection", description: "Curated categories for repairs, finishes, and maintenance." },
-                { title: "Easy ordering", description: "Product details and order form built for a real shopping flow." },
-                { title: "Customer-first support", description: "Helpful guidance before and after purchase." },
-              ].map((item) => (
-                <div key={item.title} className="rounded-2xl border border-white/10 bg-white/10 p-4">
-                  <h3 className="text-lg font-semibold text-white">{item.title}</h3>
-                  <p className="mt-2 text-sm text-slate-400">{item.description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-gray-50/70 py-14">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <MotionWrapper>
-            <SectionHeader
-              badge="FAQs"
-              title="Frequently asked questions"
-              description="Everything you need to know before placing an order from our online store."
-            />
-          </MotionWrapper>
-          <div className="mx-auto mt-8 max-w-3xl rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="space-y-3">
-              {[
-                {
-                  question: "How do I place an order?",
-                  answer: "Open any product, review the details, and submit the order form with your contact information.",
-                },
-                {
-                  question: "Can I search by category?",
-                  answer: "Yes. The filter drawer lets you quickly narrow the catalog by category and sort by price or newest items.",
-                },
-                {
-                  question: "Do you ship nationwide?",
-                  answer: "Yes. We support nationwide delivery and will confirm the delivery details once your order is placed.",
-                },
-              ].map((item) => (
-                <div key={item.question} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="font-semibold text-slate-900">{item.question}</p>
-                  <p className="mt-2 text-sm text-slate-600">{item.answer}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-gray-900 py-14">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <MotionWrapper>
-            <div className="mx-auto max-w-2xl text-center">
-              <Bell className="mx-auto mb-4 h-10 w-10 text-lime-400" />
-              <h2 className="text-3xl font-bold text-white sm:text-4xl">Stay updated with new arrivals</h2>
-              <p className="mt-4 text-gray-400">Subscribe for stock updates, new products, and special offers.</p>
-              <div className="mt-8">
-                <NewsletterForm />
-              </div>
-            </div>
-          </MotionWrapper>
-        </div>
-      </section>
     </div>
   );
 }
@@ -442,6 +400,7 @@ function ProductCard({ product }: { product: ApiProduct }) {
               src={imageSrc}
               alt={product.title}
               fill
+              unoptimized
               className="object-cover transition-transform duration-500 group-hover:scale-105"
               sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 25vw"
             />
@@ -460,25 +419,25 @@ function ProductCard({ product }: { product: ApiProduct }) {
           ) : null}
         </div>
 
-        <div className="p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-lime-600">{product.category}</p>
-          <h3 className="mt-2 line-clamp-2 text-sm font-semibold text-slate-900 transition-colors group-hover:text-lime-700">
+        <div className="p-6">
+          <p className="text-sm font-bold uppercase tracking-[0.2em] text-lime-600">{product.category}</p>
+          <h3 className="mt-2 line-clamp-2 text-lg font-bold leading-snug text-slate-900 transition-colors group-hover:text-lime-700 sm:text-xl">
             {product.title}
           </h3>
 
-          <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
+          <div className="mt-3 flex items-center gap-2 text-base text-slate-500">
             <span>{product.stock > 0 ? `${product.stock.toLocaleString("en-PK")} in stock` : "Out of stock"}</span>
           </div>
 
           <div className="mt-4 flex items-center gap-2">
-            <span className="text-lg font-bold text-slate-900">{formatPrice(product.price)}</span>
+            <span className="text-2xl font-black text-slate-900">{formatPrice(product.price)}</span>
             {hasDiscount ? (
               <span className="text-sm text-slate-400 line-through">{formatPrice(product.originalPrice)}</span>
             ) : null}
           </div>
 
           <div className="mt-5 flex gap-2">
-            <Button size="sm" className="flex-1 bg-lime-500 text-xs font-semibold text-white hover:bg-lime-600">
+            <Button className="h-11 flex-1 bg-lime-500 text-base font-bold text-white hover:bg-lime-600">
               View details
             </Button>
           </div>

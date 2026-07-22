@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -14,18 +14,18 @@ import {
   Layers,
   Paintbrush,
   Search,
-  ShieldCheck,
   Snowflake,
   Sparkles,
   Star,
   Shirt,
   Wrench,
   Zap,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import type { ApiCategory, ApiService } from "@/lib/api-types";
 import { useRef } from "react";
+import { searchApi } from "@/lib/search";
+import { orderCategories, orderServices } from "@/lib/service-order";
+import { SearchSuggestions } from "@/components/search/SearchSuggestions";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
@@ -47,8 +47,6 @@ const CAT_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   subscriptions: Calendar,
 };
 
-const PRIORITY_CATS = ["electrician", "plumbers", "carpenter", "home-cleaning", "ac-services"];
-
 interface ServicesPageContentProps {
   initialServices: ApiService[];
   initialCategories: ApiCategory[];
@@ -57,41 +55,65 @@ interface ServicesPageContentProps {
 export function ServicesPageContent({ initialServices, initialCategories }: ServicesPageContentProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [serviceSearchResults, setServiceSearchResults] = useState<ApiService[]>([]);
+  const [searching, setSearching] = useState(false);
 
-  const tabsRef = useRef<HTMLDivElement>(null);
-
-  const scrollTabs = (direction: "left" | "right") => {
-    tabsRef.current?.scrollBy({
-      left: direction === "left" ? -250 : 250,
-      behavior: "smooth",
-    });
-  };
+  const servicesRef = useRef<HTMLDivElement>(null);
 
   const allCategories = useMemo(() => {
     const catIds = [...new Set(initialServices.map((s) => s.category_id))];
-    return catIds.map((id) => {
+    return orderCategories(catIds.map((id) => {
       const found = initialCategories.find((c) => c.id === id);
       return found ?? { id, title: id.replace(/-/g, " "), subtitle: "", icon: "", tint: "#059669" };
-    });
+    }));
   }, [initialServices, initialCategories]);
 
+  const selectCategory = (categoryId: string, updateUrl = false) => {
+    setActiveCategory(categoryId);
+    if (updateUrl) {
+      window.history.replaceState(null, "", categoryId === "all" ? "/services" : `/services#${categoryId}`);
+    }
+    window.requestAnimationFrame(() => {
+      servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  useEffect(() => {
+    const selectFromHash = () => {
+      const categoryId = window.location.hash.slice(1);
+      if (categoryId && allCategories.some((category) => category.id === categoryId)) {
+        selectCategory(categoryId);
+      }
+    };
+
+    selectFromHash();
+    window.addEventListener("hashchange", selectFromHash);
+    return () => window.removeEventListener("hashchange", selectFromHash);
+  }, [allCategories]);
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setSearching(true);
+      try { setServiceSearchResults(await searchApi(query, "service", controller.signal)); }
+      catch { if (!controller.signal.aborted) setServiceSearchResults([]); }
+      finally { if (!controller.signal.aborted) setSearching(false); }
+    }, 300);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [searchQuery]);
+
   const filtered = useMemo(() => {
-    const q = searchQuery.toLowerCase();
-    const base = initialServices.filter((s) => {
+    const q = searchQuery.trim();
+    const source = orderServices(q ? serviceSearchResults : initialServices);
+    const base = source.filter((s) => {
       const matchCat = activeCategory === "all" || s.category_id === activeCategory;
-      const matchQ = !q || s.title.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
-      return matchCat && matchQ;
+      return matchCat;
     });
 
-    return base.sort((a, b) => {
-      const ai = PRIORITY_CATS.indexOf(a.category_id);
-      const bi = PRIORITY_CATS.indexOf(b.category_id);
-      if (ai !== -1 && bi === -1) return -1;
-      if (bi !== -1 && ai === -1) return 1;
-      if (ai !== -1 && bi !== -1) return ai - bi;
-      return a.title.localeCompare(b.title);
-    });
-  }, [initialServices, activeCategory, searchQuery]);
+    return base;
+  }, [initialServices, serviceSearchResults, activeCategory, searchQuery]);
 
   return (
     <div className="min-h-screen bg-slate-50 pt-0">
@@ -111,18 +133,27 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
             </p>
 
             <div className="mt-8 flex flex-col gap-3 rounded-3xl border border-white/20 bg-white/10 p-4 shadow-xl backdrop-blur-sm sm:flex-row sm:items-center">
-              <div className="flex flex-1 items-center rounded-2xl bg-white px-4 shadow-sm">
+              <div className="relative flex flex-1 items-center rounded-2xl bg-white px-4 shadow-sm">
                 <Search className="mr-3 h-5 w-5 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Search services, e.g. AC or painter"
                   value={searchQuery}
                   onChange={(e) => {
-                    setSearchQuery(e.target.value);
+                    const value = e.target.value;
+                    setSearchQuery(value);
                     setActiveCategory("all");
+                    if (!value.trim()) { setServiceSearchResults([]); setSearching(false); }
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }
                   }}
                   className="h-12 w-full bg-transparent text-base text-slate-800 outline-none placeholder:text-slate-400"
                 />
+                <SearchSuggestions query={searchQuery} scope="service" services={initialServices} />
               </div>
               <button
                 onClick={() => {
@@ -157,70 +188,47 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
         </div>
       </section>
 
-      <div className="sticky top-22 z-20 border-b border-slate-200 bg-white/90 shadow-sm backdrop-blur">
+      <section className="border-b border-slate-100 bg-white py-7">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="relative">
-            {/* Left Arrow */}
-            <button
-              type="button"
-              onClick={() => scrollTabs("left")}
-              className="absolute left-2 top-1/2 z-20 -translate-y-1/2 rounded-full border border-slate-200 bg-white p-2 shadow-md transition hover:bg-slate-100"
-            >
-              <ChevronLeft className="h-5 w-5 text-slate-700" />
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="text-lg font-extrabold text-slate-900">Browse by category</h2>
+            <button type="button" onClick={() => selectCategory("all", true)} className="flex items-center gap-1 text-sm font-bold text-emerald-700">
+              View all <ArrowRight className="h-4 w-4" />
             </button>
-
-            {/* Category Tabs */}
-            <div
-              ref={tabsRef}
-              className="flex gap-2 overflow-x-auto px-14 py-3 hide-scrollbar scroll-smooth"
-            >
-              <button
-                onClick={() => setActiveCategory("all")}
-                className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition ${activeCategory === "all"
-                  ? "bg-primary text-white shadow-sm"
-                  : "text-slate-600 hover:bg-slate-100"
-                  }`}
-              >
-                All Services
-              </button>
-
-              {allCategories.map((cat) => {
-                const IconComponent = CAT_ICONS[cat.id] || Wrench;
-
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => setActiveCategory(cat.id)}
-                    className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition ${activeCategory === cat.id
-                      ? "bg-primary text-white shadow-sm"
-                      : "text-slate-600 hover:bg-slate-100"
-                      }`}
-                  >
-                    <IconComponent className="h-4 w-4" />
-                    {cat.title}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Right Arrow */}
+          </div>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-10">
+            {allCategories.slice(0, 9).map((category) => {
+              const IconComponent = CAT_ICONS[category.id] || Wrench;
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => selectCategory(category.id, true)}
+                  className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border px-2 py-3 text-center transition hover:-translate-y-0.5 hover:shadow-md ${activeCategory === category.id ? "border-emerald-400 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700"}`}
+                >
+                  <IconComponent className="h-6 w-6 text-emerald-600" />
+                  <span className="text-[11px] font-bold leading-tight capitalize">{category.title}</span>
+                </button>
+              );
+            })}
             <button
               type="button"
-              onClick={() => scrollTabs("right")}
-              className="absolute right-2 top-1/2 z-20 -translate-y-1/2 rounded-full border border-slate-200 bg-white p-2 shadow-md transition hover:bg-slate-100"
+              onClick={() => selectCategory("all", true)}
+              className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border px-2 py-3 transition hover:shadow-md ${activeCategory === "all" ? "border-emerald-400 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700"}`}
             >
-              <ChevronRight className="h-5 w-5 text-slate-700" />
+              <Layers className="h-6 w-6 text-emerald-600" />
+              <span className="text-[11px] font-bold">All services</span>
             </button>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <div ref={servicesRef} className="mx-auto max-w-7xl scroll-mt-36 px-4 py-10 sm:px-6 lg:px-8">
         <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-slate-900">Service shortlist</h2>
             <p className="text-sm text-slate-500">
-              {filtered.length} option{filtered.length !== 1 ? "s" : ""} ready for your next booking.
+              {searching ? "Searching all services…" : `${filtered.length} option${filtered.length !== 1 ? "s" : ""} ready for your next booking.`}
             </p>
           </div>
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm">
@@ -263,12 +271,13 @@ function ServiceCardLarge({ service }: { service: ApiService }) {
   return (
     <Link href={`/services/${service.id}`} className="group block">
       <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-        <div className="relative h-52 shrink-0 bg-slate-100">
+        <div className="relative h-60 shrink-0 bg-slate-100 sm:h-64">
           {src ? (
             <Image
               src={src}
               alt={service.title}
               fill
+              unoptimized
               className="object-cover transition-transform duration-500 group-hover:scale-105"
               sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
             />
@@ -295,15 +304,15 @@ function ServiceCardLarge({ service }: { service: ApiService }) {
         </div>
 
         <div className="flex flex-1 flex-col p-6">
-          <h3 className="text-lg font-bold text-slate-900 transition-colors group-hover:text-primary">{service.title}</h3>
-          <p className="mt-2 flex-1 text-sm leading-6 text-slate-500">
+          <h3 className="text-xl font-bold leading-snug text-slate-900 transition-colors group-hover:text-primary sm:text-2xl">{service.title}</h3>
+          <p className="mt-2 flex-1 text-base leading-7 text-slate-500">
             {service.detail_description || service.description}
           </p>
 
           <div className="mt-5 flex items-center gap-2">
-            <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-            <span className="text-sm font-bold text-slate-700">{service.rating}</span>
-            <span className="text-xs text-slate-400">({service.reviews} reviews)</span>
+            <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+            <span className="text-base font-bold text-slate-700">{service.rating}</span>
+            <span className="text-sm text-slate-400">({service.reviews} reviews)</span>
             {service.workPrices && service.workPrices.length > 0 ? (
               <span className="ml-auto flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-primary">
                 <BadgeCheck className="h-3.5 w-3.5" />
@@ -316,12 +325,12 @@ function ServiceCardLarge({ service }: { service: ApiService }) {
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Starting from</p>
               <div className="mt-1 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-slate-900">Rs {service.price.toLocaleString()}</span>
+                <span className="text-3xl font-black text-slate-900">Rs {service.price.toLocaleString()}</span>
                 {discount > 0 ? <span className="text-xs text-slate-400 line-through">Rs {originalPrice.toLocaleString()}</span> : null}
               </div>
             </div>
-            <span className="flex items-center gap-1.5 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-md shadow-primary/20 transition hover:bg-emerald-700">
-              Book <ArrowRight className="h-4 w-4" />
+            <span className="flex items-center gap-2 rounded-2xl bg-primary px-5 py-3.5 text-base font-bold text-white shadow-md shadow-primary/20 transition hover:bg-emerald-700">
+              Book <ArrowRight className="h-5 w-5" />
             </span>
           </div>
         </div>

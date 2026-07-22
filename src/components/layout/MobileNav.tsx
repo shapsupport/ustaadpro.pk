@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { navItems, quickAccessMenu } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { X, LogOut, LogIn, UserPlus } from "lucide-react";
+import { LogOut, LogIn, UserPlus } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -35,9 +36,13 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
               onClick={onClose}
               className="flex items-center gap-2"
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-lime-500">
-                <span className="text-base font-black text-white">U</span>
-              </div>
+              <Image
+                src="/brand/ustaad-pro-mark.webp"
+                alt=""
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-xl object-contain shadow-sm"
+              />
 
               <span className="text-lg font-bold text-gray-900">
                 Ustaad <span className="text-lime-500">Pro</span>
