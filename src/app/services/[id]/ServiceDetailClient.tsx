@@ -327,7 +327,7 @@ export function ServiceDetailClient({ service }: { service: ApiService }) {
                 {/* CTA */}
                 <Link ref={bookingButtonRef} href={bookingHref} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-3 py-4 text-base font-bold text-white shadow-lg shadow-primary/20 transition-colors hover:bg-emerald-700"><ShoppingBag className="h-5 w-5" />Book Now</Link>
                 <a
-                  href={`https://wa.me/${process.env.NEXT_PUBLIC_WA_NUM}`}
+                  href="https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%2C%20I%20want%20to%20book%20a%20service."
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-2xl text-sm transition-colors mt-3"

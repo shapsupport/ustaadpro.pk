@@ -64,3 +64,17 @@ export interface ApiShopResponse {
   category: string;
   hasMore: boolean;
 }
+
+export interface ApiReview {
+  id: string | number;
+  rating: number;
+  comment: string;
+  createdAt?: string;
+  created_at?: string;
+  userName?: string;
+  user_name?: string;
+  customerName?: string;
+  serviceTitle?: string;
+  service_title?: string;
+  user?: { name?: string };
+}

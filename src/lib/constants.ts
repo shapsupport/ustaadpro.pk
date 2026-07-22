@@ -12,8 +12,17 @@ export const siteConfig = {
   mapsUrl: "https://maps.app.goo.gl/N7Hn1o8pupSz3iQ69",
 } as const;
 
+export const appLinks = {
+  googlePlay: "https://play.google.com/store/apps/details?id=app.sharplogicians.ustaadpro&pcampaignid=web_share",
+  appStore: "https://apps.apple.com/pk/search?term=UstaadPro",
+} as const;
+
+export const whatsappUrl =
+  "https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%2C%20I%20want%20to%20book%20a%20service.";
+
 export const navItems = [
   { label: "Home", href: "/" },
+  { label: "About Us", href: "/about" },
   { label: "Services", href: "/services" },
   { label: "Store", href: "/store" },
   { label: "Track Booking", href: "/track-booking" },

@@ -1,5 +1,5 @@
 import { cache } from "react";
-import type { ApiCategory, ApiService } from "@/lib/api-types";
+import type { ApiCategory, ApiReview, ApiService } from "@/lib/api-types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "");
 const REVALIDATE_SECONDS = 300;
@@ -67,3 +67,32 @@ export const getServices = cache(() =>
 export const getCategories = cache(() =>
   fetchCollection<ApiCategory>("/api/categories/", "categories"),
 );
+
+export const getLatestReviews = cache(async (services: ApiService[]) => {
+  if (!API_BASE_URL || !services.length) return [] as ApiReview[];
+
+  const results = await Promise.all(services.map(async (service) => {
+    try {
+      const response = await fetch(apiUrl(`/api/services/${encodeURIComponent(service.id)}/reviews`), {
+        headers: { Accept: "application/json" },
+        next: { revalidate: REVALIDATE_SECONDS },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (!response.ok) return [];
+      const data: unknown = await response.json();
+      if (!Array.isArray(data)) return [];
+      return (data as ApiReview[]).map((review) => ({
+        ...review,
+        serviceTitle: review.serviceTitle || review.service_title || service.title,
+      }));
+    } catch {
+      return [];
+    }
+  }));
+
+  return results
+    .flat()
+    .filter((review) => Number(review.rating) >= 4 && String(review.comment || "").trim().length >= 20)
+    .sort((a, b) => new Date(b.createdAt || b.created_at || 0).getTime() - new Date(a.createdAt || a.created_at || 0).getTime())
+    .slice(0, 4);
+});

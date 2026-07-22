@@ -6,6 +6,7 @@ import { footerLinks, socialLinks, siteConfig } from "@/lib/constants";
 import { Separator } from "@/components/ui/separator";
 import { NewsletterForm } from "@/components/shared/NewsletterForm";
 import { ArrowRight, Mail, MapPin, Phone } from "lucide-react";
+import { AppStoreButtons } from "@/components/shared/AppStoreButtons";
 
 const Facebook = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
@@ -46,7 +47,7 @@ export function Footer() {
         </div>
       </div>
 
-      <div className="container-wide grid gap-10 px-4 py-14 sm:grid-cols-2 md:px-6 lg:grid-cols-5 lg:gap-8 lg:px-8">
+      <div className="container-wide grid gap-10 px-4 py-14 sm:grid-cols-2 md:px-6 lg:grid-cols-6 lg:gap-8 lg:px-8">
         <div className="lg:col-span-2">
           <Link href="/" aria-label="Ustaad Pro Home" className="inline-flex rounded-2xl bg-white p-2 shadow-lg shadow-black/20">
             <Image
@@ -147,6 +148,12 @@ export function Footer() {
               </li>
             ))}
           </ul>
+        </div>
+
+        <div>
+          <h4 className="mb-4 text-sm font-semibold uppercase tracking-[0.22em] text-white">Download App</h4>
+          <p className="mb-4 text-sm leading-6 text-slate-400">Book services and manage your orders wherever you are.</p>
+          <AppStoreButtons compact />
         </div>
       </div>
 
