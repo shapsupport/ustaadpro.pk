@@ -20,8 +20,6 @@ import {
   Shirt,
   Wrench,
   Zap,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import type { ApiCategory, ApiService } from "@/lib/api-types";
 import { useRef } from "react";
@@ -60,15 +58,7 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
   const [serviceSearchResults, setServiceSearchResults] = useState<ApiService[]>([]);
   const [searching, setSearching] = useState(false);
 
-  const tabsRef = useRef<HTMLDivElement>(null);
   const servicesRef = useRef<HTMLDivElement>(null);
-
-  const scrollTabs = (direction: "left" | "right") => {
-    tabsRef.current?.scrollBy({
-      left: direction === "left" ? -250 : 250,
-      behavior: "smooth",
-    });
-  };
 
   const allCategories = useMemo(() => {
     const catIds = [...new Set(initialServices.map((s) => s.category_id))];
@@ -198,63 +188,40 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
         </div>
       </section>
 
-      <div className="sticky top-22 z-20 border-b border-slate-200 bg-white/90 shadow-sm backdrop-blur">
+      <section className="border-b border-slate-100 bg-white py-7">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="relative">
-            {/* Left Arrow */}
-            <button
-              type="button"
-              onClick={() => scrollTabs("left")}
-              className="absolute left-2 top-1/2 z-20 -translate-y-1/2 rounded-full border border-slate-200 bg-white p-2 shadow-md transition hover:bg-slate-100"
-            >
-              <ChevronLeft className="h-5 w-5 text-slate-700" />
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="text-lg font-extrabold text-slate-900">Browse by category</h2>
+            <button type="button" onClick={() => selectCategory("all", true)} className="flex items-center gap-1 text-sm font-bold text-emerald-700">
+              View all <ArrowRight className="h-4 w-4" />
             </button>
-
-            {/* Category Tabs */}
-            <div
-              ref={tabsRef}
-              className="flex gap-2 overflow-x-auto px-14 py-3 hide-scrollbar scroll-smooth"
-            >
-              <button
-                onClick={() => selectCategory("all", true)}
-                className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition ${activeCategory === "all"
-                  ? "bg-primary text-white shadow-sm"
-                  : "text-slate-600 hover:bg-slate-100"
-                  }`}
-              >
-                All Services
-              </button>
-
-              {allCategories.map((cat) => {
-                const IconComponent = CAT_ICONS[cat.id] || Wrench;
-
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => selectCategory(cat.id, true)}
-                    className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition ${activeCategory === cat.id
-                      ? "bg-primary text-white shadow-sm"
-                      : "text-slate-600 hover:bg-slate-100"
-                      }`}
-                  >
-                    <IconComponent className="h-4 w-4" />
-                    {cat.title}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Right Arrow */}
+          </div>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-10">
+            {allCategories.slice(0, 9).map((category) => {
+              const IconComponent = CAT_ICONS[category.id] || Wrench;
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => selectCategory(category.id, true)}
+                  className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border px-2 py-3 text-center transition hover:-translate-y-0.5 hover:shadow-md ${activeCategory === category.id ? "border-emerald-400 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700"}`}
+                >
+                  <IconComponent className="h-6 w-6 text-emerald-600" />
+                  <span className="text-[11px] font-bold leading-tight capitalize">{category.title}</span>
+                </button>
+              );
+            })}
             <button
               type="button"
-              onClick={() => scrollTabs("right")}
-              className="absolute right-2 top-1/2 z-20 -translate-y-1/2 rounded-full border border-slate-200 bg-white p-2 shadow-md transition hover:bg-slate-100"
+              onClick={() => selectCategory("all", true)}
+              className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border px-2 py-3 transition hover:shadow-md ${activeCategory === "all" ? "border-emerald-400 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700"}`}
             >
-              <ChevronRight className="h-5 w-5 text-slate-700" />
+              <Layers className="h-6 w-6 text-emerald-600" />
+              <span className="text-[11px] font-bold">All services</span>
             </button>
           </div>
         </div>
-      </div>
+      </section>
 
       <div ref={servicesRef} className="mx-auto max-w-7xl scroll-mt-36 px-4 py-10 sm:px-6 lg:px-8">
         <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">

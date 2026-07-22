@@ -38,6 +38,7 @@ export const socialLinks = [
 export const footerLinks = {
   quickLinks: [
     { label: "Home", href: "/" },
+    { label: "About Us", href: "/about" },
     { label: "Contact", href: "/contact" },
     { label: "FAQs", href: "/faqs" },
   ],
