@@ -33,6 +33,7 @@ export default function CheckoutPageClient() {
   const productId = searchParams.get("productId") || "";
   const productTitle = searchParams.get("productTitle") || "Selected product";
   const productPrice = Number(searchParams.get("productPrice") || 0);
+  const productImage = searchParams.get("productImage") || "";
   const quantity = Number(searchParams.get("quantity") || 1);
   const isShop = !!productId;
 
@@ -166,6 +167,9 @@ export default function CheckoutPageClient() {
           preferredTime: isShop ? "" : new Date(`${formData.preferredDate}T${formData.preferredTime}:00+05:00`).toISOString(),
           notes: formData.notes,
           screenshotName,
+          kind: isShop ? "shop" : "service",
+          serviceId: isShop ? undefined : serviceId,
+          items: isShop ? [{ productId, title: productTitle, quantity, price: productPrice, imageUrl: productImage }] : undefined,
         };
 
         // Persist to localStorage for local history
@@ -187,7 +191,7 @@ export default function CheckoutPageClient() {
         setIsSubmitting(false);
       }
     },
-    [selectedAddress, serviceTitle, workTitle, servicePrice, user, serviceId, workPriceId, settings, API_BASE_URL, isShop, productId, quantity, checkoutTitle, checkoutPrice, taxAmount]
+    [selectedAddress, serviceTitle, workTitle, servicePrice, user, serviceId, workPriceId, settings, API_BASE_URL, isShop, productId, productTitle, productPrice, productImage, quantity, checkoutTitle, checkoutPrice, taxAmount]
   );
 
 

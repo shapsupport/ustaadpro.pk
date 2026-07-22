@@ -40,6 +40,9 @@ export type BookingRecord = {
   preferredTime: string;
   notes: string;
   screenshotName: string;
+  kind?: "service" | "shop";
+  serviceId?: string;
+  items?: Array<{ productId: string; title: string; quantity: number; price: number; imageUrl?: string }>;
 };
 
 export const DEFAULT_SETTINGS: AdminSettings = {

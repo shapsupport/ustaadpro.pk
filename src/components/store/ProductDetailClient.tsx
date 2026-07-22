@@ -41,7 +41,7 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
   );
   const maxQuantity = Math.max(0, product.stock);
   const totalPrice = Number(product.price) * quantity;
-  const checkoutHref = `/checkout?productId=${product.id}&productTitle=${encodeURIComponent(product.title)}&productPrice=${product.price}&quantity=${quantity}`;
+  const checkoutHref = `/checkout?productId=${product.id}&productTitle=${encodeURIComponent(product.title)}&productPrice=${product.price}&productImage=${encodeURIComponent(product.imageUrl || "")}&quantity=${quantity}`;
 
   const updateQuantity = (nextQuantity: number) => {
     setQuantity(Math.min(Math.max(1, nextQuantity), maxQuantity || 1));

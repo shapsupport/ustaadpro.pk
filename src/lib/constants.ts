@@ -7,7 +7,9 @@ export const siteConfig = {
   url: "https://ustaadpro.pk",
   email: "ustaadpro.official26@gmail.com",
   phone: "+92 371 9201273",
-  address: "Islamabad, Pakistan",
+  address:
+    "Sharplogicians Agile Center, Building # 153-M, Office # 32, 4th Floor, D-Block Civic Center, Phase 4, Bahria Town, Islamabad 46220, Pakistan",
+  mapsUrl: "https://maps.app.goo.gl/N7Hn1o8pupSz3iQ69",
 } as const;
 
 export const navItems = [
@@ -56,7 +58,9 @@ export const footerLinks = {
   ],
   legal: [
     { label: "Privacy Policy", href: "/privacy-policy" },
-    { label: "Terms of Service", href: "/terms" },
+    { label: "Terms & Conditions", href: "/terms" },
+    { label: "Return & Refund Policy", href: "/return-refund-policy" },
+    { label: "Shipping & Service Policy", href: "/shipping-service-policy" },
   ],
 } as const;
 

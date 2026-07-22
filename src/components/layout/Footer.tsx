@@ -62,9 +62,11 @@ export function Footer() {
           </p>
 
           <div className="mt-6 space-y-3 text-sm">
-            <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 shrink-0 text-lime-400" />
-              <span>{siteConfig.address}</span>
+            <div className="flex items-start gap-2">
+              <MapPin className="mt-1 h-4 w-4 shrink-0 text-lime-400" />
+              <a href={siteConfig.mapsUrl} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-lime-400">
+                {siteConfig.address}
+              </a>
             </div>
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 shrink-0 text-lime-400" />
