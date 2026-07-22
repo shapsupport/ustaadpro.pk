@@ -57,7 +57,7 @@ export function Navbar() {
         )}
       >
         <nav
-          className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-4 sm:px-6 lg:px-8"
+          className="mx-auto flex h-20 max-w-[1536px] items-center justify-between px-4 sm:px-6 lg:px-8"
           aria-label="Main navigation"
         >
           {/* Logo */}
@@ -69,25 +69,25 @@ export function Navbar() {
             <Image
               src="/brand/ustaad-pro-mark.webp"
               alt=""
-              width={40}
-              height={40}
+              width={44}
+              height={44}
               priority
-              className="h-10 w-10 rounded-xl object-contain shadow-md shadow-primary/15"
+              className="h-11 w-11 rounded-xl object-contain shadow-md shadow-primary/15"
             />
 
-            <span className="text-xl font-black tracking-tight text-slate-900">
+            <span className="text-2xl font-black tracking-tight text-slate-900">
               Ustaad<span className="font-bold text-primary">Pro</span>
             </span>
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden items-center gap-0.5 xl:flex">
+          <div className="hidden items-center gap-1 xl:flex">
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "rounded-lg px-2.5 py-2 text-xs font-semibold transition-all hover:bg-emerald-50 hover:text-primary",
+                  "rounded-xl px-3.5 py-2.5 text-sm font-bold transition-all hover:bg-emerald-50 hover:text-primary",
                   pathname === item.href
                     ? "bg-emerald-50 text-primary"
                     : "text-slate-600"
@@ -120,7 +120,7 @@ export function Navbar() {
             {user ? (
               <button
                 onClick={() => setProfileOpen(true)}
-                className="hidden xl:flex items-center gap-2 rounded-xl bg-gradient-to-br from-primary to-emerald-700 px-4 h-10 font-bold text-white shadow-md shadow-primary/10 transition-all hover:opacity-90 cursor-pointer"
+                className="hidden xl:flex items-center gap-2 rounded-xl bg-gradient-to-br from-primary to-emerald-700 px-5 h-11 font-bold text-white shadow-md shadow-primary/10 transition-all hover:opacity-90 cursor-pointer"
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
                   <UserRound className="h-4 w-4" />
@@ -134,14 +134,14 @@ export function Navbar() {
               <div className="hidden xl:flex items-center gap-1">
                 <button
                   onClick={() => setAuthModalMode("login")}
-                  className="h-10 px-3 text-xs font-bold text-slate-700 transition-colors hover:text-primary cursor-pointer"
+                  className="h-11 px-4 text-sm font-bold text-slate-700 transition-colors hover:text-primary cursor-pointer"
                 >
                   Sign In
                 </button>
 
                 <button
                   onClick={() => setAuthModalMode("signup")}
-                  className="h-10 rounded-xl bg-primary px-4 text-xs font-bold text-white shadow-md shadow-primary/20 transition-all hover:bg-emerald-700 cursor-pointer"
+                  className="h-11 rounded-xl bg-primary px-5 text-sm font-bold text-white shadow-md shadow-primary/20 transition-all hover:bg-emerald-700 cursor-pointer"
                 >
                   Sign Up
                 </button>

@@ -9,12 +9,12 @@ import {
   Paintbrush, Search, ShieldCheck, Shirt, Snowflake, Sparkles, Star,
   Timer, UserCheck, WalletCards, Wrench, Zap, type LucideIcon,
 } from "lucide-react";
-import type { ApiCategory, ApiService } from "@/lib/api-types";
+import type { ApiCategory, ApiReview, ApiService } from "@/lib/api-types";
 import { useLocation } from "@/context/LocationContext";
 import { searchApi } from "@/lib/search";
 import { orderCategories, orderServices } from "@/lib/service-order";
 import { SearchSuggestions } from "@/components/search/SearchSuggestions";
-import { testimonials } from "@/data/testimonials";
+import { AppStoreButtons } from "@/components/shared/AppStoreButtons";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
@@ -45,9 +45,10 @@ const trustItems = [
 interface AppLayoutProps {
   initialServices: ApiService[];
   categories: ApiCategory[];
+  reviews: ApiReview[];
 }
 
-export function AppLayout({ initialServices, categories }: AppLayoutProps) {
+export function AppLayout({ initialServices, categories, reviews }: AppLayoutProps) {
   const { location, setShowPicker } = useLocation();
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
@@ -236,8 +237,33 @@ export function AppLayout({ initialServices, categories }: AppLayoutProps) {
       <section className="bg-slate-50 py-14">
         <div className="container-wide px-4 sm:px-6 lg:px-8">
           <div className="text-center"><h2 className="text-2xl font-black">What our customers say</h2><p className="mt-1 text-sm text-slate-500">Experiences shared by Ustaad Pro customers</p></div>
-          <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {testimonials.slice(0, 4).map((review) => <article key={review.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex gap-0.5">{Array.from({ length: 5 }).map((_, index) => <Star key={index} className={`h-4 w-4 ${index < review.rating ? "fill-amber-400 text-amber-400" : "text-slate-200"}`} />)}</div><p className="mt-4 line-clamp-4 text-sm leading-6 text-slate-600">“{review.review}”</p><div className="mt-5 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-sm font-black text-emerald-700">{review.name[0]}</span><div><strong className="block text-xs">{review.name}</strong><span className="text-[11px] text-slate-400">{review.location}</span></div></div></article>)}
+          {reviews.length > 0 ? <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {reviews.map((review) => {
+              const name = review.userName || review.user_name || review.customerName || review.user?.name || "Ustaad Pro customer";
+              return <article key={review.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex gap-0.5">{Array.from({ length: 5 }).map((_, index) => <Star key={index} className={`h-4 w-4 ${index < Math.round(Number(review.rating)) ? "fill-amber-400 text-amber-400" : "text-slate-200"}`} />)}</div><p className="mt-4 line-clamp-5 text-sm leading-6 text-slate-600">“{review.comment}”</p><div className="mt-5 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-sm font-black text-emerald-700">{name[0]}</span><div><strong className="block text-xs">{name}</strong><span className="text-[11px] text-slate-400">{review.serviceTitle || "Verified booking"}</span></div></div></article>;
+            })}
+          </div> : <div className="mx-auto mt-8 max-w-2xl rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center"><Star className="mx-auto h-8 w-8 text-amber-400" /><h3 className="mt-3 font-bold text-slate-800">Customer reviews will appear here</h3><p className="mt-1 text-sm text-slate-500">The latest highly rated, published reviews are loaded directly from completed bookings.</p></div>}
+        </div>
+      </section>
+
+      <section className="overflow-hidden bg-white py-12 md:py-16">
+        <div className="container-wide px-4 sm:px-6 lg:px-8">
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-950 via-emerald-800 to-emerald-600 text-white">
+            <div className="absolute inset-0 opacity-15" style={{ backgroundImage: "radial-gradient(#fff 1px,transparent 1px)", backgroundSize: "20px 20px" }} />
+            <div className="relative grid min-h-[410px] items-center md:grid-cols-[.9fr_1.1fr]">
+              <div className="relative hidden h-full min-h-[410px] md:block">
+                <Image src="/home/app-spokesperson-branded-v2.png" alt="Ustaad Pro app customer holding a smartphone displaying the Ustaad Pro logo" fill sizes="45vw" className="object-contain object-bottom" />
+              </div>
+              <div className="relative px-6 py-12 sm:px-10 md:px-8 lg:px-14">
+                <span className="inline-flex rounded-full border border-lime-300/25 bg-lime-300/10 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-lime-300">Ustaad Pro mobile app</span>
+                <h2 className="mt-5 max-w-xl text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">Your home services, right in your pocket.</h2>
+                <p className="mt-4 max-w-lg leading-7 text-emerald-50/80">Discover services, make bookings, follow updates, and manage your Ustaad Pro experience from your phone.</p>
+                <div className="mt-7"><AppStoreButtons /></div>
+                <div className="relative mx-auto mt-8 h-64 w-full max-w-xs md:hidden">
+                  <Image src="/home/app-spokesperson-branded-v2.png" alt="Ustaad Pro app customer holding a smartphone displaying the Ustaad Pro logo" fill sizes="320px" className="object-contain object-bottom" />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -259,7 +285,7 @@ function FeaturedCard({ service }: { service: ApiService }) {
   return (
     <div className="absolute right-0 top-24 z-20 w-72 overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-2xl backdrop-blur xl:w-80">
       {imgSrc(service.image_url || service.imageUrl) && <div className="relative h-28"><Image src={imgSrc(service.image_url || service.imageUrl)!} alt="" fill unoptimized className="object-cover" sizes="320px" /></div>}
-      <div className="p-5"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">Featured service</span><h2 className="mt-3 line-clamp-1 text-lg font-black">{service.title}</h2><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-4 flex items-end justify-between"><div><span className="block text-[10px] text-slate-400">Starting from</span><strong className="text-xl">Rs {service.price.toLocaleString()}</strong></div><Link href={`/services/${service.id}`} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div><div className="mt-4 flex items-center gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span className="flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" /> {service.rating || "New"}</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div></div>
+      <div className="p-5"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">Featured service</span><h2 className="mt-3 line-clamp-1 text-lg font-black">{service.title}</h2><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-4 flex items-end justify-between"><div><span className="block text-[10px] text-slate-400">Starting from</span><strong className="text-xl">Rs {service.price.toLocaleString()}</strong></div><Link href={`/services/${service.id}`} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div><div className="mt-4 flex items-center gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span className="flex items-center gap-1"><Star className={`h-3.5 w-3.5 ${service.reviews > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {service.reviews > 0 ? `${service.rating.toFixed(1)} (${service.reviews})` : "0.0 · No reviews"}</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div></div>
     </div>
   );
 }
@@ -273,7 +299,7 @@ function ServiceCard({ service }: { service: ApiService }) {
       <Link href={`/services/${service.id}`} className="relative block h-44 overflow-hidden bg-slate-100">
         {source ? <Image src={source} alt={service.title} fill unoptimized className="object-cover transition duration-500 group-hover:scale-105" sizes="(max-width:640px) 100vw,(max-width:1024px) 50vw,25vw" /> : <div className="flex h-full items-center justify-center"><Wrench className="h-10 w-10 text-slate-300" /></div>}
         <div className="absolute left-3 top-3 flex gap-2">{service.badge && <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white">{service.badge}</span>}{discount > 0 && <span className="rounded-full bg-rose-500 px-2.5 py-1 text-[10px] font-bold text-white">{discount}% OFF</span>}</div>
-        {service.rating > 0 && <span className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold"><Star className="h-3 w-3 fill-amber-400 text-amber-400" /> {service.rating} ({service.reviews})</span>}
+        <span className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold"><Star className={`h-3 w-3 ${service.reviews > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {service.reviews > 0 ? `${service.rating.toFixed(1)} (${service.reviews})` : "0.0 · No reviews"}</span>
       </Link>
       <div className="flex flex-1 flex-col p-4"><Link href={`/services/${service.id}`}><h3 className="line-clamp-1 font-extrabold group-hover:text-emerald-700">{service.title}</h3></Link><p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-3 flex items-center gap-3 text-[10px] font-medium text-slate-500"><span className="flex items-center gap-1 text-emerald-700"><BadgeCheck className="h-3.5 w-3.5" /> Professional</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div><div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-3"><div><span className="block text-[9px] text-slate-400">Starting from</span><strong>Rs {service.price.toLocaleString()}</strong>{discount > 0 && <span className="ml-1 text-[10px] text-slate-400 line-through">Rs {original.toLocaleString()}</span>}</div><Link href={`/services/${service.id}`} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-emerald-700">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div></div>
     </article>

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ServicesPageContent } from "./ServicesPageContent";
-import { getCategories, getServices } from "@/lib/server-api";
+import { getCategories, getServices, getServicesWithReviewStats } from "@/lib/server-api";
 
 export const metadata: Metadata = {
   title: "Services | Ustaad Pro",
@@ -10,5 +10,6 @@ export const metadata: Metadata = {
 
 export default async function ServicesPage() {
   const [services, categories] = await Promise.all([getServices(), getCategories()]);
-  return <ServicesPageContent initialServices={services} initialCategories={categories} />;
+  const reviewedServices = await getServicesWithReviewStats(services);
+  return <ServicesPageContent initialServices={reviewedServices} initialCategories={categories} />;
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ServiceDetailClient } from "./ServiceDetailClient";
-import { getServices } from "@/lib/server-api";
+import { getReviewsForService, getServices } from "@/lib/server-api";
 
 export async function generateStaticParams() {
   const services = await getServices();
@@ -23,5 +23,6 @@ export default async function ServiceDetailPage({ params }: { params: Promise<{ 
   const services = await getServices();
   const service = services.find((s) => s.id === id);
   if (!service) notFound();
-  return <ServiceDetailClient service={service} />;
+  const reviews = await getReviewsForService(service.id);
+  return <ServiceDetailClient service={service} initialReviews={reviews} />;
 }
