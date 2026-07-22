@@ -310,9 +310,9 @@ function ServiceCardLarge({ service }: { service: ApiService }) {
           </p>
 
           <div className="mt-5 flex items-center gap-2">
-            <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
-            <span className="text-base font-bold text-slate-700">{service.rating}</span>
-            <span className="text-sm text-slate-400">({service.reviews} reviews)</span>
+            <Star className={`h-5 w-5 ${service.reviews > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} />
+            <span className="text-base font-bold text-slate-700">{service.reviews > 0 ? service.rating.toFixed(1) : "0.0"}</span>
+            <span className="text-sm text-slate-400">{service.reviews > 0 ? `(${service.reviews} review${service.reviews === 1 ? "" : "s"})` : "(No reviews)"}</span>
             {service.workPrices && service.workPrices.length > 0 ? (
               <span className="ml-auto flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-primary">
                 <BadgeCheck className="h-3.5 w-3.5" />

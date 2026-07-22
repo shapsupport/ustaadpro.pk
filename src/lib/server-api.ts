@@ -68,31 +68,45 @@ export const getCategories = cache(() =>
   fetchCollection<ApiCategory>("/api/categories/", "categories"),
 );
 
-export const getLatestReviews = cache(async (services: ApiService[]) => {
-  if (!API_BASE_URL || !services.length) return [] as ApiReview[];
+export const getReviewsForService = cache(async (serviceId: string) => {
+  if (!API_BASE_URL) return [] as ApiReview[];
+  try {
+    const response = await fetch(apiUrl(`/api/services/${encodeURIComponent(serviceId)}/reviews`), {
+      headers: { Accept: "application/json" },
+      next: { revalidate: REVALIDATE_SECONDS },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) return [];
+    const data: unknown = await response.json();
+    return Array.isArray(data) ? data as ApiReview[] : [];
+  } catch {
+    return [];
+  }
+});
 
+export const getServicesWithReviewStats = cache(async (services: ApiService[]) => {
+  const reviewsByService = await Promise.all(services.map((service) => getReviewsForService(service.id)));
+  return services.map((service, index) => {
+    const reviews = reviewsByService[index];
+    const rating = reviews.length
+      ? reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviews.length
+      : 0;
+    return { ...service, rating, reviews: reviews.length };
+  });
+});
+
+export const getLatestReviews = cache(async (services: ApiService[]) => {
   const results = await Promise.all(services.map(async (service) => {
-    try {
-      const response = await fetch(apiUrl(`/api/services/${encodeURIComponent(service.id)}/reviews`), {
-        headers: { Accept: "application/json" },
-        next: { revalidate: REVALIDATE_SECONDS },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      });
-      if (!response.ok) return [];
-      const data: unknown = await response.json();
-      if (!Array.isArray(data)) return [];
-      return (data as ApiReview[]).map((review) => ({
-        ...review,
-        serviceTitle: review.serviceTitle || review.service_title || service.title,
-      }));
-    } catch {
-      return [];
-    }
+    const reviews = await getReviewsForService(service.id);
+    return reviews.map((review) => ({
+      ...review,
+      serviceTitle: review.serviceTitle || review.service_title || service.title,
+    }));
   }));
 
   return results
     .flat()
-    .filter((review) => Number(review.rating) >= 4 && String(review.comment || "").trim().length >= 20)
+    .filter((review) => Number(review.rating) >= 4 && String(review.comment || "").trim().length > 0)
     .sort((a, b) => new Date(b.createdAt || b.created_at || 0).getTime() - new Date(a.createdAt || a.created_at || 0).getTime())
     .slice(0, 4);
 });
