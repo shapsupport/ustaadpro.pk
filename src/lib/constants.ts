@@ -22,11 +22,11 @@ export const whatsappUrl =
 
 export const navItems = [
   { label: "Home", href: "/" },
-  { label: "About Us", href: "/about" },
   { label: "Services", href: "/services" },
   { label: "Store", href: "/store" },
   { label: "Track Booking", href: "/track-booking" },
   { label: "Contact", href: "/contact" },
+  { label: "About Us", href: "/about" },
 ] as const;
 
 export const quickAccessMenu = [

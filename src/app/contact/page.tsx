@@ -1,21 +1,50 @@
 "use client";
 
-import { Mail, Phone, MapPin, Send, MessageSquare } from "lucide-react";
+import { Mail, Phone, MapPin, Send, LoaderCircle, AlertCircle } from "lucide-react";
 import { useState } from "react";
 
 export default function ContactPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
-    setName("");
-    setEmail("");
-    setMessage("");
-    setTimeout(() => setSubmitted(false), 5000);
+    if (busy) return;
+
+    const payload = {
+      name: name.trim(),
+      email: email.trim(),
+      message: message.trim(),
+    };
+
+    if (!payload.name || !payload.email || !payload.message) {
+      setFeedback({ type: "error", message: "Please complete your name, email address, and message." });
+      return;
+    }
+
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Your message could not be sent. Please try again.");
+
+      setFeedback({ type: "success", message: data.message || "Your message has been sent successfully. We will contact you soon." });
+      setName("");
+      setEmail("");
+      setMessage("");
+    } catch (error) {
+      setFeedback({ type: "error", message: error instanceof Error ? error.message : "Your message could not be sent. Please try again." });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -44,7 +73,7 @@ export default function ContactPage() {
               </div>
               <div>
                 <h3 className="font-bold text-slate-900 mb-1">Call / WhatsApp</h3>
-                <p className="text-slate-600 text-sm font-medium">+92 371 9201273</p>
+                <a href="tel:+923719201273" className="text-slate-600 text-sm font-medium transition hover:text-primary">+92 371 9201273</a>
                 <p className="text-xs text-slate-400 mt-1">Mon-Sun: 9:00 AM - 9:00 PM</p>
               </div>
             </div>
@@ -56,7 +85,7 @@ export default function ContactPage() {
               </div>
               <div className="min-w-0">
                 <h3 className="font-bold text-slate-900 mb-1">Email Address</h3>
-                <p className="text-slate-600 text-sm font-medium truncate">ustaadpro.official26@gmail.com</p>
+                <a href="mailto:ustaadpro.official26@gmail.com" className="block truncate text-sm font-medium text-slate-600 transition hover:text-primary">ustaadpro.official26@gmail.com</a>
                 <p className="text-xs text-slate-400 mt-1">Average response time: 2 hours</p>
               </div>
             </div>
@@ -67,9 +96,9 @@ export default function ContactPage() {
                 <MapPin className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 mb-1">Head Office</h3>
-                <p className="text-slate-600 text-sm font-medium">Rawalpindi &amp; Islamabad, Pakistan</p>
-                <p className="text-xs text-slate-400 mt-1">Providing services across Twin Cities</p>
+                <h3 className="font-bold text-slate-900 mb-1">Office Location</h3>
+                <a href="https://maps.app.goo.gl/N7Hn1o8pupSz3iQ69" target="_blank" rel="noopener noreferrer" className="text-slate-600 text-sm font-medium transition hover:text-primary">Sharplogicians Agile Center, Building # 153-M, Office # 32, 4th Floor, D-Block Civic Center, Phase 4, Bahria Town, Islamabad 46220, Pakistan</a>
+                <p className="text-xs text-slate-400 mt-1">View our office on Google Maps</p>
               </div>
             </div>
           </div>
@@ -79,10 +108,10 @@ export default function ContactPage() {
             <h2 className="text-xl font-bold text-slate-900 mb-2">Send us a message</h2>
             <p className="text-slate-400 text-sm mb-6">Fill out the form below and our team will get back to you shortly.</p>
 
-            {submitted && (
-              <div className="bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm rounded-2xl p-4 mb-6 flex items-center gap-2">
-                <CheckSuccessIcon />
-                Your message has been sent successfully! We will contact you soon.
+            {feedback && (
+              <div role="status" aria-live="polite" className={`text-sm rounded-2xl p-4 mb-6 flex items-start gap-2 ${feedback.type === "success" ? "bg-emerald-50 border border-emerald-100 text-emerald-800" : "bg-red-50 border border-red-100 text-red-800"}`}>
+                {feedback.type === "success" ? <CheckSuccessIcon /> : <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />}
+                {feedback.message}
               </div>
             )}
 
@@ -95,8 +124,8 @@ export default function ContactPage() {
                   type="text"
                   required
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Abdullah Siraj"
+                  onChange={(e) => { setName(e.target.value); if (feedback?.type === "error") setFeedback(null); }}
+                  placeholder="e.g. Muhammad Ali"
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all text-slate-800"
                 />
               </div>
@@ -109,7 +138,7 @@ export default function ContactPage() {
                   type="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => { setEmail(e.target.value); if (feedback?.type === "error") setFeedback(null); }}
                   placeholder="name@example.com"
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all text-slate-800"
                 />
@@ -123,7 +152,7 @@ export default function ContactPage() {
                   required
                   rows={4}
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  onChange={(e) => { setMessage(e.target.value); if (feedback?.type === "error") setFeedback(null); }}
                   placeholder="How can we help you?"
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all text-slate-800 resize-none"
                 />
@@ -131,10 +160,11 @@ export default function ContactPage() {
 
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-emerald-700 text-white font-bold py-3.5 rounded-2xl text-sm transition-all shadow-lg shadow-primary/20"
+                disabled={busy}
+                className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-emerald-700 text-white font-bold py-3.5 rounded-2xl text-sm transition-all shadow-lg shadow-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Send Message
-                <Send className="h-4 w-4" />
+                {busy ? "Sending…" : "Send Message"}
+                {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </button>
             </form>
           </div>

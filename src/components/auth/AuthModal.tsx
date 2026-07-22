@@ -25,7 +25,6 @@ function isValidEmail(v: string): boolean {
 /** Accepts: 03XX-XXXXXXX, +923XXXXXXXXX, 923XXXXXXXXX, 03XXXXXXXXX … */
 function isValidPakistaniPhone(v: string): boolean {
   const digits = v.replace(/\D/g, "");
-  // After stripping country code we need exactly 10 digits starting with 3
   if (digits.startsWith("0092")) return /^00923\d{9}$/.test(digits);
   if (digits.startsWith("92")) return /^923\d{9}$/.test(digits);
   if (digits.startsWith("0")) return /^03\d{9}$/.test(digits);
