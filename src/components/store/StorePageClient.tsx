@@ -11,11 +11,14 @@ import type { ApiProduct, ApiShopResponse } from "@/lib/api-types";
 import { searchApi } from "@/lib/search";
 import { SearchSuggestions } from "@/components/search/SearchSuggestions";
 import {
+  Check,
   Package,
   Search,
   ShoppingBag,
+  ShoppingCart,
   SlidersHorizontal,
 } from "lucide-react";
+import { useCart } from "@/context/CartContext";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "";
 
@@ -136,8 +139,6 @@ export default function StorePageClient() {
 
   useEffect(() => {
     if (debouncedSearch) return;
-    // Fetch the selected API category whenever the filter changes.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadProducts();
   }, [loadProducts, debouncedSearch]);
 
@@ -148,8 +149,6 @@ export default function StorePageClient() {
 
   useEffect(() => {
     if (!debouncedSearch) {
-      // Clear the derived result set when returning to normal API pagination.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSearchResults([]);
       setSearching(false);
       return;
@@ -354,21 +353,23 @@ export default function StorePageClient() {
             ) : visibleProducts.length > 0 ? (
               <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
                 {visibleProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                  />
                 ))}
               </div>
             ) : (
               <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
                 <Package className="mx-auto h-10 w-10 text-slate-400" />
                 <h3 className="mt-4 text-lg font-semibold text-slate-900">No products found</h3>
-                  <p className="mt-2 text-sm text-slate-600">Try a different product name or choose another category.</p>
-                </div>
+                <p className="mt-2 text-sm text-slate-600">Try a different product name or choose another category.</p>
+              </div>
             )}
             {!catalogLoading && !searching && pageCount > 1 ? <Pagination page={page} pageCount={pageCount} onPage={choosePage} /> : null}
           </div>
         </div>
       </div>
-
     </div>
   );
 }
@@ -388,12 +389,29 @@ function Pagination({ page, pageCount, onPage }: { page: number; pageCount: numb
 }
 
 function ProductCard({ product }: { product: ApiProduct }) {
+  const { addItem } = useCart();
+  const [added, setAdded] = useState(false);
   const imageSrc = buildImageUrl(product.imageUrl);
   const hasDiscount = Boolean(product.originalPrice && Number(product.originalPrice) > Number(product.price));
+  const isOutOfStock = product.stock <= 0;
+
+  const handleAddToCart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isOutOfStock) return;
+    addItem(product, 1);
+    setAdded(true);
+    window.setTimeout(() => setAdded(false), 1500);
+  };
 
   return (
-    <Link href={`/store/${product.id}`} onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch {} }}>
-      <Card className="group h-full overflow-hidden border border-slate-200 transition-all hover:-translate-y-1 hover:border-lime-200 hover:shadow-xl">
+    <Card className="group flex h-full flex-col overflow-hidden border border-slate-200 transition-all hover:-translate-y-1 hover:border-lime-200 hover:shadow-xl">
+      {/* Clickable image + info area */}
+      <Link
+        href={`/store/${product.id}`}
+        onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch {} }}
+        className="block flex-1"
+      >
         <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
           {imageSrc ? (
             <Image
@@ -419,7 +437,7 @@ function ProductCard({ product }: { product: ApiProduct }) {
           ) : null}
         </div>
 
-        <div className="p-6">
+        <div className="p-4 pb-2">
           <p className="text-sm font-bold uppercase tracking-[0.2em] text-lime-600">{product.category}</p>
           <h3 className="mt-2 line-clamp-2 text-lg font-bold leading-snug text-slate-900 transition-colors group-hover:text-lime-700 sm:text-xl">
             {product.title}
@@ -435,14 +453,39 @@ function ProductCard({ product }: { product: ApiProduct }) {
               <span className="text-sm text-slate-400 line-through">{formatPrice(product.originalPrice)}</span>
             ) : null}
           </div>
-
-          <div className="mt-5 flex gap-2">
-            <Button className="h-11 flex-1 bg-lime-500 text-base font-bold text-white hover:bg-lime-600">
-              View details
-            </Button>
-          </div>
         </div>
-      </Card>
-    </Link>
+      </Link>
+
+      {/* Action buttons */}
+      <div className="flex items-center gap-2 p-4 pt-2">
+        <Link
+          href={`/store/${product.id}`}
+          onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch {} }}
+          className="h-11 flex-1 flex items-center justify-center rounded-xl bg-lime-500 text-sm font-bold text-white hover:bg-lime-600 transition"
+        >
+          View details
+        </Link>
+        <button
+          type="button"
+          onClick={handleAddToCart}
+          disabled={isOutOfStock}
+          aria-label={added ? "Added to cart" : "Add to cart"}
+          className={`h-11 flex items-center justify-center gap-1.5 rounded-xl border px-3 text-sm font-bold transition cursor-pointer ${
+            isOutOfStock
+              ? "cursor-not-allowed border-slate-200 text-slate-400 bg-slate-50"
+              : added
+              ? "border-emerald-600 bg-emerald-600 text-white"
+              : "border-emerald-500 bg-white text-emerald-600 hover:bg-emerald-50"
+          }`}
+        >
+          {added ? (
+            <Check className="h-4 w-4" />
+          ) : (
+            <ShoppingCart className="h-4 w-4" />
+          )}
+          <span className="hidden sm:inline">{added ? "Added" : "Add"}</span>
+        </button>
+      </div>
+    </Card>
   );
 }

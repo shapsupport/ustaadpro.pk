@@ -45,16 +45,14 @@ export function PaymentSection({
                 onPaymentChange(value);
                 if (value !== paymentMethod) onScreenshotChange("");
               }}
-              className={`flex flex-col items-center gap-1.5 rounded-2xl border p-3.5 text-center transition-all duration-150 ${
-                selected
+              className={`flex flex-col items-center gap-1.5 rounded-2xl border p-3.5 text-center transition-all duration-150 ${selected
                   ? "border-emerald-400 bg-emerald-50 shadow-sm ring-1 ring-emerald-400/50"
                   : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
-              }`}
+                }`}
             >
               <div
-                className={`flex h-9 w-9 items-center justify-center rounded-xl ${
-                  selected ? "bg-emerald-100" : "bg-slate-100"
-                }`}
+                className={`flex h-9 w-9 items-center justify-center rounded-xl ${selected ? "bg-emerald-100" : "bg-slate-100"
+                  }`}
               >
                 <Icon
                   className={`h-4 w-4 ${selected ? "text-emerald-700" : "text-slate-500"}`}

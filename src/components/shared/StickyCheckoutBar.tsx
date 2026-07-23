@@ -14,6 +14,7 @@ interface StickyCheckoutBarProps {
   quantity?: number;
   maxQuantity?: number;
   onQuantityChange?: (quantity: number) => void;
+  onClick?: () => void;
 }
 
 export function StickyCheckoutBar({
@@ -27,6 +28,7 @@ export function StickyCheckoutBar({
   quantity,
   maxQuantity,
   onQuantityChange,
+  onClick,
 }: StickyCheckoutBarProps) {
   return (
     <div
@@ -68,7 +70,10 @@ export function StickyCheckoutBar({
             href={href}
             tabIndex={visible && !disabled ? 0 : -1}
             aria-disabled={disabled}
-            onClick={(event) => disabled && event.preventDefault()}
+            onClick={(event) => {
+              if (disabled) { event.preventDefault(); return; }
+              if (onClick) { event.preventDefault(); onClick(); }
+            }}
             className={`flex min-w-0 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-extrabold text-white shadow-lg transition-all sm:min-w-48 sm:px-7 sm:py-4 sm:text-base ${
               disabled
                 ? "cursor-not-allowed bg-slate-300 shadow-none"

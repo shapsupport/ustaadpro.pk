@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import { X, MapPin, Check, Loader2, Navigation } from "lucide-react";
 import dynamic from "next/dynamic";
 
@@ -13,7 +13,7 @@ const LeafletMapComponent = dynamic(
       <div className="flex h-[350px] w-full items-center justify-center bg-slate-100 rounded-2xl">
         <div className="flex flex-col items-center gap-2 text-slate-500">
           <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
-          <span className="text-xs font-semibold">Loading Leaflet Map...</span>
+          <span className="text-xs font-semibold">Loading Map...</span>
         </div>
       </div>
     ),
@@ -23,11 +23,11 @@ const LeafletMapComponent = dynamic(
 interface MapAddressPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectAddress: (address: string, lat: number, lng: number) => void;
+  onSelectAddress: (address: string, lat?: number, lng?: number) => void;
   initialAddress?: string;
 }
 
-// Default center: Islamabad / Rawalpindi (33.6844, 73.0479)
+// Default center: Islamabad / Rawalpindi
 const DEFAULT_LAT = 33.6844;
 const DEFAULT_LNG = 73.0479;
 
@@ -43,6 +43,14 @@ export default function MapAddressPickerModal({
   });
   const [formattedAddress, setFormattedAddress] = useState(initialAddress);
   const [isGeocoding, setIsGeocoding] = useState(false);
+
+  // Each time the modal opens, increment this key so Leaflet gets a fresh DOM node.
+  const mountKeyRef = useRef(0);
+  const prevIsOpenRef = useRef(false);
+  if (isOpen && !prevIsOpenRef.current) {
+    mountKeyRef.current += 1;
+  }
+  prevIsOpenRef.current = isOpen;
 
   // Reverse geocode lat/lng to human address via OpenStreetMap Nominatim API
   const reverseGeocode = async (lat: number, lng: number) => {
@@ -103,17 +111,18 @@ export default function MapAddressPickerModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="relative w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl transition-all">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div className="flex items-center gap-2">
             <MapPin className="h-5 w-5 text-emerald-600" />
-            <h3 className="text-lg font-bold text-slate-900">Pick Service Location from Map</h3>
+            <h3 className="text-lg font-bold text-slate-900">Pick Delivery Location from Map</h3>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+            className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>
@@ -126,19 +135,20 @@ export default function MapAddressPickerModal({
             <button
               type="button"
               onClick={handleUseMyLocation}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
             >
               <Navigation className="h-3.5 w-3.5 text-emerald-600" />
               Use My Current Location
             </button>
             <span className="text-[11px] text-slate-400 text-center sm:text-right">
-              Click anywhere on the map or drag the pin to drop location
+              Click anywhere on the map or drag the pin to set location
             </span>
           </div>
 
-          {/* Leaflet Map */}
+          {/* Leaflet Map — key forces full remount each time modal opens */}
           <div className="relative overflow-hidden rounded-2xl border border-slate-200 shadow-inner">
             <LeafletMapComponent
+              key={mountKeyRef.current}
               position={position}
               onPositionChange={handlePositionChange}
             />
@@ -167,14 +177,14 @@ export default function MapAddressPickerModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-200/60 transition"
+            className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-200/60 transition cursor-pointer"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleConfirm}
-            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700 transition"
+            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700 transition cursor-pointer"
           >
             <Check className="h-4 w-4" />
             Confirm Location

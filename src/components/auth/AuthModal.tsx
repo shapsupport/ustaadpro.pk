@@ -216,7 +216,7 @@ export function AuthModal() {
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="fixed inset-x-4 top-1/2 z-[110] max-w-md mx-auto -translate-y-1/2 bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200"
+        className="fixed inset-x-3 sm:inset-x-4 top-1/2 z-[110] max-w-md mx-auto -translate-y-1/2 bg-white rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200"
       >
         {/* Back button (forgot mode) */}
         {authModalMode === "forgot" && (
@@ -238,10 +238,10 @@ export function AuthModal() {
           <X className="h-5 w-5" />
         </button>
 
-        <div className="p-8">
+        <div className="p-5 sm:p-8">
           {/* Header */}
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-black text-slate-900">{title}</h2>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900">{title}</h2>
             <p className="text-sm text-slate-500 mt-1.5">{sub}</p>
           </div>
 

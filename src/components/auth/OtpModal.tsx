@@ -224,7 +224,7 @@ export function OtpModal() {
         role="dialog"
         aria-modal="true"
         aria-label={heading}
-        className="fixed inset-x-4 top-1/2 z-[130] max-w-md mx-auto -translate-y-1/2 bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200"
+        className="fixed inset-x-3 sm:inset-x-4 top-1/2 z-[130] max-w-md mx-auto -translate-y-1/2 bg-white rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200"
       >
         {/* Close button */}
         <button
@@ -235,7 +235,7 @@ export function OtpModal() {
           <X className="h-5 w-5" />
         </button>
 
-        <div className="p-8">
+        <div className="p-5 sm:p-8">
           {/* Icon + Header */}
           <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 mb-4">
@@ -291,7 +291,7 @@ export function OtpModal() {
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 text-center">
                 Verification Code
               </label>
-              <div className="flex gap-2 justify-center">
+              <div className="flex gap-1.5 sm:gap-2 justify-center">
                 {otp.map((digit, i) => (
                   <input
                     key={i}
@@ -306,7 +306,7 @@ export function OtpModal() {
                     onPaste={handlePaste}
                     onFocus={(e) => e.target.select()}
                     aria-label={`Digit ${i + 1}`}
-                    className={`w-11 h-14 text-center text-xl font-black rounded-2xl border-2 outline-none transition-all bg-slate-50 text-slate-800 caret-transparent
+                    className={`w-10 sm:w-11 h-12 sm:h-14 text-lg sm:text-xl font-black rounded-xl sm:rounded-2xl border-2 outline-none transition-all bg-slate-50 text-slate-800 caret-transparent
                       ${digit
                         ? "border-primary bg-primary/5 text-primary"
                         : "border-slate-200 focus:border-primary focus:ring-1 focus:ring-primary"
@@ -326,7 +326,7 @@ export function OtpModal() {
                   className={`flex items-center gap-2 bg-slate-50 border rounded-2xl px-4 py-1.5 transition-all focus-within:ring-1 ${passwordError
                     ? "border-red-400 focus-within:ring-red-400"
                     : "border-slate-200 focus-within:border-primary focus-within:ring-primary"
-                  }`}
+                    }`}
                 >
                   <Lock className="h-4 w-4 text-slate-400 shrink-0" />
                   <input

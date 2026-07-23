@@ -6,18 +6,23 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { Menu, MapPin, ChevronDown, UserRound } from "lucide-react";
+import { Menu, MapPin, ChevronDown, UserRound, ShoppingCart } from "lucide-react";
 import { MobileNav } from "./MobileNav";
 import { useLocation } from "@/context/LocationContext";
 import { useAuth } from "@/context/AuthContext";
 import { UserProfileModal } from "@/components/auth/UserProfileModal";
+import { useCart } from "@/context/CartContext";
+import CartDropdown from "../store/CartDropdown";
+
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [navHidden, setNavHidden] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
   const lastScrollY = useRef(0);
+  const { totalItems } = useCart();
 
   const pathname = usePathname();
   const { location, setShowPicker } = useLocation();
@@ -115,6 +120,27 @@ export function Navbar() {
 
               <ChevronDown className="h-3 w-3 opacity-60" />
             </button>
+
+            {/* Cart Icon */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setCartOpen((prev) => !prev)}
+                aria-label={`Shopping cart, ${totalItems} item${totalItems !== 1 ? "s" : ""}`}
+                className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-lime-400 hover:text-lime-600 cursor-pointer"
+              >
+                <ShoppingCart className="h-5 w-5" />
+                {totalItems > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-lime-500 text-[10px] font-black text-white shadow">
+                    {totalItems > 99 ? "99+" : totalItems}
+                  </span>
+                )}
+              </button>
+              <CartDropdown
+                isOpen={cartOpen}
+                onClose={() => setCartOpen(false)}
+              />
+            </div>
 
             {/* Desktop User/Profile */}
             {user ? (

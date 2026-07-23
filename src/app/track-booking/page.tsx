@@ -123,14 +123,13 @@ export default function TrackBookingPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mb-8 flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="text-sm font-semibold uppercase tracking-[.25em] text-emerald-600">My bookings</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Track every order in one place</h1><p className="mt-2 text-sm text-slate-600">Open a booking for its schedule, progress, review, payment, or support options.</p></div>
+    <div className="mx-auto max-w-6xl px-3 sm:px-6 lg:px-8 py-6 sm:py-10">
+      <div className="mb-6 sm:mb-8 flex flex-col gap-3 sm:gap-4 rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm sm:flex-row sm:items-end sm:justify-between">        <div><p className="text-sm font-semibold uppercase tracking-[.25em] text-emerald-600">My bookings</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Track every order in one place</h1><p className="mt-2 text-sm text-slate-600">Open a booking for its schedule, progress, review, payment, or support options.</p></div>
         <div className="flex gap-2"><Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh</Button><Link href="/services" className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white">Book service <ArrowRight className="h-4 w-4" /></Link></div>
       </div>
       {loadError && <div className="mb-5 flex gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"><AlertCircle className="h-5 w-5 shrink-0" />{loadError}</div>}
       {bookings.length > 0 && <div className="mb-5 flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        {(["all", "service", "shop"] as const).map((item) => <button key={item} type="button" onClick={() => setView(item)} className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-bold transition ${view === item ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{item === "all" ? `All (${bookings.length})` : item === "service" ? `Services (${bookings.filter((b) => b.kind === "service").length})` : `Shop (${bookings.filter((b) => b.kind === "shop").length})`}</button>)}
+        {(["all", "service", "shop"] as const).map((item) => <button key={item} type="button" onClick={() => setView(item)} className={`shrink-0 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-bold transition ${view === item ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{item === "all" ? `All (${bookings.length})` : item === "service" ? `Services (${bookings.filter((b) => b.kind === "service").length})` : `Shop (${bookings.filter((b) => b.kind === "shop").length})`}</button>)}
       </div>}
       {loading && !bookings.length ? <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> : bookings.length === 0 ? <Empty /> : visibleBookings.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-600">No orders in this section.</div> : <div className="grid gap-4">{visibleBookings.map((booking) => <BookingCard key={`${booking.kind}-${booking.id}`} booking={booking} onUpdate={(updates) => updateBooking(booking.id, booking.kind, updates)} />)}</div>}
     </div>
@@ -148,10 +147,11 @@ function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate: (updat
   const isCompleted = normalized === "completed" || normalized === "delivered";
 
   return <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-    <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between gap-4 p-5 text-left">
+    <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 text-left">
       <div className="flex min-w-0 items-center gap-3">
         <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${isShop ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"}`}>{isShop ? <ShoppingBag className="h-6 w-6" /> : <Wrench className="h-6 w-6" />}</div>
-        <div className="min-w-0"><p className={`text-xs font-extrabold uppercase tracking-[0.16em] ${isShop ? "text-blue-600" : "text-emerald-600"}`}>{isShop ? "Product order" : "Service booking"}</p><p className="truncate text-lg font-semibold text-slate-900">{booking.workTitle || booking.serviceTitle}</p><p className="mt-1 text-sm text-slate-500">#{booking.id} · {new Date(booking.createdAt).toLocaleDateString("en-PK", { dateStyle: "medium" })}</p></div>
+        <div className="min-w-0"><p className={`text-xs font-extrabold uppercase tracking-[0.16em] ${isShop ? "text-blue-600" : "text-emerald-600"}`}>{isShop ? "Product order" : "Service booking"}</p><p className="truncate text-base sm:text-lg font-semibold text-slate-900">
+          {booking.workTitle || booking.serviceTitle}</p><p className="mt-1 text-sm text-slate-500">#{booking.id} · {new Date(booking.createdAt).toLocaleDateString("en-PK", { dateStyle: "medium" })}</p></div>
       </div>
       <div className="flex shrink-0 items-center gap-3">
         <span className={`rounded-full px-3 py-1.5 text-xs font-bold capitalize ${isCancelled ? "bg-red-50 text-red-700" : isCompleted ? "bg-emerald-100 text-emerald-800" : "bg-amber-50 text-amber-700"}`}>{normalized.replaceAll("_", " ")}</span>
@@ -162,10 +162,10 @@ function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate: (updat
       {!isCancelled && <div className={`mb-6 grid gap-1 ${isShop ? "grid-cols-5" : "grid-cols-4"}`}>{steps.map((step, i) => <div key={step} className="text-center"><div className={`mx-auto h-2 rounded-full ${i <= active ? (isShop ? "bg-blue-500" : "bg-emerald-500") : "bg-slate-200"}`} /><p className="mt-2 text-[10px] font-semibold capitalize text-slate-500">{step.replace("_", " ")}</p></div>)}</div>}
       {isCancelled && <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-center"><p className="text-sm font-bold text-red-700">This order has been cancelled</p></div>}
       {isShop && booking.items && booking.items.length > 0 && <div className="mb-4 space-y-2"><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-slate-500">Products ordered</p>{booking.items.map((item, index) => <div key={`${item.productId}-${index}`} className="flex items-center gap-3 rounded-2xl border border-slate-200 p-3">{item.imageUrl ? <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100"><Image src={absoluteImage(item.imageUrl)} alt={item.title} fill unoptimized className="object-cover" sizes="64px" /></div> : <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-slate-100"><Package className="h-6 w-6 text-slate-400" /></div>}<div className="min-w-0 flex-1"><p className="truncate font-bold text-slate-900">{item.title}</p><p className="text-sm text-slate-500">Quantity {item.quantity}</p></div><p className="text-sm font-bold text-slate-900">PKR {(item.price * item.quantity).toLocaleString("en-PK")}</p></div>)}</div>}
-      <div className="grid gap-3 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700 sm:grid-cols-2">
-        <p><strong>Payment:</strong> {booking.paymentMethod}</p><p><strong>Amount:</strong> PKR {Number(booking.servicePrice || 0).toLocaleString("en-PK")}</p>
-        {booking.preferredTime && <p className="flex gap-2"><CalendarDays className="h-4 w-4 text-slate-400" />{new Date(booking.preferredTime).toLocaleString("en-PK", { dateStyle: "medium", timeStyle: "short" })}</p>}
-        {booking.address && <p className="flex gap-2"><MapPin className="h-4 w-4 text-slate-400" />{booking.address}</p>}
+      <div className="grid gap-2 sm:gap-3 rounded-xl sm:rounded-2xl bg-slate-50 p-3 sm:p-4 text-xs sm:text-sm text-slate-700 grid-cols-1 sm:grid-cols-2">        <p><strong>Payment:</strong> {booking.paymentMethod}</p><p><strong>Amount:</strong> PKR {Number(booking.servicePrice || 0).toLocaleString("en-PK")}</p>
+        {booking.preferredTime && (
+          <p className="flex gap-2"><CalendarDays className="h-4 w-4 text-slate-400" />{booking.preferredTime}</p>
+        )}        {booking.address && <p className="flex gap-2"><MapPin className="h-4 w-4 text-slate-400" />{booking.address}</p>}
       </div>
       <BookingActions booking={booking} completed={isCompleted} isCancelled={isCancelled} isEasyPaisa={isEasyPaisa} onUpdate={onUpdate} />
     </div>}

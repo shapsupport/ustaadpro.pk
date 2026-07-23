@@ -10,6 +10,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { OtpModal } from "@/components/auth/OtpModal";
 import { WhatsAppBot } from "@/components/shared/WhatsAppBot";
+import { CartProvider } from "@/context/CartContext";
 import { siteConfig } from "@/lib/constants";
 import "./globals.css";
 
@@ -105,15 +106,17 @@ export default function RootLayout({
     >
       <body suppressHydrationWarning className="min-h-full flex flex-col">
         <AuthProvider>
-          <LocationProvider>
-            <Navbar />
-            <LocationModal />
-            <AuthModal />
-            <OtpModal />
-            <MainWrapper>{children}</MainWrapper>
-            <WhatsAppBot />
-            <Footer />
-          </LocationProvider>
+          <CartProvider>
+            <LocationProvider>
+              <Navbar />
+              <LocationModal />
+              <AuthModal />
+              <OtpModal />
+              <MainWrapper>{children}</MainWrapper>
+              <WhatsAppBot />
+              <Footer />
+            </LocationProvider>
+          </CartProvider>
         </AuthProvider>
       </body>
     </html>

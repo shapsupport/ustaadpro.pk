@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { ApiReview, ApiService, WorkPrice } from "@/lib/api-types";
 import BookingModal from "@/components/booking/BookingModal";
-import { StickyCheckoutBar } from "@/components/shared/StickyCheckoutBar";
+// import { StickyCheckoutBar } from "@/components/shared/StickyCheckoutBar";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
@@ -50,10 +50,10 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
     service.workPrices?.[0] ?? null,
   );
   const [isBookingOpen, setIsBookingOpen] = useState(false);
-  const [showStickyCheckout, setShowStickyCheckout] = useState(false);
+  // const [showStickyCheckout, setShowStickyCheckout] = useState(false);
   const [reviewsOpen, setReviewsOpen] = useState(false);
   const [reviewSnapshot, setReviewSnapshot] = useState(initialReviews);
-  const bookingButtonRef = useRef<HTMLAnchorElement>(null);
+  // const bookingButtonRef = useRef<HTMLAnchorElement>(null);
   const reviewsRef = useRef<HTMLDivElement>(null);
 
   const displayImage = imgSrc(service.image_url || service.imageUrl);
@@ -70,20 +70,20 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
       : 0;
   const bookingHref = `/checkout?serviceId=${service.id}&serviceTitle=${encodeURIComponent(service.title)}&servicePrice=${bookingPrice}&workTitle=${encodeURIComponent(selectedWork?.title || "")}&workPriceId=${selectedWork?.id || ""}`;
 
-  useEffect(() => {
-    const updateStickyCheckout = () => {
-      const button = bookingButtonRef.current;
-      setShowStickyCheckout(Boolean(button && button.getBoundingClientRect().bottom < 0));
-    };
+  // useEffect(() => {
+  //   const updateStickyCheckout = () => {
+  //     const button = bookingButtonRef.current;
+  //     setShowStickyCheckout(Boolean(button && button.getBoundingClientRect().bottom < 0));
+  //   };
 
-    updateStickyCheckout();
-    window.addEventListener("scroll", updateStickyCheckout, { passive: true });
-    window.addEventListener("resize", updateStickyCheckout);
-    return () => {
-      window.removeEventListener("scroll", updateStickyCheckout);
-      window.removeEventListener("resize", updateStickyCheckout);
-    };
-  }, []);
+  //   updateStickyCheckout();
+  //   window.addEventListener("scroll", updateStickyCheckout, { passive: true });
+  //   window.addEventListener("resize", updateStickyCheckout);
+  //   return () => {
+  //     window.removeEventListener("scroll", updateStickyCheckout);
+  //     window.removeEventListener("resize", updateStickyCheckout);
+  //   };
+  // }, []);
 
   const openReviews = () => {
     setReviewsOpen(true);
@@ -98,7 +98,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
           <button
             type="button"
             onClick={() => router.back()}
-            className="flex shrink-0 items-center gap-2 rounded-xl px-2 py-1.5 text-base font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-primary sm:text-lg"
+            className="flex shrink-0 items-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl px-1.5 sm:px-2 py-1 sm:py-1.5 text-sm sm:text-base font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-primary sm:text-lg"
             aria-label="Go back to the previous page"
           >
             <ArrowLeft className="h-5 w-5 sm:h-6 sm:w-6" />
@@ -114,7 +114,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
           {/* ── LEFT: image + work prices ── */}
           <div className="lg:col-span-3 space-y-6">
             {/* Hero image */}
-            <div className="relative aspect-[16/9] rounded-3xl overflow-hidden bg-slate-100 shadow-md">
+            <div className="relative aspect-[4/3] sm:aspect-[16/9] rounded-2xl sm:rounded-3xl overflow-hidden bg-slate-100 shadow-md">
               {displayImage ? (
                 <Image
                   src={displayImage}
@@ -122,6 +122,8 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                   fill
                   className="object-cover"
                   sizes="(max-width:1024px) 100vw, 60vw"
+                  priority
+                  loading="eager"
                 />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
@@ -147,7 +149,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                   <Tag className="h-5 w-5 text-primary" />
                   Choose a Service
                 </h2>
-                <div className="grid sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                   {service.workPrices.map((wp) => {
                     const wpImg = imgSrc(wp.imageUrl);
                     const isSelected = selectedWork?.id === wp.id;
@@ -260,7 +262,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
           </div>
 
           {/* ── RIGHT: sticky booking card ── */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 mt-6 lg:mt-0">
             <div className="lg:sticky lg:top-32 space-y-4">
               {/* Booking card */}
               <div className="bg-white rounded-3xl border border-slate-100 shadow-lg p-6">
@@ -271,7 +273,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                       {service.badge}
                     </span>
                   )}
-                  <h1 className="text-2xl font-bold text-slate-900 leading-tight">
+                  <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">
                     {service.title}
                   </h1>
                   <button type="button" onClick={openReviews} className="mt-2 flex items-center gap-2 rounded-lg text-left transition hover:text-primary" aria-label="Open customer reviews">
@@ -304,7 +306,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                         {selectedWork.title}
                       </p>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-slate-900">
+                        <span className="text-2xl sm:text-3xl font-black text-slate-900">
                           Rs {selectedWork.price.toLocaleString()}
                         </span>
                       </div>
@@ -349,10 +351,10 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                   <ShoppingBag className="h-5 w-5" />
                   Book Now
                 </button>
-                <Link ref={bookingButtonRef} href={bookingHref} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 text-sm transition-colors mt-3">
+                {/* <Link ref={bookingButtonRef} href={bookingHref} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 text-sm transition-colors mt-3">
                   <ShoppingBag className="h-4 w-4" />
                   Quick Checkout
-                </Link>
+                </Link> */}
                 <a
                   href="https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%2C%20I%20want%20to%20book%20a%20service."
                   target="_blank"
@@ -414,13 +416,13 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
       />
 
       {/* Sticky Checkout Bar */}
-      <StickyCheckoutBar
+      {/* <StickyCheckoutBar
         visible={showStickyCheckout}
         href={bookingHref}
         label="Book Now"
         title={selectedWork?.title || service.title}
         price={`Rs ${bookingPrice.toLocaleString()}`}
-      />
+      /> */}
     </div>
   );
 }

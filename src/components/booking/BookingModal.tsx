@@ -59,8 +59,8 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
 
   // Feature 4: Payment & Receipt State
   const [paymentMethod, setPaymentMethod] = useState("Cash After Work Done");
-  const [receiptDataUrl, setReceiptDataUrl] = useState("");
-  const [receiptFileName, setReceiptFileName] = useState("");
+  // const [receiptDataUrl, setReceiptDataUrl] = useState("");
+  // const [receiptFileName, setReceiptFileName] = useState("");
 
   // Submission State
   const [loading, setLoading] = useState(false);
@@ -114,6 +114,27 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
       setError("Please enter or pick your service address from the map.");
       return;
     }
+
+    const addressValue = address.trim();
+
+    // Minimum length check
+    if (addressValue.length < 15) {
+      setError("Please enter your complete address with house number, street, area and city.");
+      return;
+    }
+
+    // Must contain a number (house/street number)
+    if (!/\d/.test(addressValue)) {
+      setError("Please include your house or street number in the address.");
+      return;
+    }
+
+    // Must have at least 4 words (House, Street, Area, City)
+    const addressWords = addressValue.split(/\s+/).filter(w => w.length > 1);
+    if (addressWords.length < 4) {
+      setError("Please enter complete address: house number, street, area/colony, and city/town/village.");
+      return;
+    }
     if (!fromDate) {
       setError("Please select a service date.");
       return;
@@ -138,9 +159,12 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
         },
       ];
 
-      const noteWithReceipt = receiptDataUrl
-        ? `${requirements.trim()}\n[EasyPaisa Payment Screenshot Attached: ${receiptFileName || "receipt.png"}]`.trim()
-        : requirements.trim();
+      // const noteWithReceipt = receiptDataUrl
+      //   ? `${requirements.trim()}\n[EasyPaisa Payment Screenshot Attached: ${receiptFileName || "receipt.png"}]`.trim()
+      //   : requirements.trim();
+
+      const noteWithReceipt = requirements.trim();
+
 
       // 1. Submit Booking
       const response = await createBooking({
@@ -157,20 +181,19 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
 
       if (response && response.order) {
         const orderId = response.order.id;
-        let receiptUploaded = Boolean(receiptDataUrl);
+        // let receiptUploaded = Boolean(receiptDataUrl);
 
-        if (receiptDataUrl) {
-          try {
-            await uploadPaymentReceipt(orderId, receiptDataUrl, calculatedTotal);
-          } catch {
-            // Backend stores receipt upon work completion; saved locally for track booking
-          }
-        }
+        // if (receiptDataUrl) {
+        //   try {
+        //     await uploadPaymentReceipt(orderId, receiptDataUrl, calculatedTotal);
+        //   } catch {
+        //     // Backend stores receipt upon work completion; saved locally for track booking
+        //   }
+        // }
 
         setBookingSuccess({
           orderId,
           total: response.order.total || calculatedTotal,
-          receiptUploaded,
         });
 
         // Local storage backup
@@ -190,7 +213,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                 address,
                 paymentMethod,
                 recurringDays: daysCount,
-                receiptDataUrl: receiptDataUrl || undefined,
+                // receiptDataUrl: receiptDataUrl || undefined,
               },
               ...stored,
             ])
@@ -237,11 +260,10 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-        <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl transition-all">
-          {/* Modal Header */}
-          <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-100 bg-white/95 px-6 py-4 backdrop-blur-md">
+        <div className="relative w-full max-w-xl max-h-[85vh] mx-2 sm:mx-0 overflow-y-auto rounded-2xl sm:rounded-3xl bg-white shadow-2xl transition-all booking-modal-scrollbar">
+          <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-100 bg-white/95 px-4 sm:px-6 py-3 sm:py-4 backdrop-blur-md">
             <div>
-              <h2 className="text-xl font-black text-slate-900">Book Service</h2>
+              <h2 className="text-lg sm:text-xl font-black text-slate-900">Book Service</h2>
               <p className="text-xs font-bold text-emerald-600 truncate max-w-xs">{service.title}</p>
             </div>
             <button
@@ -255,7 +277,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
 
           {/* Modal Body */}
           {bookingSuccess ? (
-            <div className="p-8 text-center space-y-4">
+            <div className="p-6 sm:p-8 text-center space-y-4">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-lg shadow-emerald-600/10">
                 <CheckCircle2 className="h-10 w-10" />
               </div>
@@ -287,7 +309,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
               </button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-5">
               {/* Auth Notice if guest */}
               {!user && (
                 <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900">
@@ -429,11 +451,6 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
               <EasyPaisaPaymentSection
                 paymentMethod={paymentMethod}
                 onSelectPaymentMethod={setPaymentMethod}
-                receiptDataUrl={receiptDataUrl}
-                onReceiptChange={(dataUrl, filename) => {
-                  setReceiptDataUrl(dataUrl);
-                  setReceiptFileName(filename);
-                }}
               />
 
               {/* Special Instructions */}
@@ -468,7 +485,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                   <button
                     type="submit"
                     disabled={loading}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-4 font-bold text-white shadow-lg shadow-emerald-600/25 hover:bg-emerald-700 transition disabled:opacity-50 text-base"
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-4 font-bold text-white shadow-lg shadow-emerald-600/25 hover:bg-emerald-700 transition disabled:opacity-50 text-sm sm:text-base"
                   >
                     {loading ? (
                       <>

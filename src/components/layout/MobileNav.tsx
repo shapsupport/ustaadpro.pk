@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -8,10 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { navItems, quickAccessMenu } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { LogOut, LogIn, UserPlus } from "lucide-react";
+import { LogOut, LogIn, UserPlus, ShoppingCart } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useCart } from "@/context/CartContext";
+import CartCheckoutModal from "@/components/store/CartCheckoutModal";
 
 function getIcon(iconName: string): LucideIcon {
   return (LucideIcons as unknown as Record<string, LucideIcon>)[iconName] || LucideIcons.FileText;
@@ -25,8 +28,11 @@ interface MobileNavProps {
 export function MobileNav({ open, onClose }: MobileNavProps) {
   const pathname = usePathname();
   const { user, setAuthModalMode, logout } = useAuth();
+  const { totalItems } = useCart();
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onClose}>
       <SheetContent side="right" className="w-full max-w-sm p-0">
         <SheetHeader className="border-b px-6 py-4">
@@ -67,6 +73,24 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
                   {user.email}
                 </p>
               </div>
+
+              {/* Cart button */}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  setCheckoutOpen(true);
+                }}
+                className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-lime-400 hover:text-lime-600 transition"
+                aria-label={`Cart, ${totalItems} items`}
+              >
+                <ShoppingCart className="h-5 w-5" />
+                {totalItems > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-lime-500 text-[10px] font-black text-white shadow">
+                    {totalItems > 99 ? "99+" : totalItems}
+                  </span>
+                )}
+              </button>
             </div>
           ) : (
             <div className="mb-6 grid grid-cols-2 gap-2">
@@ -165,5 +189,12 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
         </div>
       </SheetContent>
     </Sheet>
+
+    {/* Mobile Cart Checkout Modal */}
+    <CartCheckoutModal
+      isOpen={checkoutOpen}
+      onClose={() => setCheckoutOpen(false)}
+    />
+  </>
   );
 }
