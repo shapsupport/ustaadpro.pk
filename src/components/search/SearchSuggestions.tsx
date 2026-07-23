@@ -2,11 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { LoaderCircle, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { searchSuggestions, type SearchResult } from "@/lib/search";
-import type { ApiService } from "@/lib/api-types";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
 
@@ -46,39 +46,13 @@ function SuggestionItem({ result }: { result: SearchResult }) {
   );
 }
 
-function localServiceResults(services: ApiService[], query: string): SearchResult[] {
-  const terms = query.toLowerCase().replace(/\bhvac\b/g, "ac").split(/\s+/).filter(Boolean);
-  const matches = (value: string) => {
-    const normalized = value.toLowerCase().replace(/\bhvac\b/g, "ac").replace(/-/g, " ");
-    return terms.every((term) => normalized.includes(term));
-  };
-
-  return services.flatMap((service) => {
-    const serviceText = [service.title, service.description, service.category_id, service.subcategory_id, service.service_type].join(" ");
-    const parent: SearchResult[] = matches(serviceText) ? [{ ...service, resultType: "service", suggestionId: `service-${service.id}` }] : [];
-    const subServices: SearchResult[] = (service.workPrices || [])
-      .filter((item) => matches(`${item.title} ${item.description} ${serviceText}`))
-      .map((item) => ({
-        resultType: "service",
-        suggestionId: `work-price-${item.id}`,
-        id: service.id,
-        title: item.title,
-        description: item.description,
-        price: item.price,
-        imageUrl: item.imageUrl || service.image_url || service.imageUrl,
-      }));
-    return [...parent, ...subServices];
-  });
-}
-
 export function SearchSuggestions({
   query,
   scope = "all",
-  services: availableServices,
 }: {
   query: string;
   scope?: "all" | "service" | "shop_product";
-  services?: ApiService[];
+  services?: unknown;
 }) {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -97,9 +71,7 @@ export function SearchSuggestions({
       setLoading(true);
       try {
         const remote = await searchSuggestions(value, scope, controller.signal);
-        const local = scope === "service" ? localServiceResults(availableServices || [], value) : [];
-        const combined = [...local, ...remote];
-        setResults([...new Map(combined.map((result) => [result.suggestionId || `${result.resultType}-${result.id}`, result])).values()].slice(0, 10));
+        setResults(remote);
       } catch {
         if (!controller.signal.aborted) setResults([]);
       } finally {
@@ -111,7 +83,7 @@ export function SearchSuggestions({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query, scope, availableServices]);
+  }, [query, scope]);
 
   useEffect(() => {
     if (query.trim().length < 2) return;
@@ -169,8 +141,18 @@ export function SearchSuggestions({
       </div>
       <div className="search-results-scrollbar max-h-[32rem] overflow-y-auto p-1.5 pr-2">
       {loading ? (
-        <div className="flex items-center justify-center gap-2 px-4 py-6 text-sm text-slate-500">
-          <LoaderCircle className="h-5 w-5 animate-spin" /> Searching…
+        <div className="space-y-2 p-2" role="status" aria-label="Searching">
+          <span className="sr-only">Searching…</span>
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="flex items-center gap-3 p-2">
+              <Skeleton className="h-16 w-16 shrink-0" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-5 w-3/4" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+              <Skeleton className="h-9 w-24" />
+            </div>
+          ))}
         </div>
       ) : results.length ? (
         <div className="space-y-3">

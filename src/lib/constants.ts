@@ -20,13 +20,18 @@ export const appLinks = {
 export const whatsappUrl =
   "https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%2C%20I%20want%20to%20book%20a%20service.";
 
+export const whatsappCallUrl =
+  "https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%2C%20please%20call%20me%20on%20WhatsApp%20to%20help%20with%20my%20booking.";
+
+export const whatsappBotUrl =
+  "https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%20booking%20bot%2C%20I%20want%20to%20book%20a%20service%20quickly.";
+
 export const navItems = [
   { label: "Home", href: "/" },
   { label: "Services", href: "/services" },
   { label: "Store", href: "/store" },
   { label: "Track Booking", href: "/track-booking" },
   { label: "Contact", href: "/contact" },
-  { label: "About Us", href: "/about" },
 ] as const;
 
 export const quickAccessMenu = [

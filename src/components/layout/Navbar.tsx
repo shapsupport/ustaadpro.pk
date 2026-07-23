@@ -13,6 +13,7 @@ import { useAuth } from "@/context/AuthContext";
 import { UserProfileModal } from "@/components/auth/UserProfileModal";
 import { useCart } from "@/context/CartContext";
 import CartDropdown from "../store/CartDropdown";
+import { UniversalSearch } from "@/components/search/UniversalSearch";
 
 
 export function Navbar() {
@@ -28,6 +29,8 @@ export function Navbar() {
   const { location, setShowPicker } = useLocation();
   const { user, setAuthModalMode } = useAuth();
   const isDetailPage = /^\/(services|store)\/[^/]+$/.test(pathname);
+  const searchScope = pathname.startsWith("/store") ? "shop_product" : "service";
+  const visibleNavItems = navItems.filter((item) => item.href !== "/track-booking" || Boolean(user));
 
   useEffect(() => {
     const handleScroll = () => {
@@ -62,7 +65,7 @@ export function Navbar() {
         )}
       >
         <nav
-          className="mx-auto flex h-20 max-w-[1536px] items-center justify-between px-4 sm:px-6 lg:px-8"
+          className="mx-auto flex h-20 max-w-[1760px] items-center justify-between px-3 sm:px-5 lg:px-6"
           aria-label="Main navigation"
         >
           {/* Logo */}
@@ -85,9 +88,13 @@ export function Navbar() {
             </span>
           </Link>
 
+          <div className="mx-3 hidden min-w-0 max-w-[1000px] flex-1 lg:block xl:mx-5">
+            <UniversalSearch key={searchScope} defaultScope={searchScope} />
+          </div>
+
           {/* Desktop Navigation */}
-          <div className="hidden items-center gap-1 xl:flex">
-            {navItems.map((item) => (
+          <div className="hidden items-center gap-1 2xl:flex">
+            {visibleNavItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -108,7 +115,7 @@ export function Navbar() {
             {/* Location */}
             <button
               onClick={() => setShowPicker(true)}
-              className="hidden cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-sm transition-all hover:border-primary hover:text-primary md:flex"
+              className="hidden cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-sm transition-all hover:border-primary hover:text-primary xl:flex"
             >
               <MapPin className="h-4 w-4 text-primary" />
 
@@ -120,27 +127,6 @@ export function Navbar() {
 
               <ChevronDown className="h-3 w-3 opacity-60" />
             </button>
-
-            {/* Cart Icon */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setCartOpen((prev) => !prev)}
-                aria-label={`Shopping cart, ${totalItems} item${totalItems !== 1 ? "s" : ""}`}
-                className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-lime-400 hover:text-lime-600 cursor-pointer"
-              >
-                <ShoppingCart className="h-5 w-5" />
-                {totalItems > 0 && (
-                  <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-lime-500 text-[10px] font-black text-white shadow">
-                    {totalItems > 99 ? "99+" : totalItems}
-                  </span>
-                )}
-              </button>
-              <CartDropdown
-                isOpen={cartOpen}
-                onClose={() => setCartOpen(false)}
-              />
-            </div>
 
             {/* Desktop User/Profile */}
             {user ? (
@@ -157,21 +143,13 @@ export function Navbar() {
                 </span>
               </button>
             ) : (
-              <div className="hidden xl:flex items-center gap-1">
-                <button
-                  onClick={() => setAuthModalMode("login")}
-                  className="h-11 px-4 text-sm font-bold text-slate-700 transition-colors hover:text-primary cursor-pointer"
-                >
-                  Sign In
-                </button>
-
-                <button
-                  onClick={() => setAuthModalMode("signup")}
-                  className="h-11 rounded-xl bg-primary px-5 text-sm font-bold text-white shadow-md shadow-primary/20 transition-all hover:bg-emerald-700 cursor-pointer"
-                >
-                  Sign Up
-                </button>
-              </div>
+              <button
+                onClick={() => setAuthModalMode("login")}
+                className="hidden h-10 items-center gap-1.5 rounded-xl bg-primary px-3.5 text-xs font-bold text-white shadow-md shadow-primary/20 transition-all hover:bg-emerald-700 xl:flex"
+              >
+                <UserRound className="h-4 w-4" />
+                Account
+              </button>
             )}
 
             {/* Mobile Hamburger */}
@@ -182,6 +160,20 @@ export function Navbar() {
             >
               <Menu className="h-5 w-5" />
             </button>
+
+            {/* Cart stays at the far-right edge of the navbar. */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setCartOpen((prev) => !prev)}
+                aria-label={`Shopping cart, ${totalItems} item${totalItems !== 1 ? "s" : ""}`}
+                className="relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-lime-400 hover:text-lime-600"
+              >
+                <ShoppingCart className="h-5 w-5" />
+                {totalItems > 0 && <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-lime-500 text-[10px] font-black text-white shadow">{totalItems > 99 ? "99+" : totalItems}</span>}
+              </button>
+              <CartDropdown isOpen={cartOpen} onClose={() => setCartOpen(false)} />
+            </div>
           </div>
         </nav>
       </header>

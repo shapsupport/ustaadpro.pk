@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { StickyCheckoutBar } from "@/components/shared/StickyCheckoutBar";
 import { useCart } from "@/context/CartContext";
 import CartCheckoutModal from "@/components/store/CartCheckoutModal";
+import { AvailabilityToast } from "@/components/shared/AvailabilityToast";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "";
 
@@ -82,6 +83,7 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
 
   return (
     <>
+      <AvailabilityToast kind="product" title={product.title} limited={product.stock > 0 && product.stock <= 10} />
       <div className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <button
@@ -117,7 +119,7 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
                     {product.category}
                   </span>
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                    {product.stock > 0 ? `${product.stock.toLocaleString("en-PK")} in stock` : "Out of stock"}
+                    {product.stock > 0 ? "Available to order" : "Currently unavailable"}
                   </span>
                 </div>
                 <h1 className="mt-4 text-3xl font-bold text-slate-900">{product.title}</h1>
@@ -165,7 +167,7 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
                 <div className="mt-5 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4">
                   <div>
                     <p className="text-sm font-bold text-slate-900">Quantity</p>
-                    <p className="text-xs text-slate-500">Choose up to {product.stock.toLocaleString("en-PK")}</p>
+                    <p className="text-xs text-slate-500">Select how many you need</p>
                   </div>
                   <div className="flex items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
                     <button

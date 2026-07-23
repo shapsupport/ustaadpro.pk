@@ -9,12 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { navItems, quickAccessMenu } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { LogOut, LogIn, UserPlus, ShoppingCart } from "lucide-react";
+import { LogOut, LogIn, ShoppingCart } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import CartCheckoutModal from "@/components/store/CartCheckoutModal";
+import { UniversalSearch } from "@/components/search/UniversalSearch";
 
 function getIcon(iconName: string): LucideIcon {
   return (LucideIcons as unknown as Record<string, LucideIcon>)[iconName] || LucideIcons.FileText;
@@ -30,6 +31,8 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
   const { user, setAuthModalMode, logout } = useAuth();
   const { totalItems } = useCart();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const searchScope = pathname.startsWith("/store") ? "shop_product" : "service";
+  const visibleNavItems = navItems.filter((item) => item.href !== "/track-booking" || Boolean(user));
 
   return (
     <>
@@ -58,6 +61,9 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
         </SheetHeader>
 
         <div className="flex h-[calc(100vh-80px)] flex-col overflow-y-auto px-4 py-6">
+          <div className="mb-6">
+            <UniversalSearch key={searchScope} mobile defaultScope={searchScope} onNavigate={onClose} />
+          </div>
           {/* User Profile / Auth */}
           {user ? (
             <div className="mb-6 flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
@@ -93,27 +99,16 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
               </button>
             </div>
           ) : (
-            <div className="mb-6 grid grid-cols-2 gap-2">
+            <div className="mb-6">
               <button
                 onClick={() => {
                   onClose();
                   setAuthModalMode("login");
                 }}
-                className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white transition hover:bg-emerald-700"
               >
                 <LogIn className="h-4 w-4" />
-                Sign In
-              </button>
-
-              <button
-                onClick={() => {
-                  onClose();
-                  setAuthModalMode("signup");
-                }}
-                className="flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
-              >
-                <UserPlus className="h-4 w-4" />
-                Sign Up
+                Continue with account
               </button>
             </div>
           )}
@@ -161,7 +156,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
 
           {/* Navigation */}
           <div className="mb-6 space-y-1">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

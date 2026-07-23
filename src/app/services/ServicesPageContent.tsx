@@ -13,7 +13,6 @@ import {
   Hammer,
   Layers,
   Paintbrush,
-  Search,
   Snowflake,
   Sparkles,
   Star,
@@ -28,9 +27,8 @@ import {
 } from "lucide-react";
 import type { ApiCategory, ApiService } from "@/lib/api-types";
 import { useRef } from "react";
-import { searchApi } from "@/lib/search";
 import { orderCategories, orderServices } from "@/lib/service-order";
-import { SearchSuggestions } from "@/components/search/SearchSuggestions";
+import { searchServicesFromApi } from "@/lib/search";
 import { useLocation } from "@/context/LocationContext";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
@@ -56,14 +54,14 @@ const CAT_ICONS: Record<string, ComponentType<{ className?: string }>> = {
 interface ServicesPageContentProps {
   initialServices: ApiService[];
   initialCategories: ApiCategory[];
+  initialSearch?: string;
 }
 
-export function ServicesPageContent({ initialServices, initialCategories }: ServicesPageContentProps) {
+export function ServicesPageContent({ initialServices, initialCategories, initialSearch = "" }: ServicesPageContentProps) {
   const { location, setShowPicker } = useLocation();
-  const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
-  const [serviceSearchResults, setServiceSearchResults] = useState<ApiService[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [searchedServices, setSearchedServices] = useState<ApiService[]>([]);
+  const [completedSearch, setCompletedSearch] = useState("");
 
   const servicesRef = useRef<HTMLDivElement>(null);
 
@@ -99,31 +97,39 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
   }, [allCategories]);
 
   useEffect(() => {
-    const query = searchQuery.trim();
+    const query = initialSearch.trim();
     if (!query) return;
     const controller = new AbortController();
-    const timer = window.setTimeout(async () => {
-      setSearching(true);
-      try { setServiceSearchResults(await searchApi(query, "service", controller.signal)); }
-      catch { if (!controller.signal.aborted) setServiceSearchResults([]); }
-      finally { if (!controller.signal.aborted) setSearching(false); }
-    }, 300);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [searchQuery]);
+    searchServicesFromApi(query, "all", controller.signal)
+      .then((results) => {
+        if (!controller.signal.aborted) {
+          setSearchedServices(results as ApiService[]);
+          setCompletedSearch(query);
+          window.requestAnimationFrame(() => {
+            servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+          });
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setSearchedServices([]);
+          setCompletedSearch(query);
+        }
+      });
+    return () => controller.abort();
+  }, [initialSearch]);
 
   const filtered = useMemo(() => {
-    const q = searchQuery.trim();
-    const source = orderServices(q ? serviceSearchResults : initialServices);
-    const base = source.filter((s) => {
+    if (initialSearch.trim()) return searchedServices;
+    return orderServices(initialServices).filter((s) => {
       const matchCat = activeCategory === "all" || s.category_id === activeCategory;
       return matchCat;
     });
-
-    return base;
-  }, [initialServices, serviceSearchResults, activeCategory, searchQuery]);
+  }, [initialServices, activeCategory, initialSearch, searchedServices]);
 
   const startingPrice = initialServices.length ? Math.min(...initialServices.map((service) => service.price).filter((price) => price > 0)) : 0;
   const reviewedServices = initialServices.filter((service) => service.reviews > 0).length;
+  const searching = Boolean(initialSearch.trim() && completedSearch !== initialSearch.trim());
 
   return (
     <div className="min-h-screen bg-slate-50 pt-0">
@@ -138,15 +144,6 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
             <h1 className="mt-3 max-w-2xl text-4xl font-black leading-[1.06] tracking-tight text-slate-950 sm:text-5xl xl:text-6xl">Find the right expert.<span className="mt-2 block text-emerald-600">Get the job done right.</span></h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-slate-600 sm:text-lg">Explore repairs, maintenance, installations, cleaning, and specialist work with clear service details and straightforward booking.</p>
 
-            <div className="relative mt-7 max-w-2xl">
-              <div className="flex h-16 items-center rounded-2xl border border-slate-200 bg-white p-1.5 pl-4 shadow-xl shadow-slate-900/10 focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100">
-                <Search className="mr-3 h-5 w-5 shrink-0 text-slate-400" />
-                <input type="text" placeholder="What service do you need?" value={searchQuery} onChange={(e) => { const value = e.target.value; setSearchQuery(value); setActiveCategory("all"); if (!value.trim()) { setServiceSearchResults([]); setSearching(false); } }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); } }} className="h-full min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 sm:text-base" />
-                <button type="button" onClick={() => servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className="flex h-12 shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-4 font-bold text-white transition hover:bg-emerald-700 sm:px-6"><Search className="h-4 w-4" /><span className="hidden sm:inline">Search</span></button>
-              </div>
-              <SearchSuggestions query={searchQuery} scope="service" services={initialServices} />
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500"><span className="font-bold">Popular:</span>{allCategories.slice(0, 5).map((category) => <button key={category.id} type="button" onClick={() => selectCategory(category.id, true)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 transition hover:border-emerald-300 hover:text-emerald-700">{category.title}</button>)}</div>
           </div>
 
           <div className="relative z-10 lg:pl-8">
@@ -203,9 +200,11 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
       <div ref={servicesRef} className="mx-auto max-w-7xl scroll-mt-36 px-4 py-10 sm:px-6 lg:px-8">
         <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">Service shortlist</h2>
+            <h2 className="text-2xl font-bold text-slate-900">
+              {initialSearch.trim() ? `Results for “${initialSearch.trim()}”` : "Service shortlist"}
+            </h2>
             <p className="text-sm text-slate-500">
-              {searching ? "Searching all services…" : `${filtered.length} option${filtered.length !== 1 ? "s" : ""} ready for your next booking.`}
+              {searching ? "Loading matching services…" : `${filtered.length} option${filtered.length !== 1 ? "s" : ""} ready for your next booking.`}
             </p>
           </div>
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm">
@@ -214,14 +213,18 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
           </div>
         </div>
 
-        {filtered.length === 0 ? (
+        {searching ? (
+          <div className="rounded-3xl border border-emerald-100 bg-white p-10 text-center shadow-sm">
+            <p className="font-bold text-emerald-700">Searching the service catalogue…</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
             <p className="text-xl font-bold text-slate-400">No services match your search</p>
             <p className="mt-2 text-slate-500">Try a different keyword or reset the filter.</p>
             <button
               onClick={() => {
-                setSearchQuery("");
                 setActiveCategory("all");
+                window.history.replaceState(null, "", "/services");
               }}
               className="mt-6 rounded-xl bg-primary px-6 py-3 font-bold text-white transition hover:bg-emerald-700"
             >
@@ -230,8 +233,8 @@ export function ServicesPageContent({ initialServices, initialCategories }: Serv
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((service) => (
-              <ServiceCardLarge key={service.id} service={service} />
+            {filtered.map((service, index) => (
+              <ServiceCardLarge key={`${service.id}-${service.title}-${index}`} service={service} />
             ))}
           </div>
         )}

@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import type { ApiReview, ApiService, WorkPrice } from "@/lib/api-types";
 import BookingModal from "@/components/booking/BookingModal";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AvailabilityToast } from "@/components/shared/AvailabilityToast";
 // import { StickyCheckoutBar } from "@/components/shared/StickyCheckoutBar";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
@@ -91,6 +93,8 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
   };
 
   return (
+    <>
+    <AvailabilityToast kind="service" title={service.title} />
     <div className="min-h-screen bg-slate-50">
       {/* ── Back bar ── */}
       <div className="border-b border-slate-100 bg-white/90 px-4 py-3 backdrop-blur-md">
@@ -424,6 +428,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
         price={`Rs ${bookingPrice.toLocaleString()}`}
       /> */}
     </div>
+    </>
   );
 }
 
@@ -495,7 +500,7 @@ function ServiceReviews({ serviceId, initialReviews, open, onToggle, onReviewsLo
       </button>
 
       {open && <div className="border-t border-slate-100 p-6 sm:p-8">
-        {loading ? <div className="py-12 text-center text-sm font-medium text-slate-500">Loading customer reviews…</div> : error ? <div className="rounded-2xl border border-red-100 bg-red-50 p-5 text-sm font-medium text-red-700">{error}</div> : reviews.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center"><Star className="mx-auto h-8 w-8 text-amber-400" /><h3 className="mt-3 font-bold text-slate-800">No published reviews yet</h3><p className="mt-1 text-sm text-slate-500">Reviews from completed bookings will appear here.</p></div> : <>
+        {loading ? <div className="grid gap-4 sm:grid-cols-2" role="status" aria-label="Loading customer reviews"><span className="sr-only">Loading customer reviews…</span>{Array.from({ length: 4 }).map((_, index) => <div key={index} className="rounded-2xl border border-slate-100 p-5"><div className="flex items-center gap-3"><Skeleton className="h-10 w-10 rounded-full" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-24" /></div></div><Skeleton className="mt-4 h-4 w-28" /><Skeleton className="mt-4 h-4 w-full" /><Skeleton className="mt-2 h-4 w-4/5" /></div>)}</div> : error ? <div className="rounded-2xl border border-red-100 bg-red-50 p-5 text-sm font-medium text-red-700">{error}</div> : reviews.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center"><Star className="mx-auto h-8 w-8 text-amber-400" /><h3 className="mt-3 font-bold text-slate-800">No published reviews yet</h3><p className="mt-1 text-sm text-slate-500">Reviews from completed bookings will appear here.</p></div> : <>
           <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
             <aside>
               <div className="rounded-2xl bg-slate-50 p-5 text-center"><strong className="text-4xl font-black text-slate-900">{average.toFixed(1)}</strong><div className="mt-2 flex justify-center"><StarRating rating={average} /></div><p className="mt-2 text-xs text-slate-500">Based on {reviews.length} published review{reviews.length === 1 ? "" : "s"}</p></div>

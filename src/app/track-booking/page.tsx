@@ -3,10 +3,11 @@
 import Link from "next/link";
 import Image from "next/image";
 import { type ChangeEvent, useCallback, useEffect, useState } from "react";
-import { AlertCircle, ArrowRight, CalendarDays, Camera, ChevronDown, Loader2, MapPin, MessageSquareWarning, Package, RefreshCw, ShoppingBag, Star, UserRound, Wrench, XCircle } from "lucide-react";
+import { AlertCircle, ArrowRight, CalendarDays, Camera, ChevronDown, MapPin, MessageSquareWarning, Package, RefreshCw, ShoppingBag, Star, UserRound, Wrench, XCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 const STORAGE_KEY = "ustaadpro_bookings";
@@ -131,7 +132,7 @@ export default function TrackBookingPage() {
       {bookings.length > 0 && <div className="mb-5 flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
         {(["all", "service", "shop"] as const).map((item) => <button key={item} type="button" onClick={() => setView(item)} className={`shrink-0 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-bold transition ${view === item ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{item === "all" ? `All (${bookings.length})` : item === "service" ? `Services (${bookings.filter((b) => b.kind === "service").length})` : `Shop (${bookings.filter((b) => b.kind === "shop").length})`}</button>)}
       </div>}
-      {loading && !bookings.length ? <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> : bookings.length === 0 ? <Empty /> : visibleBookings.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-600">No orders in this section.</div> : <div className="grid gap-4">{visibleBookings.map((booking) => <BookingCard key={`${booking.kind}-${booking.id}`} booking={booking} onUpdate={(updates) => updateBooking(booking.id, booking.kind, updates)} />)}</div>}
+      {loading && !bookings.length ? <div className="grid gap-4" role="status" aria-label="Loading bookings"><span className="sr-only">Loading bookings…</span>{Array.from({ length: 4 }).map((_, index) => <div key={index} className="rounded-3xl border border-slate-200 bg-white p-5"><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-2xl" /><div className="flex-1 space-y-2"><Skeleton className="h-3 w-28" /><Skeleton className="h-6 w-2/3" /><Skeleton className="h-4 w-40" /></div><Skeleton className="h-8 w-24 rounded-full" /></div></div>)}</div> : bookings.length === 0 ? <Empty /> : visibleBookings.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-600">No orders in this section.</div> : <div className="grid gap-4">{visibleBookings.map((booking) => <BookingCard key={`${booking.kind}-${booking.id}`} booking={booking} onUpdate={(updates) => updateBooking(booking.id, booking.kind, updates)} />)}</div>}
     </div>
   );
 }

@@ -8,8 +8,13 @@ export const metadata: Metadata = {
     "Browse professional home services including electrical, plumbing, AC repair, painting, cleaning, carpentry, CCTV installation, and more. Book verified professionals in Pakistan.",
 };
 
-export default async function ServicesPage() {
+export default async function ServicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ search?: string }>;
+}) {
+  const { search = "" } = await searchParams;
   const [services, categories] = await Promise.all([getServices(), getCategories()]);
   const reviewedServices = await getServicesWithReviewStats(services);
-  return <ServicesPageContent initialServices={reviewedServices} initialCategories={categories} />;
+  return <ServicesPageContent initialServices={reviewedServices} initialCategories={categories} initialSearch={search} />;
 }

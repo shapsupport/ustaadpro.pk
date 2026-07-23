@@ -6,14 +6,14 @@ import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { ProductGridSkeleton } from "@/components/ui/skeleton";
 import type { ApiProduct, ApiShopResponse } from "@/lib/api-types";
 import { searchApi } from "@/lib/search";
-import { SearchSuggestions } from "@/components/search/SearchSuggestions";
 import {
   Check,
+  Minus,
   Package,
-  Search,
+  Plus,
   ShoppingBag,
   ShoppingCart,
   SlidersHorizontal,
@@ -31,6 +31,23 @@ function buildImageUrl(url?: string) {
 function formatPrice(price?: number | string) {
   const amount = Number(price || 0);
   return `Rs ${amount.toLocaleString("en-PK")}`;
+}
+
+function normalizedProductName(value?: string) {
+  return (value || "").trim().toLocaleLowerCase().replace(/\s+/g, " ");
+}
+
+function uniqueProducts(items: ApiProduct[]) {
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  return items.filter((product) => {
+    const id = String(product.id || "");
+    const name = normalizedProductName(product.title);
+    if (!id || !name || seenIds.has(id) || seenNames.has(name)) return false;
+    seenIds.add(id);
+    seenNames.add(name);
+    return true;
+  });
 }
 
 const PREFERRED_CATEGORY_ORDER = ["Paints", "Tools", "Hardware"];
@@ -73,10 +90,12 @@ export default function StorePageClient() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const pageSize = 45;
+  const pageSize = 40;
   const resultsRef = useRef<HTMLDivElement>(null);
+  const catalogRequestRef = useRef(0);
 
   const loadProducts = useCallback(async () => {
+    const requestId = ++catalogRequestRef.current;
     const requestKey = `${selectedCategory}:${page}`;
     setLoading(true);
     try {
@@ -102,7 +121,8 @@ export default function StorePageClient() {
           cursors.set(slot.category, cursor + 1);
           return product ? [product as ApiProduct] : [];
         });
-        setProducts(mixedProducts);
+        if (requestId !== catalogRequestRef.current) return;
+        setProducts(uniqueProducts(mixedProducts));
         setCategories(catalogCategories);
         setTotal(catalogCategories.reduce((sum, category) => sum + Number(category.total || 0), 0));
         return;
@@ -123,23 +143,29 @@ export default function StorePageClient() {
           ? data.data
           : [];
 
-      const normalizedProducts = allProducts.filter((product: ApiProduct) => product?.id);
+      const normalizedProducts = uniqueProducts(allProducts.filter((product: ApiProduct) => product?.id));
+      if (requestId !== catalogRequestRef.current) return;
       setProducts(normalizedProducts);
       setCategories(Array.isArray(data?.categories) ? data.categories : []);
       setTotal(Number(data?.total || normalizedProducts.length));
     } catch (error) {
       console.error("Failed to load store products:", error);
-      setProducts([]);
-      setCategories([]);
+      if (requestId === catalogRequestRef.current) {
+        setProducts([]);
+        setCategories([]);
+      }
     } finally {
-      setLoadedCatalogKey(requestKey);
-      setLoading(false);
+      if (requestId === catalogRequestRef.current) {
+        setLoadedCatalogKey(requestKey);
+        setLoading(false);
+      }
     }
   }, [selectedCategory, page]);
 
   useEffect(() => {
     if (debouncedSearch) return;
-    void loadProducts();
+    const timer = window.setTimeout(() => void loadProducts(), 0);
+    return () => window.clearTimeout(timer);
   }, [loadProducts, debouncedSearch]);
 
   useEffect(() => {
@@ -149,8 +175,6 @@ export default function StorePageClient() {
 
   useEffect(() => {
     if (!debouncedSearch) {
-      setSearchResults([]);
-      setSearching(false);
       return;
     }
     let active = true;
@@ -159,7 +183,7 @@ export default function StorePageClient() {
       setSearching(true);
       try {
         const matches = await searchApi(debouncedSearch, "shop_product", controller.signal);
-        if (active) setSearchResults(matches);
+        if (active) setSearchResults(uniqueProducts(matches));
       } catch { if (active) setSearchResults([]); }
       finally { if (active) setSearching(false); }
     }
@@ -178,13 +202,13 @@ export default function StorePageClient() {
     setSearch("");
     setDebouncedSearch("");
     setPage(1);
+    window.dispatchEvent(new Event("ustaadpro:shop-search-reset"));
   }, []);
 
   const activeFilters = selectedCategory !== "all" || Boolean(debouncedSearch);
-  const filteredSearchResults = useMemo(() => selectedCategory === "all" ? searchResults : searchResults.filter((product) => product.category === selectedCategory), [searchResults, selectedCategory]);
-  const visibleTotal = debouncedSearch ? filteredSearchResults.length : total;
+  const visibleTotal = debouncedSearch ? searchResults.length : total;
   const pageCount = Math.max(1, Math.ceil(visibleTotal / pageSize));
-  const visibleProducts = debouncedSearch ? filteredSearchResults.slice((page - 1) * pageSize, page * pageSize) : products;
+  const visibleProducts = debouncedSearch ? searchResults.slice((page - 1) * pageSize, page * pageSize) : products;
   const catalogLoading = loading || (!debouncedSearch && loadedCatalogKey !== `${selectedCategory}:${page}`);
   const skeletonCount = Math.max(12, products.length, visibleProducts.length);
   const handleSearchChange = useCallback((value: string) => {
@@ -206,18 +230,15 @@ export default function StorePageClient() {
       setDebouncedSearch("");
     }
   }, [search]);
-  const submitSearch = useCallback(() => {
-    const value = search.trim();
-    if (!value) return;
-    setSearching(true);
-    setDebouncedSearch(value);
-    setPage(1);
-    const target = resultsRef.current;
-    if (target) {
-      const top = target.getBoundingClientRect().top + window.scrollY - 112;
-      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-    }
-  }, [search]);
+  useEffect(() => {
+    const syncNavbarSearch = (event: Event) => {
+      const detail = (event as CustomEvent<{ query?: string; category?: string }>).detail;
+      handleSearchChange(String(detail?.query || ""));
+      setSelectedCategory(String(detail?.category || "all"));
+    };
+    window.addEventListener("ustaadpro:shop-search", syncNavbarSearch);
+    return () => window.removeEventListener("ustaadpro:shop-search", syncNavbarSearch);
+  }, [handleSearchChange]);
   const chooseCategory = useCallback((category: string) => {
     if (!search.trim()) setLoading(true);
     setSelectedCategory(category);
@@ -266,38 +287,18 @@ export default function StorePageClient() {
         </div>
       </section>
 
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="space-y-6">
-          <aside className="sticky top-24 z-40 w-full min-w-0 self-start rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur">
-            <div className="flex items-center gap-2 lg:hidden">
+      <div className="mx-auto max-w-[1536px] px-4 py-6 sm:px-6 lg:px-8">
+        <div className="grid gap-6 lg:grid-cols-[230px_minmax(0,1fr)]">
+          <aside className="sticky top-24 z-30 w-full min-w-0 self-start rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur">
+            <div className="flex items-center gap-2">
               <SlidersHorizontal className="h-4 w-4 text-lime-600" />
               <h2 className="text-lg font-semibold text-slate-900">Filters</h2>
             </div>
 
-            <div className="mt-3 flex flex-col gap-3 lg:mt-0 lg:flex-row lg:items-center">
-              <div className="shrink-0 lg:w-80">
-                <label htmlFor="store-search" className="sr-only">Search all products</label>
-                <div className="relative z-50">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    id="store-search"
-                    type="search"
-                    value={search}
-                    onChange={(event) => handleSearchChange(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        submitSearch();
-                      }
-                    }}
-                    placeholder="Name, category, description…"
-                    className="h-11 rounded-2xl border-slate-200 pl-9"
-                  />
-                  <SearchSuggestions query={search} scope="shop_product" />
-                </div>
-              </div>
+            <div className="mt-4 flex flex-col gap-3">
               <div className="min-w-0 flex-1">
-                <div className="shop-category-scrollbar flex gap-2 overflow-x-auto overflow-y-hidden pb-2">
+                <p className="mb-2 hidden text-[11px] font-black uppercase tracking-[0.18em] text-slate-400 lg:block">Product categories</p>
+                <div className="shop-category-scrollbar flex gap-2 overflow-x-auto overflow-y-hidden pb-2 lg:flex-col lg:overflow-visible lg:pb-0">
                   {categoryItems.map((item) => {
                     const isActive = selectedCategory === item.name;
                     return (
@@ -305,7 +306,7 @@ export default function StorePageClient() {
                         key={item.name}
                         type="button"
                         onClick={() => chooseCategory(item.name)}
-                        className={`flex shrink-0 items-center gap-2 rounded-2xl border px-3 py-2.5 text-left text-sm font-medium transition ${
+                        className={`flex shrink-0 items-center justify-between gap-2 rounded-2xl border px-3 py-2.5 text-left text-sm font-medium transition lg:w-full ${
                           isActive
                             ? "border-lime-500 bg-lime-50 text-lime-700"
                             : "border-slate-200 bg-white text-slate-700 hover:border-lime-200 hover:text-lime-700"
@@ -319,12 +320,13 @@ export default function StorePageClient() {
                 </div>
               </div>
 
-              <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="whitespace-nowrap text-sm font-semibold text-slate-900">{visibleTotal.toLocaleString("en-PK")} products</p>
+              <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                <p className="text-xs font-medium text-slate-500">Results available</p>
+                <p className="mt-0.5 whitespace-nowrap text-sm font-bold text-slate-900">{visibleTotal.toLocaleString("en-PK")} products</p>
               </div>
 
               {activeFilters ? (
-                <Button type="button" variant="outline" className="shrink-0" onClick={clearFilters}>
+                <Button type="button" variant="outline" className="w-full shrink-0" onClick={clearFilters}>
                   Clear filters
                 </Button>
               ) : null}
@@ -345,13 +347,9 @@ export default function StorePageClient() {
             </div>
 
             {catalogLoading || searching ? (
-              <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-                {Array.from({ length: skeletonCount }).map((_, index) => (
-                  <div key={index} className="h-80 animate-pulse rounded-3xl border border-slate-200 bg-slate-100" />
-                ))}
-              </div>
+              <ProductGridSkeleton count={skeletonCount} />
             ) : visibleProducts.length > 0 ? (
-              <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {visibleProducts.map((product) => (
                   <ProductCard
                     key={product.id}
@@ -391,6 +389,7 @@ function Pagination({ page, pageCount, onPage }: { page: number; pageCount: numb
 function ProductCard({ product }: { product: ApiProduct }) {
   const { addItem } = useCart();
   const [added, setAdded] = useState(false);
+  const [quantity, setQuantity] = useState(1);
   const imageSrc = buildImageUrl(product.imageUrl);
   const hasDiscount = Boolean(product.originalPrice && Number(product.originalPrice) > Number(product.price));
   const isOutOfStock = product.stock <= 0;
@@ -399,9 +398,13 @@ function ProductCard({ product }: { product: ApiProduct }) {
     e.preventDefault();
     e.stopPropagation();
     if (isOutOfStock) return;
-    addItem(product, 1);
+    addItem(product, quantity);
     setAdded(true);
     window.setTimeout(() => setAdded(false), 1500);
+  };
+
+  const setSafeQuantity = (value: number) => {
+    setQuantity(Math.min(Math.max(1, Number.isFinite(value) ? Math.floor(value) : 1), Math.max(1, product.stock)));
   };
 
   return (
@@ -412,7 +415,7 @@ function ProductCard({ product }: { product: ApiProduct }) {
         onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch {} }}
         className="block flex-1"
       >
-        <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
+        <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
           {imageSrc ? (
             <Image
               src={imageSrc}
@@ -437,18 +440,18 @@ function ProductCard({ product }: { product: ApiProduct }) {
           ) : null}
         </div>
 
-        <div className="p-4 pb-2">
-          <p className="text-sm font-bold uppercase tracking-[0.2em] text-lime-600">{product.category}</p>
-          <h3 className="mt-2 line-clamp-2 text-lg font-bold leading-snug text-slate-900 transition-colors group-hover:text-lime-700 sm:text-xl">
+        <div className="p-3 pb-2">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-lime-600">{product.category}</p>
+          <h3 className="mt-1.5 line-clamp-2 text-base font-bold leading-snug text-slate-900 transition-colors group-hover:text-lime-700">
             {product.title}
           </h3>
 
-          <div className="mt-3 flex items-center gap-2 text-base text-slate-500">
-            <span>{product.stock > 0 ? `${product.stock.toLocaleString("en-PK")} in stock` : "Out of stock"}</span>
+          <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+            <span>{product.stock > 0 ? "Available to order" : "Currently unavailable"}</span>
           </div>
 
-          <div className="mt-4 flex items-center gap-2">
-            <span className="text-2xl font-black text-slate-900">{formatPrice(product.price)}</span>
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-xl font-black text-slate-900">{formatPrice(product.price)}</span>
             {hasDiscount ? (
               <span className="text-sm text-slate-400 line-through">{formatPrice(product.originalPrice)}</span>
             ) : null}
@@ -457,11 +460,29 @@ function ProductCard({ product }: { product: ApiProduct }) {
       </Link>
 
       {/* Action buttons */}
-      <div className="flex items-center gap-2 p-4 pt-2">
+      <div className="p-3 pt-1">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="text-xs font-bold text-slate-600">Quantity</span>
+          <div className="flex h-9 items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+            <button type="button" onClick={() => setSafeQuantity(quantity - 1)} disabled={quantity <= 1 || isOutOfStock} className="flex h-full w-8 items-center justify-center text-slate-600 hover:bg-slate-200 disabled:opacity-35" aria-label="Decrease quantity"><Minus className="h-3.5 w-3.5" /></button>
+            <input
+              type="number"
+              min={1}
+              max={Math.max(1, product.stock)}
+              value={quantity}
+              disabled={isOutOfStock}
+              onChange={(event) => setSafeQuantity(Number(event.target.value))}
+              className="h-full w-12 border-x border-slate-200 bg-white text-center text-sm font-black text-slate-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              aria-label={`Quantity for ${product.title}`}
+            />
+            <button type="button" onClick={() => setSafeQuantity(quantity + 1)} disabled={quantity >= product.stock || isOutOfStock} className="flex h-full w-8 items-center justify-center text-slate-600 hover:bg-slate-200 disabled:opacity-35" aria-label="Increase quantity"><Plus className="h-3.5 w-3.5" /></button>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
         <Link
           href={`/store/${product.id}`}
           onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch {} }}
-          className="h-11 flex-1 flex items-center justify-center rounded-xl bg-lime-500 text-sm font-bold text-white hover:bg-lime-600 transition"
+          className="flex h-10 flex-1 items-center justify-center rounded-xl bg-lime-500 text-xs font-bold text-white transition hover:bg-lime-600"
         >
           View details
         </Link>
@@ -470,7 +491,7 @@ function ProductCard({ product }: { product: ApiProduct }) {
           onClick={handleAddToCart}
           disabled={isOutOfStock}
           aria-label={added ? "Added to cart" : "Add to cart"}
-          className={`h-11 flex items-center justify-center gap-1.5 rounded-xl border px-3 text-sm font-bold transition cursor-pointer ${
+          className={`flex h-10 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition cursor-pointer ${
             isOutOfStock
               ? "cursor-not-allowed border-slate-200 text-slate-400 bg-slate-50"
               : added
@@ -485,6 +506,7 @@ function ProductCard({ product }: { product: ApiProduct }) {
           )}
           <span className="hidden sm:inline">{added ? "Added" : "Add"}</span>
         </button>
+        </div>
       </div>
     </Card>
   );

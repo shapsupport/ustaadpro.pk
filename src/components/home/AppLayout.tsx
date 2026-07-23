@@ -6,14 +6,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight, BadgeCheck, CalendarCheck, Camera, CheckCircle2, ChevronDown,
   ChevronLeft, ChevronRight, Clock3, Flame, Hammer, Layers3, MapPin,
-  Paintbrush, Search, ShieldCheck, Shirt, Snowflake, Sparkles, Star,
+  Paintbrush, ShieldCheck, Shirt, Snowflake, Sparkles, Star,
   Timer, UserCheck, WalletCards, Wrench, Zap, type LucideIcon,
 } from "lucide-react";
 import type { ApiCategory, ApiReview, ApiService } from "@/lib/api-types";
 import { useLocation } from "@/context/LocationContext";
-import { searchApi } from "@/lib/search";
 import { orderCategories, orderServices } from "@/lib/service-order";
-import { SearchSuggestions } from "@/components/search/SearchSuggestions";
 import { AppStoreButtons } from "@/components/shared/AppStoreButtons";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
@@ -50,10 +48,7 @@ interface AppLayoutProps {
 
 export function AppLayout({ initialServices, categories, reviews }: AppLayoutProps) {
   const { location, setShowPicker } = useLocation();
-  const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
-  const [remoteResults, setRemoteResults] = useState<ApiService[]>([]);
-  const [searching, setSearching] = useState(false);
   const [featuredIndex, setFeaturedIndex] = useState(0);
   const servicesRef = useRef<HTMLElement>(null);
 
@@ -66,32 +61,14 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
   }, [categories, orderedServices]);
 
   useEffect(() => {
-    const cleaned = query.trim();
-    if (!cleaned) {
-      setRemoteResults([]);
-      setSearching(false);
-      return;
-    }
-    const controller = new AbortController();
-    const timeout = window.setTimeout(async () => {
-      setSearching(true);
-      try { setRemoteResults(await searchApi(cleaned, "service", controller.signal)); }
-      catch { if (!controller.signal.aborted) setRemoteResults([]); }
-      finally { if (!controller.signal.aborted) setSearching(false); }
-    }, 300);
-    return () => { window.clearTimeout(timeout); controller.abort(); };
-  }, [query]);
-
-  useEffect(() => {
     if (orderedServices.length < 2) return;
     const timer = window.setInterval(() => setFeaturedIndex((index) => (index + 1) % orderedServices.length), 6000);
     return () => window.clearInterval(timer);
   }, [orderedServices.length]);
 
   const filtered = useMemo(() => {
-    const source = query.trim() ? orderServices(remoteResults) : orderedServices;
-    return source.filter((service) => activeCategory === "all" || service.category_id === activeCategory);
-  }, [activeCategory, orderedServices, query, remoteResults]);
+    return orderedServices.filter((service) => activeCategory === "all" || service.category_id === activeCategory);
+  }, [activeCategory, orderedServices]);
 
   const featured = orderedServices[featuredIndex];
   const popular = filtered.slice(0, 8);
@@ -120,31 +97,6 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
             <p className="mt-5 max-w-lg text-base leading-7 text-slate-600 sm:text-lg">
               Book skilled electricians, plumbers, AC technicians and more services across Rawalpindi and Islamabad.
             </p>
-
-            <div className="relative mt-7 max-w-xl">
-              <div className="flex h-14 items-center rounded-xl border border-slate-200 bg-white p-1.5 pl-4 shadow-xl shadow-slate-900/10 focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100">
-                <Search className="mr-3 h-5 w-5 shrink-0 text-slate-400" />
-                <input
-                  value={query}
-                  onChange={(event) => { setQuery(event.target.value); setActiveCategory("all"); }}
-                  onKeyDown={(event) => { if (event.key === "Enter") servicesRef.current?.scrollIntoView({ behavior: "smooth" }); }}
-                  className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
-                  placeholder="Search services (e.g. AC service, wiring...)"
-                  aria-label="Search services"
-                />
-                <button type="button" onClick={() => servicesRef.current?.scrollIntoView({ behavior: "smooth" })} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white transition hover:bg-emerald-700" aria-label="View search results">
-                  <Search className="h-5 w-5" />
-                </button>
-              </div>
-              <SearchSuggestions query={query} scope="service" services={initialServices} />
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span className="font-semibold">Popular:</span>
-              {categoryList.slice(0, 5).map((category) => (
-                <button key={category.id} type="button" onClick={() => showCategory(category.id)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 transition hover:border-emerald-300 hover:text-emerald-700">{category.title}</button>
-              ))}
-            </div>
 
             <div className="mt-7 grid max-w-xl grid-cols-2 gap-2 sm:grid-cols-4">
               {[
@@ -196,7 +148,7 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
       <section ref={servicesRef} id="popular-services" className="scroll-mt-28 bg-slate-50/70 py-12">
         <div className="container-wide px-4 sm:px-6 lg:px-8">
           <div className="mb-7 flex items-end justify-between gap-4">
-            <div><h2 className="text-2xl font-black">{query ? "Search results" : "Popular services"}</h2><p className="mt-1 text-sm text-slate-500">{searching ? "Searching services…" : `${filtered.length} service${filtered.length === 1 ? "" : "s"} available`}</p></div>
+            <div><h2 className="text-2xl font-black">Popular services</h2><p className="mt-1 text-sm text-slate-500">{filtered.length} service{filtered.length === 1 ? "" : "s"} available</p></div>
             <Link href="/services" className="hidden items-center gap-1 text-sm font-bold text-emerald-700 sm:flex">View all services <ArrowRight className="h-4 w-4" /></Link>
           </div>
           {popular.length ? (
@@ -204,7 +156,7 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
           ) : (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center">
               <h3 className="font-bold">No services found</h3><p className="mt-1 text-sm text-slate-500">Try another search or category.</p>
-              <button onClick={() => { setQuery(""); setActiveCategory("all"); }} className="mt-5 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white">Show all services</button>
+              <button onClick={() => setActiveCategory("all")} className="mt-5 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white">Show all services</button>
             </div>
           )}
         </div>
