@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { ApiProduct } from "@/lib/api-types";
+import { showSuccessToast } from "@/context/ToastContext";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -166,6 +167,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const addItem = useCallback((product: ApiProduct, quantity = 1) => {
     dispatch({ type: "ADD_ITEM", product, quantity });
+    showSuccessToast(`${product.title} has been added to your cart.`);
   }, []);
 
   const removeItem = useCallback((productId: string) => {

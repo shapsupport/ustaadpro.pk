@@ -216,7 +216,7 @@ export function AuthModal() {
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="fixed inset-x-3 sm:inset-x-4 top-1/2 z-[110] max-w-md mx-auto -translate-y-1/2 bg-white rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200"
+        className="fixed inset-x-3 top-1/2 z-[110] mx-auto max-h-[calc(100dvh-1.5rem)] max-w-md -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl border border-slate-100 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:inset-x-4 sm:max-h-[calc(100dvh-2rem)] sm:rounded-3xl"
       >
         {/* Back button (forgot mode) */}
         {authModalMode === "forgot" && (
@@ -238,9 +238,9 @@ export function AuthModal() {
           <X className="h-5 w-5" />
         </button>
 
-        <div className="p-5 sm:p-8">
+        <div className="p-4 sm:p-8">
           {/* Header */}
-          <div className="text-center mb-6">
+          <div className="mb-4 pr-8 text-center sm:mb-6 sm:pr-0">
             <h2 className="text-xl sm:text-2xl font-black text-slate-900">{title}</h2>
             <p className="text-sm text-slate-500 mt-1.5">{sub}</p>
           </div>
@@ -253,7 +253,7 @@ export function AuthModal() {
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4" noValidate>
             {/* ── Signup-only fields ── */}
             {authModalMode === "signup" && (
               <>
@@ -339,7 +339,7 @@ export function AuthModal() {
                   <button
                     type="button"
                     onClick={() => setVerificationChannel("email")}
-                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 text-center transition-all ${verificationChannel === "email"
+                    className={`flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border-2 text-center transition-all ${verificationChannel === "email"
                       ? "border-primary bg-primary/5 text-primary"
                       : "border-slate-200 hover:border-slate-300 text-slate-500"
                       }`}
@@ -351,7 +351,7 @@ export function AuthModal() {
                   <button
                     type="button"
                     onClick={() => setVerificationChannel("phone")}
-                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 text-center transition-all ${verificationChannel === "phone"
+                    className={`flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border-2 text-center transition-all ${verificationChannel === "phone"
                       ? "border-primary bg-primary/5 text-primary"
                       : "border-slate-200 hover:border-slate-300 text-slate-500"
                       }`}
@@ -403,7 +403,7 @@ export function AuthModal() {
           </form>
 
           {/* ── Footer toggle ── */}
-          <div className="text-center mt-6 pt-5 border-t border-slate-100">
+          <div className="mt-4 border-t border-slate-100 pt-4 text-center sm:mt-6 sm:pt-5">
             {authModalMode === "login" ? (
               <button
                 onClick={() => switchMode("signup")}

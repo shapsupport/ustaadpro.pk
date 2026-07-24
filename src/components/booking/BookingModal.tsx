@@ -20,6 +20,7 @@ import TimeSlotPicker from "./TimeSlotPicker";
 import RecurringPicker, { calculateDaysCount } from "./RecurringPicker";
 import MapAddressPickerModal from "../location/MapAddressPickerModal";
 import EasyPaisaPaymentSection from "./EasyPaisaPaymentSection";
+import { showSuccessToast } from "@/context/ToastContext";
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -195,6 +196,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
           orderId,
           total: response.order.total || calculatedTotal,
         });
+        showSuccessToast(`${service.title} has been booked successfully.`);
 
         // Local storage backup
         try {

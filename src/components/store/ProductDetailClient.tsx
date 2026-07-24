@@ -19,7 +19,6 @@ import { useEffect, useRef, useState } from "react";
 import { StickyCheckoutBar } from "@/components/shared/StickyCheckoutBar";
 import { useCart } from "@/context/CartContext";
 import CartCheckoutModal from "@/components/store/CartCheckoutModal";
-import { AvailabilityToast } from "@/components/shared/AvailabilityToast";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "";
 
@@ -83,7 +82,6 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
 
   return (
     <>
-      <AvailabilityToast kind="product" title={product.title} limited={product.stock > 0 && product.stock <= 10} />
       <div className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <button

@@ -23,7 +23,6 @@ import {
 import type { ApiReview, ApiService, WorkPrice } from "@/lib/api-types";
 import BookingModal from "@/components/booking/BookingModal";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AvailabilityToast } from "@/components/shared/AvailabilityToast";
 // import { StickyCheckoutBar } from "@/components/shared/StickyCheckoutBar";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
@@ -94,8 +93,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
 
   return (
     <>
-    <AvailabilityToast kind="service" title={service.title} />
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 pt-4">
       {/* ── Back bar ── */}
       <div className="border-b border-slate-100 bg-white/90 px-4 py-3 backdrop-blur-md">
         <div className="max-w-6xl mx-auto flex items-center gap-3">

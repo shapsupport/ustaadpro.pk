@@ -224,7 +224,7 @@ export function OtpModal() {
         role="dialog"
         aria-modal="true"
         aria-label={heading}
-        className="fixed inset-x-3 sm:inset-x-4 top-1/2 z-[130] max-w-md mx-auto -translate-y-1/2 bg-white rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200"
+        className="fixed inset-x-3 top-1/2 z-[130] mx-auto max-h-[calc(100dvh-1.5rem)] max-w-md -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl border border-slate-100 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:inset-x-4 sm:max-h-[calc(100dvh-2rem)] sm:rounded-3xl"
       >
         {/* Close button */}
         <button
@@ -291,7 +291,7 @@ export function OtpModal() {
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 text-center">
                 Verification Code
               </label>
-              <div className="flex gap-1.5 sm:gap-2 justify-center">
+              <div className="mx-auto grid w-full max-w-[19rem] grid-cols-6 gap-1.5 sm:gap-2">
                 {otp.map((digit, i) => (
                   <input
                     key={i}
@@ -306,7 +306,7 @@ export function OtpModal() {
                     onPaste={handlePaste}
                     onFocus={(e) => e.target.select()}
                     aria-label={`Digit ${i + 1}`}
-                    className={`w-10 sm:w-11 h-12 sm:h-14 text-lg sm:text-xl font-black rounded-xl sm:rounded-2xl border-2 outline-none transition-all bg-slate-50 text-slate-800 caret-transparent
+                    className={`h-12 w-full min-w-0 appearance-none rounded-xl border-2 bg-slate-50 p-0 text-center text-lg font-black leading-none tabular-nums text-slate-800 outline-none caret-transparent transition-all sm:h-14 sm:rounded-2xl sm:text-xl
                       ${digit
                         ? "border-primary bg-primary/5 text-primary"
                         : "border-slate-200 focus:border-primary focus:ring-1 focus:ring-primary"

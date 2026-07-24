@@ -11,6 +11,7 @@ import { AuthModal } from "@/components/auth/AuthModal";
 import { OtpModal } from "@/components/auth/OtpModal";
 import { WhatsAppBot } from "@/components/shared/WhatsAppBot";
 import { CartProvider } from "@/context/CartContext";
+import { ToastProvider } from "@/context/ToastContext";
 import { siteConfig } from "@/lib/constants";
 import "./globals.css";
 
@@ -105,19 +106,21 @@ export default function RootLayout({
       className={`${inter.variable} ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body suppressHydrationWarning className="min-h-full flex flex-col">
-        <AuthProvider>
-          <CartProvider>
-            <LocationProvider>
-              <Navbar />
-              <LocationModal />
-              <AuthModal />
-              <OtpModal />
-              <MainWrapper>{children}</MainWrapper>
-              <WhatsAppBot />
-              <Footer />
-            </LocationProvider>
-          </CartProvider>
-        </AuthProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <CartProvider>
+              <LocationProvider>
+                <Navbar />
+                <LocationModal />
+                <AuthModal />
+                <OtpModal />
+                <MainWrapper>{children}</MainWrapper>
+                <WhatsAppBot />
+                <Footer />
+              </LocationProvider>
+            </CartProvider>
+          </AuthProvider>
+        </ToastProvider>
       </body>
     </html>
   );

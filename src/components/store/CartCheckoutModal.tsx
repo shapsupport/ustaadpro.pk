@@ -22,6 +22,7 @@ import { checkoutShopOrder } from "@/services/shopService";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import MapAddressPickerModal from "../location/MapAddressPickerModal";
+import { showSuccessToast } from "@/context/ToastContext";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "";
 
@@ -142,10 +143,15 @@ export default function CartCheckoutModal({
       });
 
       if (response?.order) {
+        const purchasedProducts =
+          items.length === 1
+            ? items[0].product.title
+            : `${items[0].product.title} and ${items.length - 1} other product${items.length > 2 ? "s" : ""}`;
         setOrderSuccess({
           orderId: response.order.id,
           total: response.order.total,
         });
+        showSuccessToast(`${purchasedProducts} ${items.length === 1 ? "has" : "have"} been bought successfully.`);
         clearCart();
       } else {
         throw new Error("Failed to receive order confirmation.");

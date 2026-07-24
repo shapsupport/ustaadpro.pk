@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Bot, MessageCircle, PhoneCall } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { siteConfig, whatsappBotUrl, whatsappCallUrl } from "@/lib/constants";
 import {
   Dialog,
@@ -22,8 +23,12 @@ function WhatsAppIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 export function WhatsAppBot() {
+  const pathname = usePathname();
   const [showDesktopNumber, setShowDesktopNumber] = useState(false);
   const telephone = siteConfig.phone.replace(/\s+/g, "");
+  const isShop = pathname.startsWith("/store");
+  const shopWhatsAppUrl =
+    "https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%2C%20please%20call%20me%20on%20WhatsApp%20to%20help%20with%20a%20product%20order.";
 
   function handlePhoneCall() {
     const canCallDirectly =
@@ -41,42 +46,44 @@ export function WhatsAppBot() {
   return (
     <Dialog onOpenChange={(open) => !open && setShowDesktopNumber(false)}>
       <DialogTrigger
-        className="group fixed bottom-6 right-6 z-[80] flex h-14 items-center gap-2 rounded-full bg-[#25D366] px-3 text-white shadow-[0_12px_35px_rgba(37,211,102,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_45px_rgba(18,140,126,0.4)] active:translate-y-0 sm:h-16 sm:px-4"
-        aria-label="Book now: choose phone, WhatsApp call, or booking bot"
+        className={`group fixed bottom-6 right-6 z-[80] flex items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_12px_35px_rgba(37,211,102,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_45px_rgba(18,140,126,0.4)] active:translate-y-0 ${
+          isShop ? "h-11 w-11 p-0 sm:h-12 sm:w-12" : "h-14 gap-2 px-3 sm:h-16 sm:px-4"
+        }`}
+        aria-label={isShop ? "Contact us about this product" : "Book now: choose phone, WhatsApp call, or booking bot"}
       >
         <span className="pointer-events-none absolute inset-0 rounded-full bg-[#25D366] opacity-20 animate-ping" />
-        <WhatsAppIcon className="relative h-8 w-8 sm:h-9 sm:w-9" />
-        <strong className="relative whitespace-nowrap pr-1 text-sm sm:text-base">Book Now</strong>
+        <WhatsAppIcon className={isShop ? "relative h-6 w-6 sm:h-7 sm:w-7" : "relative h-8 w-8 sm:h-9 sm:w-9"} />
+        {!isShop && <strong className="relative whitespace-nowrap pr-1 text-sm sm:text-base">Book Now</strong>}
       </DialogTrigger>
 
-      <DialogContent className="max-w-lg rounded-3xl border-0 p-7 shadow-2xl sm:p-8">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-3xl border-0 p-4 shadow-2xl sm:max-w-xl sm:p-8">
         <DialogHeader className="pr-8">
           <DialogTitle className="text-xl font-black text-slate-950">
-            How would you like to book?
+            {isShop ? "How would you like to order?" : "How would you like to book?"}
           </DialogTitle>
           <DialogDescription>
-            Choose the fastest way to connect with Ustaad Pro.
+            {isShop ? "Contact Ustaad Pro for help with this product." : "Choose the fastest way to connect with Ustaad Pro."}
           </DialogDescription>
         </DialogHeader>
 
         {showDesktopNumber ? (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-7 text-center sm:p-9">
+          <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-center sm:p-9">
             <span className="text-sm font-semibold text-emerald-800">Call us at</span>
             <a
               href={`tel:${telephone}`}
-              className="mt-3 block whitespace-nowrap text-2xl font-black tabular-nums tracking-[0.12em] text-slate-950 sm:text-4xl sm:tracking-[0.16em]"
+              className="mt-3 block w-full text-[clamp(1rem,5.5vw,2rem)] font-black leading-tight tabular-nums tracking-normal text-slate-950 sm:text-3xl sm:tracking-[0.06em]"
             >
               {siteConfig.phone}
             </a>
             <p className="mt-3 text-xs text-slate-600">
-              Dial this number from your mobile phone to book your service.
+              {isShop ? "Dial this number for help with your product order." : "Dial this number from your mobile phone to book your service."}
             </p>
             <button
               type="button"
               onClick={() => setShowDesktopNumber(false)}
               className="mt-5 text-sm font-bold text-emerald-700 hover:text-emerald-800"
             >
-              Back to booking options
+              {isShop ? "Back to order options" : "Back to booking options"}
             </button>
           </div>
         ) : (
@@ -96,7 +103,7 @@ export function WhatsAppBot() {
             </button>
 
             <a
-              href={whatsappCallUrl}
+              href={isShop ? shopWhatsAppUrl : whatsappCallUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-4 rounded-2xl border border-slate-200 p-4 transition hover:border-emerald-300 hover:bg-emerald-50"
@@ -110,21 +117,23 @@ export function WhatsAppBot() {
               </span>
             </a>
 
-            <a
-              href={whatsappBotUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 transition hover:border-emerald-400 hover:bg-emerald-100"
-            >
-              <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white">
-                <Bot className="h-6 w-6" />
-                <MessageCircle className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-white p-0.5 text-emerald-700" />
-              </span>
-              <span>
-                <strong className="block text-sm text-slate-950">Chat with booking bot</strong>
-                <span className="text-xs text-slate-500">Recommended for faster booking</span>
-              </span>
-            </a>
+            {!isShop && (
+              <a
+                href={whatsappBotUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 transition hover:border-emerald-400 hover:bg-emerald-100"
+              >
+                <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white">
+                  <Bot className="h-6 w-6" />
+                  <MessageCircle className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-white p-0.5 text-emerald-700" />
+                </span>
+                <span>
+                  <strong className="block text-sm text-slate-950">Chat with booking bot</strong>
+                  <span className="text-xs text-slate-500">Recommended for faster booking</span>
+                </span>
+              </a>
+            )}
           </div>
         )}
       </DialogContent>
