@@ -306,11 +306,10 @@ export default function StorePageClient() {
                         key={item.name}
                         type="button"
                         onClick={() => chooseCategory(item.name)}
-                        className={`flex shrink-0 items-center justify-between gap-2 rounded-2xl border px-3 py-2.5 text-left text-sm font-medium transition lg:w-full ${
-                          isActive
-                            ? "border-lime-500 bg-lime-50 text-lime-700"
-                            : "border-slate-200 bg-white text-slate-700 hover:border-lime-200 hover:text-lime-700"
-                        }`}
+                        className={`flex shrink-0 items-center justify-between gap-2 rounded-2xl border px-3 py-2.5 text-left text-sm font-medium transition lg:w-full ${isActive
+                          ? "border-lime-500 bg-lime-50 text-lime-700"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-lime-200 hover:text-lime-700"
+                          }`}
                       >
                         <span>{item.name === "all" ? "All Products" : item.name}</span>
                         <span className="text-xs text-slate-500">{item.total}</span>
@@ -412,7 +411,7 @@ function ProductCard({ product }: { product: ApiProduct }) {
       {/* Clickable image + info area */}
       <Link
         href={`/store/${product.id}`}
-        onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch {} }}
+        onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch { } }}
         className="block flex-1"
       >
         <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
@@ -479,33 +478,32 @@ function ProductCard({ product }: { product: ApiProduct }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-        <Link
-          href={`/store/${product.id}`}
-          onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch {} }}
-          className="flex h-10 flex-1 items-center justify-center rounded-xl bg-lime-500 text-xs font-bold text-white transition hover:bg-lime-600"
-        >
-          View details
-        </Link>
-        <button
-          type="button"
-          onClick={handleAddToCart}
-          disabled={isOutOfStock}
-          aria-label={added ? "Added to cart" : "Add to cart"}
-          className={`flex h-10 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition cursor-pointer ${
-            isOutOfStock
+          <Link
+            href={`/store/${product.id}`}
+            onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch { } }}
+            className="flex h-10 flex-1 items-center justify-center rounded-xl bg-lime-500 text-xs font-bold text-white transition hover:bg-lime-600"
+          >
+            View details
+          </Link>
+          <button
+            type="button"
+            onClick={handleAddToCart}
+            disabled={isOutOfStock}
+            aria-label={added ? "Added to cart" : "Add to cart"}
+            className={`flex h-10 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition cursor-pointer ${isOutOfStock
               ? "cursor-not-allowed border-slate-200 text-slate-400 bg-slate-50"
               : added
-              ? "border-emerald-600 bg-emerald-600 text-white"
-              : "border-emerald-500 bg-white text-emerald-600 hover:bg-emerald-50"
-          }`}
-        >
-          {added ? (
-            <Check className="h-4 w-4" />
-          ) : (
-            <ShoppingCart className="h-4 w-4" />
-          )}
-          <span className="hidden sm:inline">{added ? "Added" : "Add"}</span>
-        </button>
+                ? "border-emerald-600 bg-emerald-600 text-white"
+                : "border-emerald-500 bg-white text-emerald-600 hover:bg-emerald-50"
+              }`}
+          >
+            {added ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <ShoppingCart className="h-4 w-4" />
+            )}
+            <span className="hidden sm:inline">{added ? "Added" : "Add"}</span>
+          </button>
         </div>
       </div>
     </Card>

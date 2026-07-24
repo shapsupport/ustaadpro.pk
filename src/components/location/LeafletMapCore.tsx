@@ -42,7 +42,7 @@ export default function LeafletMapCore({ position, onPositionChange }: LeafletMa
   return (
     <MapContainer
       center={[position.lat, position.lng]}
-      zoom={14}
+      zoom={12}
       scrollWheelZoom={true}
       style={{ height: "350px", width: "100%" }}
     >

@@ -22,6 +22,21 @@ import MapAddressPickerModal from "../location/MapAddressPickerModal";
 import EasyPaisaPaymentSection from "./EasyPaisaPaymentSection";
 import { showSuccessToast } from "@/context/ToastContext";
 
+// ── Service Area: Rawalpindi + Islamabad ────────────────────────────────
+const SERVICE_AREA = { south: 33.40, north: 33.80, west: 72.85, east: 73.30 };
+
+function isWithinServiceArea(lat: number, lng: number): boolean {
+  return lat >= SERVICE_AREA.south && lat <= SERVICE_AREA.north &&
+    lng >= SERVICE_AREA.west && lng <= SERVICE_AREA.east;
+}
+
+const CITY_KEYWORDS = ["rawalpindi", "islamabad", "rwp", "isb", "pindi"];
+
+function isAddressInServiceCity(addr: string): boolean {
+  const lower = addr.toLowerCase();
+  return CITY_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
 interface BookingModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -58,6 +73,8 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
 
   // Feature 3: Map Picker State
   const [isMapOpen, setIsMapOpen] = useState(false);
+  // Coordinates from map picker (null = manual address)
+  const [addressCoords, setAddressCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   // Feature 4: Payment & Receipt State
   const [paymentMethod, setPaymentMethod] = useState("Cash After Work Done");
@@ -144,6 +161,12 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
     }
     if (!selectedTime) {
       setError("Please select a 30-minute time slot from the grid.");
+      return;
+    }
+
+    // Service area check: block if map coords are outside RWP+ISB
+    if (addressCoords && !isWithinServiceArea(addressCoords.lat, addressCoords.lng)) {
+      setError("📍 This location is outside our service area. We currently only serve Rawalpindi & Islamabad. Please pick a location within the service area.");
       return;
     }
 
@@ -411,11 +434,21 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                     type="text"
                     required
                     value={address}
-                    onChange={(e) => setAddress(e.target.value)}
+                    onChange={(e) => {
+                      setAddress(e.target.value);
+                      setAddressCoords(null); // manual edit clears map coords
+                    }}
                     placeholder="House #, Street #, Area or click 'Pick from Map'"
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
+                {/* Amber warning: manual address doesn't mention RWP/ISB */}
+                {address.trim().length > 10 && !addressCoords && !isAddressInServiceCity(address) && (
+                  <div className="mt-1.5 flex items-start gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <span className="shrink-0">⚠️</span>
+                    <span>We currently only serve in <strong>Rawalpindi &amp; Islamabad</strong>. Please confirm your address is within these cities.</span>
+                  </div>
+                )}
               </div>
 
               {/* FEATURE 2: Recurring Booking Picker */}
@@ -518,8 +551,11 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
         isOpen={isMapOpen}
         onClose={() => setIsMapOpen(false)}
         initialAddress={address}
-        onSelectAddress={(newAddress) => {
+        onSelectAddress={(newAddress, lat, lng) => {
           setAddress(newAddress);
+          if (lat !== undefined && lng !== undefined) {
+            setAddressCoords({ lat, lng });
+          }
         }}
       />
     </>

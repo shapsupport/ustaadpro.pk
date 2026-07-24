@@ -27,9 +27,26 @@ interface MapAddressPickerModalProps {
   initialAddress?: string;
 }
 
-// Default center: Islamabad / Rawalpindi
-const DEFAULT_LAT = 33.6844;
-const DEFAULT_LNG = 73.0479;
+// ── Service Area: Rawalpindi + Islamabad ─────────────────────────────────
+const SERVICE_AREA = {
+  south: 33.40,
+  north: 33.80,
+  west: 72.85,
+  east: 73.30,
+};
+
+function isWithinServiceArea(lat: number, lng: number): boolean {
+  return (
+    lat >= SERVICE_AREA.south &&
+    lat <= SERVICE_AREA.north &&
+    lng >= SERVICE_AREA.west &&
+    lng <= SERVICE_AREA.east
+  );
+}
+
+// Default center: Twin Cities midpoint
+const DEFAULT_LAT = 33.60;
+const DEFAULT_LNG = 73.05;
 
 export default function MapAddressPickerModal({
   isOpen,
@@ -43,6 +60,7 @@ export default function MapAddressPickerModal({
   });
   const [formattedAddress, setFormattedAddress] = useState(initialAddress);
   const [isGeocoding, setIsGeocoding] = useState(false);
+  const [outOfBoundsError, setOutOfBoundsError] = useState(false);
 
   // Each time the modal opens, increment this key so Leaflet gets a fresh DOM node.
   const mountKeyRef = useRef(0);
@@ -97,10 +115,15 @@ export default function MapAddressPickerModal({
 
   const handlePositionChange = (lat: number, lng: number) => {
     setPosition({ lat, lng });
+    setOutOfBoundsError(false); // clear error when user moves pin
     reverseGeocode(lat, lng);
   };
 
   const handleConfirm = () => {
+    if (!isWithinServiceArea(position.lat, position.lng)) {
+      setOutOfBoundsError(true);
+      return;
+    }
     const finalAddr =
       formattedAddress ||
       `Selected Location (Lat: ${position.lat.toFixed(4)}, Lng: ${position.lng.toFixed(4)})`;
@@ -153,6 +176,16 @@ export default function MapAddressPickerModal({
               onPositionChange={handlePositionChange}
             />
           </div>
+
+          {/* Out-of-bounds error */}
+          {outOfBoundsError && (
+            <div className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-700">
+              <span className="text-base leading-none shrink-0">📍</span>
+              <span className="font-semibold">
+                This location is outside our service area. We currently only serve <strong>Rawalpindi &amp; Islamabad</strong>. Please move the pin to a valid location.
+              </span>
+            </div>
+          )}
 
           {/* Selected Address Display */}
           <div className="rounded-2xl bg-emerald-50/60 border border-emerald-100 p-3.5">
