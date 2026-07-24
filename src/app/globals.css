@@ -219,6 +219,17 @@
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
+/* Keep the floating booking shortcut clear of the bottom checkout bar. */
+body:has([data-sticky-checkout-visible="true"]) [data-floating-book-now] {
+  bottom: 10.5rem;
+}
+
+@media (min-width: 640px) {
+  body:has([data-sticky-checkout-visible="true"]) [data-floating-book-now] {
+    bottom: 9rem;
+  }
+}
+
 .glass-strong {
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(20px);

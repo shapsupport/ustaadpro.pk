@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -19,11 +18,13 @@ import {
   ChevronDown,
   MessageSquareText,
   SlidersHorizontal,
+  Minus,
+  Plus,
 } from "lucide-react";
 import type { ApiReview, ApiService, WorkPrice } from "@/lib/api-types";
 import BookingModal from "@/components/booking/BookingModal";
 import { Skeleton } from "@/components/ui/skeleton";
-// import { StickyCheckoutBar } from "@/components/shared/StickyCheckoutBar";
+import { StickyCheckoutBar } from "@/components/shared/StickyCheckoutBar";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
@@ -51,10 +52,11 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
     service.workPrices?.[0] ?? null,
   );
   const [isBookingOpen, setIsBookingOpen] = useState(false);
-  // const [showStickyCheckout, setShowStickyCheckout] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+  const [showStickyCheckout, setShowStickyCheckout] = useState(false);
   const [reviewsOpen, setReviewsOpen] = useState(false);
   const [reviewSnapshot, setReviewSnapshot] = useState(initialReviews);
-  // const bookingButtonRef = useRef<HTMLAnchorElement>(null);
+  const bookingButtonRef = useRef<HTMLButtonElement>(null);
   const reviewsRef = useRef<HTMLDivElement>(null);
 
   const displayImage = imgSrc(service.image_url || service.imageUrl);
@@ -62,6 +64,8 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
     service.original_price || service.originalPrice || 0,
   );
   const bookingPrice = selectedWork?.price ?? service.price;
+  const allowsQuantity = /\bper\b/i.test(selectedWork?.description || "");
+  const totalPrice = bookingPrice * (allowsQuantity ? quantity : 1);
   const liveRating = reviewSnapshot.length
     ? reviewSnapshot.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviewSnapshot.length
     : 0;
@@ -69,26 +73,30 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
     originalPrice > service.price
       ? Math.round(((originalPrice - service.price) / originalPrice) * 100)
       : 0;
-  const bookingHref = `/checkout?serviceId=${service.id}&serviceTitle=${encodeURIComponent(service.title)}&servicePrice=${bookingPrice}&workTitle=${encodeURIComponent(selectedWork?.title || "")}&workPriceId=${selectedWork?.id || ""}`;
 
-  // useEffect(() => {
-  //   const updateStickyCheckout = () => {
-  //     const button = bookingButtonRef.current;
-  //     setShowStickyCheckout(Boolean(button && button.getBoundingClientRect().bottom < 0));
-  //   };
+  useEffect(() => {
+    const updateStickyCheckout = () => {
+      const button = bookingButtonRef.current;
+      setShowStickyCheckout(Boolean(button && button.getBoundingClientRect().bottom < 0));
+    };
 
-  //   updateStickyCheckout();
-  //   window.addEventListener("scroll", updateStickyCheckout, { passive: true });
-  //   window.addEventListener("resize", updateStickyCheckout);
-  //   return () => {
-  //     window.removeEventListener("scroll", updateStickyCheckout);
-  //     window.removeEventListener("resize", updateStickyCheckout);
-  //   };
-  // }, []);
+    updateStickyCheckout();
+    window.addEventListener("scroll", updateStickyCheckout, { passive: true });
+    window.addEventListener("resize", updateStickyCheckout);
+    return () => {
+      window.removeEventListener("scroll", updateStickyCheckout);
+      window.removeEventListener("resize", updateStickyCheckout);
+    };
+  }, []);
 
   const openReviews = () => {
     setReviewsOpen(true);
     window.setTimeout(() => reviewsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  };
+
+  const selectWork = (work: WorkPrice) => {
+    setSelectedWork(work);
+    setQuantity(1);
   };
 
   return (
@@ -158,7 +166,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                     return (
                       <button
                         key={wp.id}
-                        onClick={() => setSelectedWork(wp)}
+                        onClick={() => selectWork(wp)}
                         className={`flex items-start gap-3 text-left p-4 rounded-2xl border-2 transition-all ${isSelected
                           ? "border-primary bg-emerald-50 shadow-sm"
                           : "border-slate-200 bg-white hover:border-primary/40 hover:bg-slate-50"
@@ -181,12 +189,14 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                           >
                             {wp.title}
                           </p>
-                          <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
-                            {wp.description}
-                          </p>
-                          <p className="text-sm font-bold text-slate-900 mt-1">
+                          <p className="mt-1 text-sm font-bold text-slate-900">
                             Rs {wp.price.toLocaleString()}
                           </p>
+                          {wp.description && (
+                            <p className="mt-1.5 inline-flex max-w-full rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold leading-4 text-emerald-800">
+                              {wp.description}
+                            </p>
+                          )}
                         </div>
                         {isSelected && (
                           <BadgeCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
@@ -312,6 +322,42 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                           Rs {selectedWork.price.toLocaleString()}
                         </span>
                       </div>
+                      {selectedWork.description && (
+                        <p className="mt-2 inline-flex rounded-lg border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-sm font-bold text-emerald-800">
+                          {selectedWork.description}
+                        </p>
+                      )}
+                      {allowsQuantity && (
+                        <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4">
+                          <div>
+                            <p className="text-xs font-bold text-slate-700">Quantity</p>
+                            <p className="text-[11px] text-slate-400">Select up to 10</p>
+                          </div>
+                          <div className="flex items-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                            <button
+                              type="button"
+                              onClick={() => setQuantity((current) => Math.max(1, current - 1))}
+                              disabled={quantity <= 1}
+                              className="grid h-10 w-10 place-items-center text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+                              aria-label="Decrease service quantity"
+                            >
+                              <Minus className="h-4 w-4" />
+                            </button>
+                            <span className="grid h-10 min-w-10 place-items-center border-x border-slate-200 text-sm font-black text-slate-900">
+                              {quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setQuantity((current) => Math.min(10, current + 1))}
+                              disabled={quantity >= 10}
+                              className="grid h-10 w-10 place-items-center text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+                              aria-label="Increase service quantity"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </>
                   ) : (
                     <div className="flex items-baseline gap-2">
@@ -346,6 +392,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
 
                 {/* CTA Buttons */}
                 <button
+                  ref={bookingButtonRef}
                   type="button"
                   onClick={() => setIsBookingOpen(true)}
                   className="flex items-center justify-center gap-2 w-full bg-primary hover:bg-emerald-700 text-white font-bold py-4 rounded-2xl text-base transition-colors shadow-lg shadow-primary/20"
@@ -353,10 +400,6 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                   <ShoppingBag className="h-5 w-5" />
                   Book Now
                 </button>
-                {/* <Link ref={bookingButtonRef} href={bookingHref} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 text-sm transition-colors mt-3">
-                  <ShoppingBag className="h-4 w-4" />
-                  Quick Checkout
-                </Link> */}
                 <a
                   href="https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%2C%20I%20want%20to%20book%20a%20service."
                   target="_blank"
@@ -412,19 +455,28 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
           id: service.id,
           title: service.title,
           price: bookingPrice,
+          quantity: allowsQuantity ? quantity : 1,
           selectedWorkPriceId: selectedWork?.id ? Number(selectedWork.id) : undefined,
           selectedWorkTitle: selectedWork?.title || undefined,
         }}
       />
 
       {/* Sticky Checkout Bar */}
-      {/* <StickyCheckoutBar
+      <StickyCheckoutBar
         visible={showStickyCheckout}
-        href={bookingHref}
+        href="#book-service"
         label="Book Now"
         title={selectedWork?.title || service.title}
-        price={`Rs ${bookingPrice.toLocaleString()}`}
-      /> */}
+        price={`Rs ${totalPrice.toLocaleString()}`}
+        quantity={allowsQuantity ? quantity : undefined}
+        maxQuantity={10}
+        onQuantityChange={
+          allowsQuantity
+            ? (nextQuantity) => setQuantity(Math.max(1, Math.min(10, nextQuantity)))
+            : undefined
+        }
+        onClick={() => setIsBookingOpen(true)}
+      />
     </div>
     </>
   );

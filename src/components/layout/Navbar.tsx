@@ -111,11 +111,11 @@ export function Navbar() {
           </div>
 
           {/* Right Side */}
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             {/* Location */}
             <button
               onClick={() => setShowPicker(true)}
-              className="hidden cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-sm transition-all hover:border-primary hover:text-primary xl:flex"
+              className="hidden cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-sm transition-all hover:border-primary hover:text-primary 2xl:flex"
             >
               <MapPin className="h-4 w-4 text-primary" />
 
@@ -132,7 +132,7 @@ export function Navbar() {
             {user ? (
               <button
                 onClick={() => setProfileOpen(true)}
-                className="hidden xl:flex items-center gap-2 rounded-xl bg-gradient-to-br from-primary to-emerald-700 px-5 h-11 font-bold text-white shadow-md shadow-primary/10 transition-all hover:opacity-90 cursor-pointer"
+                className="hidden h-11 cursor-pointer items-center gap-2 rounded-xl bg-gradient-to-br from-primary to-emerald-700 px-5 font-bold text-white shadow-md shadow-primary/10 transition-all hover:opacity-90 2xl:flex"
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
                   <UserRound className="h-4 w-4" />
@@ -145,7 +145,7 @@ export function Navbar() {
             ) : (
               <button
                 onClick={() => setAuthModalMode("login")}
-                className="hidden h-10 items-center gap-1.5 rounded-xl bg-primary px-3.5 text-xs font-bold text-white shadow-md shadow-primary/20 transition-all hover:bg-emerald-700 xl:flex"
+                className="hidden h-10 items-center gap-1.5 rounded-xl bg-primary px-3.5 text-xs font-bold text-white shadow-md shadow-primary/20 transition-all hover:bg-emerald-700 2xl:flex"
               >
                 <UserRound className="h-4 w-4" />
                 Account
@@ -154,7 +154,7 @@ export function Navbar() {
 
             {/* Mobile Hamburger */}
             <button
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 xl:hidden cursor-pointer"
+              className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 2xl:hidden"
               onClick={() => setMobileOpen(true)}
               aria-label="Open menu"
             >
