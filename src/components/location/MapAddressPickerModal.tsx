@@ -134,25 +134,28 @@ export default function MapAddressPickerModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl transition-all">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-3 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="w-full max-w-lg sm:max-w-xl max-h-[90vh] flex flex-col rounded-2xl sm:rounded-3xl bg-white shadow-2xl overflow-hidden transition-all">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+        <div className="shrink-0 flex items-center justify-between border-b border-slate-100 px-4 sm:px-6 py-3">
           <div className="flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-emerald-600" />
-            <h3 className="text-lg font-bold text-slate-900">Pick Delivery Location from Map</h3>
+            <MapPin className="h-5 w-5 text-emerald-600 shrink-0" />
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+              Pick Delivery Location from Map
+            </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition cursor-pointer"
+            className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition cursor-pointer shrink-0"
+            aria-label="Close modal"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-6 space-y-4">
+        {/* Content Body (Scrollable if needed on very small screens) */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
           {/* Controls Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
             <button
@@ -160,16 +163,26 @@ export default function MapAddressPickerModal({
               onClick={handleUseMyLocation}
               className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
             >
-              <Navigation className="h-3.5 w-3.5 text-emerald-600" />
+              <Navigation className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
               Use My Current Location
             </button>
             <span className="text-[11px] text-slate-400 text-center sm:text-right">
-              Click anywhere on the map or drag the pin to set location
+              Click anywhere on map or drag pin to set location
             </span>
           </div>
 
-          {/* Leaflet Map — key forces full remount each time modal opens */}
-          <div className="relative overflow-hidden rounded-2xl border border-slate-200 shadow-inner">
+          {/* Out-of-bounds error */}
+          {outOfBoundsError && (
+            <div className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+              <span className="text-base leading-none shrink-0">📍</span>
+              <span className="font-semibold">
+                This location is outside our service area. We currently only serve <strong>Rawalpindi &amp; Islamabad</strong>. Please move the pin.
+              </span>
+            </div>
+          )}
+
+          {/* Map Area */}
+          <div className="relative w-full h-[260px] sm:h-[300px] md:h-[340px] overflow-hidden rounded-xl border border-slate-200 shadow-inner">
             <LeafletMapComponent
               key={mountKeyRef.current}
               position={position}
@@ -177,47 +190,37 @@ export default function MapAddressPickerModal({
             />
           </div>
 
-          {/* Out-of-bounds error */}
-          {outOfBoundsError && (
-            <div className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-700">
-              <span className="text-base leading-none shrink-0">📍</span>
-              <span className="font-semibold">
-                This location is outside our service area. We currently only serve <strong>Rawalpindi &amp; Islamabad</strong>. Please move the pin to a valid location.
-              </span>
-            </div>
-          )}
-
           {/* Selected Address Display */}
-          <div className="rounded-2xl bg-emerald-50/60 border border-emerald-100 p-3.5">
+          <div className="rounded-2xl bg-emerald-50/60 border border-emerald-100 p-2.5 sm:p-3">
             <p className="text-[10px] uppercase font-bold tracking-wider text-emerald-700">
               Selected Address
             </p>
-            <p className="text-xs font-semibold text-slate-800 mt-1 flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-slate-800 mt-0.5 flex items-center gap-1.5 truncate">
               {isGeocoding ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600 shrink-0" />
                   <span>Fetching address details...</span>
                 </>
               ) : (
-                <span>{formattedAddress || "Click on the map to choose a location"}</span>
+                <span className="truncate">{formattedAddress || "Click on the map to choose a location"}</span>
               )}
             </p>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4 bg-slate-50/50">
+        {/* Footer Buttons */}
+        <div className="shrink-0 p-4 border-t border-slate-100 bg-white flex items-center gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-200/60 transition cursor-pointer"
+            className="flex-1 rounded-xl border border-slate-200 py-2.5 sm:py-3 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleConfirm}
-            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700 transition cursor-pointer"
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 sm:py-3 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700 transition cursor-pointer"
           >
             <Check className="h-4 w-4" />
             Confirm Location
