@@ -32,6 +32,7 @@ export function StickyCheckoutBar({
 }: StickyCheckoutBarProps) {
   return (
     <div
+      data-sticky-checkout-visible={visible}
       className={`fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-10px_40px_rgba(15,23,42,0.16)] backdrop-blur-xl transition-all duration-300 sm:px-6 sm:py-4 ${
         visible
           ? "translate-y-0 opacity-100"

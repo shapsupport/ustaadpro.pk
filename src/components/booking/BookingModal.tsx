@@ -29,6 +29,7 @@ interface BookingModalProps {
     id: string | number;
     title: string;
     price: number;
+    quantity?: number;
     selectedWorkPriceId?: number;
     selectedWorkTitle?: string;
   };
@@ -82,11 +83,12 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
 
   // Derived Calculations
   const unitPrice = service.price;
+  const quantity = Math.max(1, Math.min(10, Number(service.quantity || 1)));
   const daysCount = useMemo(
     () => (isRecurring ? calculateDaysCount(fromDate, toDate) : 1),
     [isRecurring, fromDate, toDate]
   );
-  const calculatedTotal = unitPrice * daysCount;
+  const calculatedTotal = unitPrice * quantity * daysCount;
 
   if (!isOpen) return null;
 
@@ -156,7 +158,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
           servicePrice: unitPrice,
           workPriceId: !isNaN(workIdNum) && workIdNum > 0 ? workIdNum : undefined,
           workTitle: service.selectedWorkTitle || undefined,
-          quantity: 1,
+          quantity,
         },
       ];
 
@@ -215,6 +217,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                 address,
                 paymentMethod,
                 recurringDays: daysCount,
+                quantity,
                 // receiptDataUrl: receiptDataUrl || undefined,
               },
               ...stored,
@@ -348,6 +351,11 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                 <div className="text-right">
                   <p className="text-[10px] uppercase font-bold text-slate-400">Unit Price</p>
                   <p className="text-sm font-black text-emerald-600">Rs {unitPrice.toLocaleString()}</p>
+                  {quantity > 1 && (
+                    <p className="mt-0.5 text-[11px] font-bold text-slate-500">
+                      × {quantity} = Rs {(unitPrice * quantity).toLocaleString()}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -418,7 +426,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                 toDate={toDate}
                 onFromDateChange={setFromDate}
                 onToDateChange={setToDate}
-                unitPrice={unitPrice}
+                unitPrice={unitPrice * quantity}
               />
 
               {/* Date selection if One Time */}

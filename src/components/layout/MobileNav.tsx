@@ -181,6 +181,38 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
           >
             Book a Service
           </Button>
+
+          <div className="mt-auto pt-8">
+            <Separator className="mb-4" />
+            <nav
+              aria-label="Legal and policy links"
+              className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 px-2 text-center"
+            >
+              <Link
+                href="/privacy-policy"
+                onClick={onClose}
+                className="text-xs font-medium text-slate-400 transition hover:text-slate-600"
+              >
+                Privacy Policy
+              </Link>
+              <span className="text-slate-300" aria-hidden="true">•</span>
+              <Link
+                href="/shipping-service-policy"
+                onClick={onClose}
+                className="text-xs font-medium text-slate-400 transition hover:text-slate-600"
+              >
+                Shipping Policy
+              </Link>
+              <span className="text-slate-300" aria-hidden="true">•</span>
+              <Link
+                href="/terms"
+                onClick={onClose}
+                className="text-xs font-medium text-slate-400 transition hover:text-slate-600"
+              >
+                Terms &amp; Conditions
+              </Link>
+            </nav>
+          </div>
         </div>
       </SheetContent>
     </Sheet>

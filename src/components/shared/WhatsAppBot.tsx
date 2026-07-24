@@ -46,6 +46,7 @@ export function WhatsAppBot() {
   return (
     <Dialog onOpenChange={(open) => !open && setShowDesktopNumber(false)}>
       <DialogTrigger
+        data-floating-book-now
         className={`group fixed bottom-6 right-6 z-[80] flex items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_12px_35px_rgba(37,211,102,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_45px_rgba(18,140,126,0.4)] active:translate-y-0 ${
           isShop ? "h-11 w-11 p-0 sm:h-12 sm:w-12" : "h-14 gap-2 px-3 sm:h-16 sm:px-4"
         }`}
