@@ -251,7 +251,7 @@ function ServiceCardLarge({ service }: { service: ApiService }) {
   return (
     <Link href={`/services/${service.id}`} className="group block">
       <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-        <div className="relative h-60 shrink-0 bg-slate-100 sm:h-64">
+        <div className="relative h-48 shrink-0 bg-slate-100 sm:h-64">
           {src ? (
             <Image
               src={src}
@@ -267,7 +267,7 @@ function ServiceCardLarge({ service }: { service: ApiService }) {
             </div>
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" />
-          <div className="absolute left-4 top-4 flex gap-2">
+          <div className="absolute left-3 top-3 flex flex-wrap gap-2 sm:left-4 sm:top-4">
             {service.badge ? (
               <span className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white shadow">{service.badge}</span>
             ) : null}
@@ -276,40 +276,40 @@ function ServiceCardLarge({ service }: { service: ApiService }) {
             ) : null}
           </div>
           {service.duration ? (
-            <div className="absolute bottom-4 right-4 flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
+            <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm sm:bottom-4 sm:right-4">
               <Clock className="h-3.5 w-3.5" />
               {service.duration}
             </div>
           ) : null}
         </div>
 
-        <div className="flex flex-1 flex-col p-6">
-          <h3 className="text-xl font-bold leading-snug text-slate-900 transition-colors group-hover:text-primary sm:text-2xl">{service.title}</h3>
-          <p className="mt-2 flex-1 text-base leading-7 text-slate-500">
+        <div className="flex flex-1 flex-col p-4 sm:p-6">
+          <h3 className="text-lg font-bold leading-snug text-slate-900 transition-colors group-hover:text-primary sm:text-2xl">{service.title}</h3>
+          <p className="mt-2 line-clamp-3 flex-1 text-sm leading-6 text-slate-500 sm:text-base sm:leading-7">
             {service.detail_description || service.description}
           </p>
 
-          <div className="mt-5 flex items-center gap-2">
-            <Star className={`h-5 w-5 ${service.reviews > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} />
-            <span className="text-base font-bold text-slate-700">{service.reviews > 0 ? service.rating.toFixed(1) : "0.0"}</span>
+          <div className="mt-4 flex flex-wrap items-center gap-2 sm:mt-5">
+            <Star className={`h-4 w-4 sm:h-5 sm:w-5 ${service.reviews > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} />
+            <span className="text-sm font-bold text-slate-700 sm:text-base">{service.reviews > 0 ? service.rating.toFixed(1) : "0.0"}</span>
             <span className="text-sm text-slate-400">{service.reviews > 0 ? `(${service.reviews} review${service.reviews === 1 ? "" : "s"})` : "(No reviews)"}</span>
             {service.workPrices && service.workPrices.length > 0 ? (
-              <span className="ml-auto flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-primary">
+              <span className="flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-primary sm:ml-auto">
                 <BadgeCheck className="h-3.5 w-3.5" />
                 {service.workPrices.length} types
               </span>
             ) : null}
           </div>
 
-          <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-5">
-            <div>
+          <div className="mt-4 flex flex-col items-stretch gap-4 border-t border-slate-100 pt-4 sm:mt-5 sm:flex-row sm:items-center sm:justify-between sm:pt-5">
+            <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Starting from</p>
-              <div className="mt-1 flex items-baseline gap-1.5">
-                <span className="text-3xl font-black text-slate-900">Rs {service.price.toLocaleString()}</span>
+              <div className="mt-1 flex flex-wrap items-baseline gap-1.5">
+                <span className="text-2xl font-black text-slate-900 sm:text-3xl">Rs {service.price.toLocaleString()}</span>
                 {discount > 0 ? <span className="text-xs text-slate-400 line-through">Rs {originalPrice.toLocaleString()}</span> : null}
               </div>
             </div>
-            <span className="flex items-center gap-2 rounded-2xl bg-primary px-5 py-3.5 text-base font-bold text-white shadow-md shadow-primary/20 transition hover:bg-emerald-700">
+            <span className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-bold text-white shadow-md shadow-primary/20 transition hover:bg-emerald-700 sm:w-auto sm:py-3.5 sm:text-base">
               Book <ArrowRight className="h-5 w-5" />
             </span>
           </div>

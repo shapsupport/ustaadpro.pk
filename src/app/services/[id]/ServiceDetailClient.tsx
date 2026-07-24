@@ -59,7 +59,9 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
   const bookingButtonRef = useRef<HTMLButtonElement>(null);
   const reviewsRef = useRef<HTMLDivElement>(null);
 
-  const displayImage = imgSrc(service.image_url || service.imageUrl);
+  const displayImage = imgSrc(
+    selectedWork?.imageUrl || service.image_url || service.imageUrl,
+  );
   const originalPrice = Number(
     service.original_price || service.originalPrice || 0,
   );
@@ -97,6 +99,17 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
   const selectWork = (work: WorkPrice) => {
     setSelectedWork(work);
     setQuantity(1);
+  };
+
+  const addWorkToBooking = (work: WorkPrice, workQuantity = 1) => {
+    selectWork(work);
+    setQuantity(workQuantity);
+    setIsBookingOpen(true);
+  };
+
+  const changeWorkQuantity = (work: WorkPrice, nextQuantity: number) => {
+    if (selectedWork?.id !== work.id) selectWork(work);
+    setQuantity(Math.max(1, Math.min(10, nextQuantity)));
   };
 
   return (
@@ -163,48 +176,149 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                   {service.workPrices.map((wp) => {
                     const wpImg = imgSrc(wp.imageUrl);
                     const isSelected = selectedWork?.id === wp.id;
+                    const pricedPerItem = /\bper\b/i.test(wp.description || "");
+                    const workQuantity = isSelected ? quantity : 1;
                     return (
-                      <button
+                      <div
                         key={wp.id}
-                        onClick={() => selectWork(wp)}
-                        className={`flex items-start gap-3 text-left p-4 rounded-2xl border-2 transition-all ${isSelected
+                        className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border-2 transition-all ${isSelected
                           ? "border-primary bg-emerald-50 shadow-sm"
-                          : "border-slate-200 bg-white hover:border-primary/40 hover:bg-slate-50"
+                          : "border-slate-200 bg-white hover:border-primary/40"
                           }`}
                       >
-                        {wpImg && (
-                          <div className="relative h-14 w-14 rounded-xl overflow-hidden shrink-0 bg-slate-100">
-                            <Image
-                              src={wpImg}
-                              alt={wp.title}
-                              fill
-                              className="object-cover"
-                              sizes="56px"
-                            />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p
-                            className={`text-sm font-semibold truncate ${isSelected ? "text-primary" : "text-slate-800"}`}
-                          >
-                            {wp.title}
-                          </p>
-                          <p className="mt-1 text-sm font-bold text-slate-900">
-                            Rs {wp.price.toLocaleString()}
-                          </p>
-                          {wp.description && (
-                            <p className="mt-1.5 inline-flex max-w-full rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold leading-4 text-emerald-800">
-                              {wp.description}
-                            </p>
+                        <button
+                          type="button"
+                          onClick={() => selectWork(wp)}
+                          className="relative flex w-full flex-1 items-center gap-3 p-3 text-left transition-colors hover:bg-slate-50/70 sm:items-start sm:p-4"
+                        >
+                          {wpImg && (
+                            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100 sm:h-14 sm:w-14">
+                              <Image
+                                src={wpImg}
+                                alt={wp.title}
+                                fill
+                                className="object-cover"
+                                sizes="(max-width: 639px) 64px, 56px"
+                              />
+                            </div>
                           )}
+                          <div className={`min-w-0 flex-1 ${isSelected ? "pr-7" : ""}`}>
+                            <p
+                              className={`break-words text-sm font-semibold leading-5 ${isSelected ? "text-primary" : "text-slate-800"}`}
+                            >
+                              {wp.title}
+                            </p>
+                            <p className="mt-1 text-sm font-bold text-slate-900">
+                              Rs {wp.price.toLocaleString()}
+                            </p>
+                            {wp.description && (
+                              <p className="mt-1.5 w-fit max-w-full break-words rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold leading-4 text-emerald-800">
+                                {wp.description}
+                              </p>
+                            )}
+                          </div>
+                          {isSelected && (
+                            <BadgeCheck className="absolute right-3 top-3 h-5 w-5 shrink-0 text-primary sm:right-4 sm:top-4" />
+                          )}
+                        </button>
+                        <div className="flex items-center gap-2 border-t border-slate-200/80 bg-white p-2 sm:hidden">
+                          {pricedPerItem && (
+                            <div className="flex shrink-0 items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                              <button
+                                type="button"
+                                onClick={() => changeWorkQuantity(wp, workQuantity - 1)}
+                                disabled={workQuantity <= 1}
+                                className="grid h-10 w-9 place-items-center text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-30"
+                                aria-label={`Decrease ${wp.title} quantity`}
+                              >
+                                <Minus className="h-4 w-4" />
+                              </button>
+                              <span className="grid h-10 min-w-9 place-items-center border-x border-slate-200 bg-white text-sm font-black text-slate-900">
+                                {workQuantity}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => changeWorkQuantity(wp, workQuantity + 1)}
+                                disabled={workQuantity >= 10}
+                                className="grid h-10 w-9 place-items-center text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-30"
+                                aria-label={`Increase ${wp.title} quantity`}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </button>
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => addWorkToBooking(wp, workQuantity)}
+                            className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-sm font-bold text-white shadow-sm shadow-primary/20 transition hover:bg-emerald-700"
+                            aria-label={`Add ${workQuantity} ${wp.title} to booking`}
+                          >
+                            <ShoppingBag className="h-4 w-4 shrink-0" />
+                            <span className="truncate">Add to Cart</span>
+                          </button>
                         </div>
-                        {isSelected && (
-                          <BadgeCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                        )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
+
+                {/* Keep the selected service actionable without making mobile users
+                    scroll through the full details section to reach the booking card. */}
+                {selectedWork && (
+                  <div className="mt-4 hidden rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm sm:block lg:hidden">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          Your selection
+                        </p>
+                        <p className="mt-1 break-words text-sm font-bold leading-5 text-slate-900">
+                          {selectedWork.title}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-lg font-black text-slate-950">
+                        Rs {totalPrice.toLocaleString()}
+                      </p>
+                    </div>
+
+                    {allowsQuantity && (
+                      <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
+                        <span className="text-sm font-bold text-slate-700">Quantity</span>
+                        <div className="flex items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                          <button
+                            type="button"
+                            onClick={() => setQuantity((current) => Math.max(1, current - 1))}
+                            disabled={quantity <= 1}
+                            className="grid h-10 w-10 place-items-center text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-30"
+                            aria-label="Decrease service quantity"
+                          >
+                            <Minus className="h-4 w-4" />
+                          </button>
+                          <span className="grid h-10 min-w-10 place-items-center border-x border-slate-200 bg-white text-sm font-black text-slate-900">
+                            {quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setQuantity((current) => Math.min(10, current + 1))}
+                            disabled={quantity >= 10}
+                            className="grid h-10 w-10 place-items-center text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-30"
+                            aria-label="Increase service quantity"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setIsBookingOpen(true)}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-sm font-bold text-white shadow-lg shadow-primary/20 transition-colors hover:bg-emerald-700"
+                    >
+                      <ShoppingBag className="h-5 w-5" />
+                      Book Selected Service
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -541,12 +655,12 @@ function ServiceReviews({ serviceId, initialReviews, open, onToggle, onReviewsLo
 
   return (
     <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-      <button type="button" onClick={onToggle} className="flex w-full items-center justify-between gap-4 p-6 text-left transition hover:bg-slate-50 sm:p-8" aria-expanded={open}>
-        <div className="flex items-center gap-4">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-500"><MessageSquareText className="h-6 w-6" /></span>
-          <div><h2 className="text-xl font-black text-slate-900">Customer reviews</h2><div className="mt-1 flex items-center gap-2"><StarRating rating={average} /><span className="text-sm font-bold text-slate-700">{average ? average.toFixed(1) : "New"}</span><span className="text-sm text-slate-400">({reviews.length})</span></div></div>
+      <button type="button" onClick={onToggle} className="flex w-full flex-col items-stretch gap-3 p-4 text-left transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-8" aria-expanded={open}>
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-500 sm:h-12 sm:w-12 sm:rounded-2xl"><MessageSquareText className="h-5 w-5 sm:h-6 sm:w-6" /></span>
+          <div className="min-w-0"><h2 className="text-lg font-black text-slate-900 sm:text-xl">Customer reviews</h2><div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1"><StarRating rating={average} /><span className="text-sm font-bold text-slate-700">{average ? average.toFixed(1) : "New"}</span><span className="text-sm text-slate-400">({reviews.length})</span></div></div>
         </div>
-        <span className="flex items-center gap-2 text-sm font-bold text-primary">{open ? "Close reviews" : "Open reviews"}<ChevronDown className={`h-5 w-5 transition ${open ? "rotate-180" : ""}`} /></span>
+        <span className="flex items-center justify-between gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-bold text-primary sm:shrink-0 sm:justify-start sm:bg-transparent sm:px-0 sm:py-0">{open ? "Close reviews" : "Open reviews"}<ChevronDown className={`h-5 w-5 transition ${open ? "rotate-180" : ""}`} /></span>
       </button>
 
       {open && <div className="border-t border-slate-100 p-6 sm:p-8">
