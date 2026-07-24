@@ -12,6 +12,7 @@ import {
   signupUser,
   verifySignupOtp as apiVerifySignupOtp,
   loginUser,
+  loginWithPhone as apiLoginWithPhone,
   requestPasswordResetOtp,
   resetPasswordWithOtp,
   type AuthUser,
@@ -59,7 +60,8 @@ interface AuthContextValue {
   signup: (data: SignupPayload) => Promise<void>;
   verifySignupOtp: (code: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  requestPasswordReset: (email: string) => Promise<void>;
+  loginWithPhone: (phone: string) => Promise<void>;
+  requestPasswordReset: (email: string, channel?: "email" | "phone") => Promise<void>;
   resetPassword: (code: string, newPassword: string) => Promise<void>;
   logout: () => void;
 }
@@ -110,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authModalMode, setAuthModalMode] = useState<"login" | "signup" | "forgot" | null>(null);
   const [otpModal, setOtpModal] = useState<OtpModalState | null>(null);
 
-   // Restore session on mount - with 30-day expiry check
+  // Restore session on mount - with 30-day expiry check
   useEffect(() => {
     try {
       const savedUser = localStorage.getItem("ustaadpro_user");
@@ -183,29 +185,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [otpModal]);
 
   // ── Login ────────────────────────────────────────────────────────────────
- const login = useCallback(async (email: string, password: string) => {
-  setIsLoading(true);
-  try {
-    const { token, user: loggedInUser } = await loginUser({ email, password });
-    persistSession(token, loggedInUser);
-    setUser(loggedInUser);
-    setAuthModalMode(null);
-  } catch (error) {
-    throw error; // Re-throw to let AuthModal handle the error
-  } finally {
-    setIsLoading(false);
-  }
-}, []);
-
-  // ── Forgot password ──────────────────────────────────────────────────────
-  const requestPasswordReset = useCallback(async (email: string) => {
+  const login = useCallback(async (identifier: string, password: string) => {
     setIsLoading(true);
     try {
-      const res = await requestPasswordResetOtp({ email, channel: "email" });
+      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+      const payload = isEmail
+        ? { email: identifier, password }
+        : { phone: identifier, password };
+
+      const { token, user: loggedInUser } = await loginUser(payload);
+      persistSession(token, loggedInUser);
+      setUser(loggedInUser);
+      setAuthModalMode(null);
+    } catch (error) {
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // ── Login with phone (no password) ───────────────────────────────────────────
+  const loginWithPhone = useCallback(async (phone: string) => {
+    setIsLoading(true);
+    try {
+      const { token, user: loggedInUser } = await apiLoginWithPhone({ phone });
+      persistSession(token, loggedInUser);
+      setUser(loggedInUser);
+      setAuthModalMode(null);
+    } catch (error) {
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+  // ── Forgot password ────────────────────────────────────────────
+  const requestPasswordReset = useCallback(async (identifier: string, channel: "email" | "phone" = "email") => {
+    setIsLoading(true);
+    try {
+      const payload =
+        channel === "phone"
+          ? { phone: identifier, channel }
+          : { email: identifier, channel };
+      const res = await requestPasswordResetOtp(payload);
       setOtpModal({
         mode: "forgot-password-verify",
-        maskedContact: maskEmail(email),
-        email,
+        maskedContact: channel === "phone" ? identifier : maskEmail(identifier),
+        email: channel === "email" ? identifier : undefined,
+        phone: channel === "phone" ? identifier : undefined,
         verificationChannel: res.verificationChannel,
       });
       setAuthModalMode(null);
@@ -213,17 +239,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   }, []);
-
-  // ── Reset password ───────────────────────────────────────────────────────
+  // ── Reset password ───────────────────────────────────────────────
   const resetPassword = useCallback(async (code: string, newPassword: string) => {
     if (!otpModal) throw new Error("No pending OTP session.");
     setIsLoading(true);
     try {
       await resetPasswordWithOtp({
         email: otpModal.email,
+        phone: otpModal.phone,
         code,
         newPassword,
-        channel: "email",
+        channel: otpModal.verificationChannel,
       });
       setOtpModal(null);
       setAuthModalMode("login");
@@ -252,6 +278,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signup,
         verifySignupOtp,
         login,
+        loginWithPhone,
         requestPasswordReset,
         resetPassword,
         logout,

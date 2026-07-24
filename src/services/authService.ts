@@ -61,7 +61,8 @@ export async function verifySignupOtp(data: VerifySignupOtpPayload): Promise<Aut
 // ── Login (email + password) ───────────────────────────────────────────────
 
 export interface LoginPayload {
-  email: string;
+  email?: string;
+  phone?: string;
   password: string;
 }
 
@@ -134,6 +135,17 @@ export async function resetPasswordWithOtp(
   data: ResetPasswordPayload,
 ): Promise<ResetPasswordResponse> {
   const res = await api.post<ResetPasswordResponse>("/forgot-password/reset", data);
+  return res.data;
+}
+
+// ── Login with phone (no password, no OTP) ────────────────────────────────
+
+export interface LoginWithPhonePayload {
+  phone: string;
+}
+
+export async function loginWithPhone(data: LoginWithPhonePayload): Promise<AuthResponse> {
+  const res = await api.post<AuthResponse>("/login-phone", data);
   return res.data;
 }
 

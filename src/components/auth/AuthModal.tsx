@@ -89,6 +89,7 @@ export function AuthModal() {
     setAuthModalMode,
     isLoading,
     login,
+    loginWithPhone,
     signup,
     requestPasswordReset,
   } = useAuth();
@@ -100,6 +101,7 @@ export function AuthModal() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [verificationChannel, setVerificationChannel] = useState<"email" | "phone">("email");
+  const [loginMethod, setLoginMethod] = useState<"email" | "phone">("email");
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -110,7 +112,7 @@ export function AuthModal() {
   const resetForm = useCallback(() => {
     setName(""); setEmail(""); setPhone(""); setPassword("");
     setErrors({}); setApiError(""); setShowPassword(false);
-    setVerificationChannel("email");
+    setVerificationChannel("email"); setLoginMethod("email");
   }, []);
 
   const switchMode = useCallback(
@@ -132,9 +134,17 @@ export function AuthModal() {
 
   function validateLogin() {
     const e: Record<string, string> = {};
-    if (!email.trim()) e.email = "Email is required.";
-    else if (!isValidEmail(email)) e.email = "Enter a valid email address.";
-    if (!password) e.password = "Password is required.";
+    if (loginMethod === "email") {
+      const val = email.trim();
+      if (!val) e.email = "Email is required.";
+      else if (!isValidEmail(val)) e.email = "Enter a valid email address.";
+      if (!password) e.password = "Password is required.";
+    } else {
+      const val = phone.trim();
+      if (!val) e.phone = "Phone number is required.";
+      else if (!isValidPakistaniPhone(val))
+        e.phone = "Enter a valid Pakistani number (e.g. 0300 1234567).";
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -156,8 +166,15 @@ export function AuthModal() {
 
   function validateForgot() {
     const e: Record<string, string> = {};
-    if (!email.trim()) e.email = "Email is required.";
-    else if (!isValidEmail(email)) e.email = "Enter a valid email address.";
+    if (verificationChannel === "phone") {
+      const val = phone.trim();
+      if (!val) e.phone = "Phone number is required.";
+      else if (!isValidPakistaniPhone(val))
+        e.phone = "Enter a valid Pakistani number (e.g. 0300 1234567).";
+    } else {
+      if (!email.trim()) e.email = "Email is required.";
+      else if (!isValidEmail(email)) e.email = "Enter a valid email address.";
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -171,7 +188,11 @@ export function AuthModal() {
     try {
       if (authModalMode === "login") {
         if (!validateLogin()) return;
-        await login(email, password);
+        if (loginMethod === "phone") {
+          await loginWithPhone(phone.trim());
+        } else {
+          await login(email.trim(), password);
+        }
         resetForm();
       } else if (authModalMode === "signup") {
         if (!validateSignup()) return;
@@ -186,7 +207,11 @@ export function AuthModal() {
         resetForm();
       } else if (authModalMode === "forgot") {
         if (!validateForgot()) return;
-        await requestPasswordReset(email);
+        if (verificationChannel === "phone") {
+          await requestPasswordReset(phone.trim(), "phone");
+        } else {
+          await requestPasswordReset(email.trim(), "email");
+        }
         resetForm();
       }
     } catch (err) {
@@ -199,7 +224,7 @@ export function AuthModal() {
   const headings = {
     login: { title: "Welcome Back", sub: "Sign in to access your bookings & store orders" },
     signup: { title: "Create Account", sub: "Join Ustaad Pro to get professional home services" },
-    forgot: { title: "Forgot Password", sub: "Enter your email and we'll send a reset code" },
+    forgot: { title: "Forgot Password", sub: "Enter your email and choose how to receive the reset code" },
   };
   const { title, sub } = headings[authModalMode];
 
@@ -285,22 +310,82 @@ export function AuthModal() {
               </>
             )}
 
-            {/* ── Email ── */}
-            <Field label="Email Address" error={errors.email}>
-              <InputRow
-                id="auth-email"
-                icon={<Mail className="h-4 w-4" />}
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                hasError={!!errors.email}
-              />
-            </Field>
+            {/* ── Login: Email / Phone tabs ── */}
+            {authModalMode === "login" && (
+              <div className="flex items-center gap-1 bg-slate-100 rounded-2xl p-1 mb-1">
+                <button
+                  type="button"
+                  id="login-tab-email"
+                  onClick={() => { setLoginMethod("email"); setErrors({}); setApiError(""); }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-sm font-semibold transition-all ${
+                    loginMethod === "email"
+                      ? "bg-white text-primary shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  Email
+                </button>
+                <button
+                  type="button"
+                  id="login-tab-phone"
+                  onClick={() => { setLoginMethod("phone"); setErrors({}); setApiError(""); }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-sm font-semibold transition-all ${
+                    loginMethod === "phone"
+                      ? "bg-white text-primary shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  <Phone className="h-3.5 w-3.5" />
+                  Phone
+                </button>
+              </div>
+            )}
 
-            {/* ── Password (login & signup only) ── */}
-            {authModalMode !== "forgot" && (
+            {/* ── Email input ── */}
+            {authModalMode === "login" && loginMethod === "email" ? (
+              <Field label="Email Address" error={errors.email}>
+                <InputRow
+                  id="auth-email"
+                  icon={<Mail className="h-4 w-4" />}
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@example.com"
+                  hasError={!!errors.email}
+                />
+              </Field>
+            ) : authModalMode === "login" && loginMethod === "phone" ? (
+              <Field label="Phone Number" error={errors.phone}>
+                <InputRow
+                  id="auth-phone-login"
+                  icon={<Phone className="h-4 w-4" />}
+                  type="tel"
+                  autoComplete="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g. 0300 1234567"
+                  hasError={!!errors.phone}
+                />
+              </Field>
+            ) : authModalMode === "signup" ? (
+              <Field label="Email Address" error={errors.email}>
+                <InputRow
+                  id="auth-email"
+                  icon={<Mail className="h-4 w-4" />}
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@example.com"
+                  hasError={!!errors.email}
+                />
+              </Field>
+            ) : null}
+
+            {/* ── Password (login email mode & signup only) ── */}
+            {(authModalMode === "signup" || (authModalMode === "login" && loginMethod === "email")) && (
               <Field label="Password" error={errors.password}>
                 <InputRow
                   id="auth-password"
@@ -329,16 +414,16 @@ export function AuthModal() {
               </Field>
             )}
 
-            {/* ── Channel Selector (signup only) ── */}
-            {authModalMode === "signup" && (
+            {/* ── Channel Selector (signup & forgot) ── */}
+            {(authModalMode === "signup" || authModalMode === "forgot") && (
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                  Verification Channel
+                  {authModalMode === "forgot" ? "Receive OTP via" : "Verification Channel"}
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => setVerificationChannel("email")}
+                    onClick={() => { setVerificationChannel("email"); setErrors({}); setApiError(""); }}
                     className={`flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border-2 text-center transition-all ${verificationChannel === "email"
                       ? "border-primary bg-primary/5 text-primary"
                       : "border-slate-200 hover:border-slate-300 text-slate-500"
@@ -350,7 +435,7 @@ export function AuthModal() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setVerificationChannel("phone")}
+                    onClick={() => { setVerificationChannel("phone"); setErrors({}); setApiError(""); }}
                     className={`flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border-2 text-center transition-all ${verificationChannel === "phone"
                       ? "border-primary bg-primary/5 text-primary"
                       : "border-slate-200 hover:border-slate-300 text-slate-500"
@@ -364,8 +449,35 @@ export function AuthModal() {
               </div>
             )}
 
-            {/* ── Forgot password link (login mode) ── */}
-            {authModalMode === "login" && (
+            {/* ── Forgot: dynamic input based on channel ── */}
+            {authModalMode === "forgot" && verificationChannel === "phone" ? (
+              <Field label="Phone Number" error={errors.phone}>
+                <InputRow
+                  id="auth-forgot-phone"
+                  icon={<Phone className="h-4 w-4" />}
+                  type="tel"
+                  autoComplete="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g. 0300 1234567"
+                  hasError={!!errors.phone}
+                />
+              </Field>
+            ) : authModalMode === "forgot" ? (
+              <Field label="Email Address" error={errors.email}>
+                <InputRow
+                  id="auth-forgot-email"
+                  icon={<Mail className="h-4 w-4" />}
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@example.com"
+                  hasError={!!errors.email}
+                />
+              </Field>
+            ) : null}
+            {authModalMode === "login" && loginMethod === "email" && (
               <div className="text-right -mt-1">
                 <button
                   type="button"
