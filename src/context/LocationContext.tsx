@@ -40,6 +40,15 @@ export function LocationProvider({ children }: { children: ReactNode }) {
       const saved = localStorage.getItem(LOCATION_STORAGE_KEY);
       if (saved) {
         const parsed: LocationState = JSON.parse(saved);
+        if (parsed.coords && !isInServiceArea(parsed.coords)) {
+          localStorage.removeItem(LOCATION_STORAGE_KEY);
+          const invalidTimer = setTimeout(() => {
+            setLocation({ status: "idle" });
+            setGeoError("Your saved location is outside our current Rawalpindi–Islamabad service area. Please choose another location.");
+            setShowPicker(true);
+          }, 0);
+          return () => clearTimeout(invalidTimer);
+        }
         const restoreTimer = setTimeout(() => setLocation(parsed), 0);
         return () => clearTimeout(restoreTimer);
       }
@@ -68,8 +77,14 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         const coords: Coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         const { city, area, label } = await reverseGeocode(coords);
         const serviceable = isInServiceArea(coords);
+        if (!serviceable) {
+          setLocation({ status: "idle" });
+          setGeoError("We currently operate only in Rawalpindi and Islamabad, including their border areas. Please choose a location inside the service area.");
+          setShowPicker(true);
+          return;
+        }
         const next: LocationState = {
-          status: serviceable ? "serviceable" : "not-serviceable",
+          status: "serviceable",
           coords,
           city,
           area,
@@ -96,8 +111,14 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const setManualLocation = useCallback(
     (coords: Coords, label: string, city: string, area?: string) => {
       const serviceable = isInServiceArea(coords);
+      if (!serviceable) {
+        setGeoError("Please select a location within Rawalpindi or Islamabad. Border areas are supported.");
+        setShowPicker(true);
+        return;
+      }
+      setGeoError("");
       const next: LocationState = {
-        status: serviceable ? "serviceable" : "not-serviceable",
+        status: "serviceable",
         coords,
         city,
         area,

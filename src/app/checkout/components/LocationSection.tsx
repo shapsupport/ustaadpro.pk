@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPin, Navigation, AlertCircle, CheckCircle2 } from "lucide-react";
+import { MapPin, Navigation, AlertCircle } from "lucide-react";
 import { useLocation } from "@/context/LocationContext";
 import { Input } from "@/components/ui/input";
 import type { ChangeEvent } from "react";
@@ -22,8 +22,7 @@ export function LocationSection({
 
   const hasLocation =
     location.status === "serviceable" ||
-    location.status === "not-serviceable" ||
-    Boolean(location.label);
+    (Boolean(location.label) && !location.coords);
 
   const selectedLabel =
     location.shortLabel || location.label || "No location selected";
@@ -31,6 +30,14 @@ export function LocationSection({
   return (
     <fieldset className="space-y-4">
       <legend className="text-sm font-bold text-slate-800">Delivery address</legend>
+
+      <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-800">
+        <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span>
+          We currently operate in <strong>Rawalpindi and Islamabad only</strong>,
+          including locations along both city borders.
+        </span>
+      </div>
 
       {/* Selected area */}
       {hasLocation ? (
@@ -47,7 +54,7 @@ export function LocationSection({
             onClick={() => setShowPicker(true)}
             className="shrink-0 rounded-xl bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200 transition hover:ring-slate-300"
           >
-            Change
+            Edit
           </button>
         </div>
       ) : (

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { X, MapPin, Check, Loader2, Navigation } from "lucide-react";
 import dynamic from "next/dynamic";
+import { isInServiceArea } from "@/lib/location";
 
 // Dynamically import Leaflet map components with ssr: false
 const LeafletMapComponent = dynamic(
@@ -25,23 +26,8 @@ interface MapAddressPickerModalProps {
   onClose: () => void;
   onSelectAddress: (address: string, lat?: number, lng?: number) => void;
   initialAddress?: string;
-}
-
-// ── Service Area: Rawalpindi + Islamabad ─────────────────────────────────
-const SERVICE_AREA = {
-  south: 33.40,
-  north: 33.80,
-  west: 72.85,
-  east: 73.30,
-};
-
-function isWithinServiceArea(lat: number, lng: number): boolean {
-  return (
-    lat >= SERVICE_AREA.south &&
-    lat <= SERVICE_AREA.north &&
-    lng >= SERVICE_AREA.west &&
-    lng <= SERVICE_AREA.east
-  );
+  initialLat?: number;
+  initialLng?: number;
 }
 
 // Default center: Twin Cities midpoint
@@ -53,22 +39,16 @@ export default function MapAddressPickerModal({
   onClose,
   onSelectAddress,
   initialAddress = "",
+  initialLat,
+  initialLng,
 }: MapAddressPickerModalProps) {
   const [position, setPosition] = useState<{ lat: number; lng: number }>({
-    lat: DEFAULT_LAT,
-    lng: DEFAULT_LNG,
+    lat: initialLat ?? DEFAULT_LAT,
+    lng: initialLng ?? DEFAULT_LNG,
   });
   const [formattedAddress, setFormattedAddress] = useState(initialAddress);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [outOfBoundsError, setOutOfBoundsError] = useState(false);
-
-  // Each time the modal opens, increment this key so Leaflet gets a fresh DOM node.
-  const mountKeyRef = useRef(0);
-  const prevIsOpenRef = useRef(false);
-  if (isOpen && !prevIsOpenRef.current) {
-    mountKeyRef.current += 1;
-  }
-  prevIsOpenRef.current = isOpen;
 
   // Reverse geocode lat/lng to human address via OpenStreetMap Nominatim API
   const reverseGeocode = async (lat: number, lng: number) => {
@@ -120,7 +100,7 @@ export default function MapAddressPickerModal({
   };
 
   const handleConfirm = () => {
-    if (!isWithinServiceArea(position.lat, position.lng)) {
+    if (!isInServiceArea(position)) {
       setOutOfBoundsError(true);
       return;
     }
@@ -135,7 +115,7 @@ export default function MapAddressPickerModal({
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-3 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-lg sm:max-w-xl max-h-[90vh] flex flex-col rounded-2xl sm:rounded-3xl bg-white shadow-2xl overflow-hidden transition-all">
+      <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all sm:rounded-3xl">
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between border-b border-slate-100 px-4 sm:px-6 py-3">
           <div className="flex items-center gap-2">
@@ -154,8 +134,8 @@ export default function MapAddressPickerModal({
           </button>
         </div>
 
-        {/* Content Body (Scrollable if needed on very small screens) */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
+        {/* Content Body */}
+        <div className="flex-1 space-y-2.5 p-3 sm:p-4">
           {/* Controls Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
             <button
@@ -171,6 +151,11 @@ export default function MapAddressPickerModal({
             </span>
           </div>
 
+          <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-800">
+            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>We currently operate in <strong>Rawalpindi and Islamabad only</strong>. You may also select locations along the borders of these cities.</span>
+          </div>
+
           {/* Out-of-bounds error */}
           {outOfBoundsError && (
             <div className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
@@ -182,9 +167,8 @@ export default function MapAddressPickerModal({
           )}
 
           {/* Map Area */}
-          <div className="relative w-full h-[260px] sm:h-[300px] md:h-[340px] overflow-hidden rounded-xl border border-slate-200 shadow-inner">
+          <div className="relative h-[min(42dvh,360px)] min-h-[190px] w-full overflow-hidden rounded-xl border border-slate-200 shadow-inner">
             <LeafletMapComponent
-              key={mountKeyRef.current}
               position={position}
               onPositionChange={handlePositionChange}
             />

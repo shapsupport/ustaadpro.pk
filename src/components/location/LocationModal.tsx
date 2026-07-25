@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { MapPin, Navigation, Search, X, Loader2, AlertCircle } from "lucide-react";
+import { Map, MapPin, Navigation, Search, X, Loader2, AlertCircle } from "lucide-react";
 import { useLocation } from "@/context/LocationContext";
-import { searchLocations, TWIN_CITY_LOCALITIES, type LocationSuggestion } from "@/lib/location";
+import MapAddressPickerModal from "./MapAddressPickerModal";
+import { reverseGeocode, searchLocations, TWIN_CITY_LOCALITIES, type LocationSuggestion } from "@/lib/location";
 
 export function LocationModal() {
   const {
@@ -20,6 +21,7 @@ export function LocationModal() {
   const [fetching, setFetching] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const [selecting, setSelecting] = useState(false);
+  const [showMap, setShowMap] = useState(false);
   const [selectedCity, setSelectedCity] = useState<keyof typeof TWIN_CITY_LOCALITIES>("Islamabad");
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -65,6 +67,19 @@ export function LocationModal() {
     setSelecting(false);
   };
 
+  const handleMapSelection = async (address: string, lat?: number, lng?: number) => {
+    if (lat === undefined || lng === undefined) return;
+    setSelecting(true);
+    const details = await reverseGeocode({ lat, lng });
+    setManualLocation(
+      { lat, lng },
+      address || details.label,
+      details.city,
+      details.area,
+    );
+    setSelecting(false);
+  };
+
   // Keyboard navigation in dropdown
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!suggestions.length) return;
@@ -88,10 +103,10 @@ export function LocationModal() {
         role="dialog"
         aria-modal="true"
         aria-label="Select your location"
-        className="fixed inset-x-4 top-1/2 z-[70] mx-auto max-h-[90vh] max-w-lg -translate-y-1/2 overflow-y-auto rounded-3xl bg-white shadow-2xl"
+        className="fixed inset-x-3 top-1/2 z-[70] mx-auto max-h-[calc(100dvh-1rem)] w-auto max-w-4xl -translate-y-1/2 overflow-visible rounded-2xl bg-white shadow-2xl sm:inset-x-6 sm:rounded-3xl"
       >
         {/* Header */}
-        <div className="bg-gradient-to-br from-primary to-emerald-700 p-6 text-white relative">
+        <div className="relative rounded-t-2xl bg-gradient-to-br from-primary to-emerald-700 p-4 text-white sm:rounded-t-3xl sm:p-5">
           <button
             onClick={skipLocation}
             className="absolute right-4 top-4 p-1.5 rounded-full hover:bg-white/20 transition-colors"
@@ -100,20 +115,20 @@ export function LocationModal() {
             <X className="h-5 w-5" />
           </button>
 
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-11 w-11 bg-white/20 rounded-2xl flex items-center justify-center shrink-0">
-              <MapPin className="h-6 w-6" />
+          <div className="mb-3 flex items-center gap-3 pr-9">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20">
+              <MapPin className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">Where are you?</h2>
-              <p className="text-emerald-100 text-sm font-medium">Serving Rawalpindi &amp; Islamabad now — we’ll expand to more cities soon</p>
+              <h2 className="text-lg font-bold sm:text-xl">Where are you?</h2>
+              <p className="text-xs font-medium text-emerald-100 sm:text-sm">Serving Rawalpindi &amp; Islamabad now</p>
             </div>
           </div>
 
           <button
             onClick={detectLocation}
             disabled={isLoading}
-            className="w-full flex items-center justify-center gap-2 bg-white text-primary font-semibold py-3 px-5 rounded-2xl shadow-lg hover:bg-emerald-50 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-primary shadow-lg transition-all hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isLoading ? (
               <><Loader2 className="h-4 w-4 animate-spin" />Detecting location…</>
@@ -130,7 +145,16 @@ export function LocationModal() {
           )}
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="grid gap-3 p-3.5 sm:p-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)]">
+          <div className="space-y-3">
+          <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+              We currently operate in <strong>Rawalpindi and Islamabad only</strong>.
+              Locations along the borders of both cities are also supported.
+            </p>
+          </div>
+
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Choose city</p>
             <div className="grid grid-cols-2 gap-2">
@@ -160,13 +184,30 @@ export function LocationModal() {
                 />
                 {fetching && <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />}
                 {selecting && <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />}
+                {query && !fetching && !selecting && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (debounceRef.current) clearTimeout(debounceRef.current);
+                      setQuery("");
+                      setSuggestions([]);
+                      setActiveSuggestion(-1);
+                      setFetching(false);
+                      inputRef.current?.focus();
+                    }}
+                    className="rounded-full p-1 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
+                    aria-label="Clear location search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
               </div>
 
               {/* Dropdown suggestions */}
               {suggestions.length > 0 && (
                 <ul
                   role="listbox"
-                  className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden z-10 divide-y divide-slate-50"
+                  className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-[min(40dvh,320px)] divide-y divide-slate-50 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl ring-1 ring-slate-900/5"
                 >
                   {suggestions.map((s, i) => (
                     <li key={i} role="option" aria-selected={i === activeSuggestion}>
@@ -187,32 +228,43 @@ export function LocationModal() {
 
               {/* No results hint */}
               {!fetching && query.length >= 2 && suggestions.length === 0 && (
-                <p className="flex items-center gap-1.5 text-xs text-slate-400 mt-2 px-1">
-                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                  No locality found in {selectedCity} for &ldquo;{query}&rdquo;
-                </p>
+                <div className="mt-2 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-800">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <p>
+                    We couldn&apos;t find &ldquo;{query}&rdquo;. Try sharing your current
+                    location, pick the point on the map, or add your house and landmark
+                    manually during checkout.
+                  </p>
+                </div>
               )}
             </div>
           </div>
 
+          <button
+            type="button"
+            onClick={() => setShowMap(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800 transition hover:border-emerald-300 hover:bg-emerald-100"
+          >
+            <Map className="h-4 w-4" />
+            {location.coords ? "Edit precise location on map" : "Pick precise location on map"}
+          </button>
+          </div>
+
           {/* ── Popular quick picks ── */}
-          <div>
+          <div className="hidden rounded-2xl border border-slate-100 bg-slate-50/60 p-4 md:block">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
               Localities in {selectedCity}
             </p>
-            <div className="grid max-h-44 grid-cols-2 gap-2 overflow-y-auto pr-1">
+            <div className="grid grid-cols-4 gap-1.5">
               {TWIN_CITY_LOCALITIES[selectedCity].map((locality) => (
                 <button
                   key={locality}
                   onClick={() => handlePopular(locality, selectedCity)}
                   disabled={selecting || isLoading}
-                  className="flex items-start gap-2 text-left bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 rounded-xl px-3 py-2.5 transition-all disabled:opacity-50 group"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-left transition-all hover:border-emerald-200 hover:bg-emerald-50 disabled:opacity-50 group"
                 >
                   <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400 group-hover:text-primary mt-0.5 transition-colors" />
-                  <div>
-                    <p className="text-xs font-semibold text-slate-700 group-hover:text-primary transition-colors leading-tight">{locality}</p>
-                    <p className="text-[10px] text-slate-400">{selectedCity}</p>
-                  </div>
+                  <p className="text-[11px] font-semibold leading-tight text-slate-700 transition-colors group-hover:text-primary">{locality}</p>
                 </button>
               ))}
             </div>
@@ -220,12 +272,22 @@ export function LocationModal() {
 
           <button
             onClick={skipLocation}
-            className="w-full text-center text-xs text-slate-400 hover:text-slate-600 py-1 transition-colors"
+            className="text-center text-xs text-slate-400 transition-colors hover:text-slate-600 md:col-span-2"
           >
             Skip for now — browse as Rawalpindi / Islamabad while we expand
           </button>
         </div>
       </div>
+
+      <MapAddressPickerModal
+        key={showMap ? `open-${location.coords?.lat}-${location.coords?.lng}` : "closed"}
+        isOpen={showMap}
+        onClose={() => setShowMap(false)}
+        onSelectAddress={handleMapSelection}
+        initialAddress={location.label}
+        initialLat={location.coords?.lat}
+        initialLng={location.coords?.lng}
+      />
     </>
   );
 }

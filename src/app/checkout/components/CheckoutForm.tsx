@@ -58,8 +58,7 @@ export function CheckoutForm({
 
   const hasLocation =
     location.status === "serviceable" ||
-    location.status === "not-serviceable" ||
-    Boolean(location.label);
+    (Boolean(location.label) && !location.coords);
 
   const handleChange = useCallback(
     (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {

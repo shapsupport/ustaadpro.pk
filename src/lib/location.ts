@@ -21,8 +21,13 @@ export interface LocationState {
 const RAWALPINDI_CENTRE: Coords = { lat: 33.6007, lng: 73.0679 };
 const ISLAMABAD_CENTRE: Coords  = { lat: 33.7285, lng: 73.0938 };
 
-// The two cities span ~35 km at their widest; we add 5 km buffer on top.
-const SERVICE_RADIUS_KM = 40; // covers both cities + 5 km fringe
+/** Twin-cities service boundary, including localities along the city borders. */
+export const SERVICE_AREA_BOUNDS = {
+  south: 33.40,
+  north: 33.90,
+  west: 72.85,
+  east: 73.30,
+} as const;
 
 /** Haversine distance in km */
 export function haversineKm(a: Coords, b: Coords): number {
@@ -41,8 +46,10 @@ export function haversineKm(a: Coords, b: Coords): number {
 
 export function isInServiceArea(coords: Coords): boolean {
   return (
-    haversineKm(coords, RAWALPINDI_CENTRE) <= SERVICE_RADIUS_KM ||
-    haversineKm(coords, ISLAMABAD_CENTRE) <= SERVICE_RADIUS_KM
+    coords.lat >= SERVICE_AREA_BOUNDS.south &&
+    coords.lat <= SERVICE_AREA_BOUNDS.north &&
+    coords.lng >= SERVICE_AREA_BOUNDS.west &&
+    coords.lng <= SERVICE_AREA_BOUNDS.east
   );
 }
 
@@ -131,7 +138,11 @@ export async function searchLocations(query: string, selectedCity?: keyof typeof
         sublabel: [city, a.state].filter(Boolean).join(", "),
         coords: { lat: parseFloat(item.lat), lng: parseFloat(item.lon) },
       };
-    }).filter((s) => s.label && (!selectedCity || `${s.sublabel} ${s.label}`.toLowerCase().includes(selectedCity.toLowerCase())));
+    }).filter((s) =>
+      s.label &&
+      isInServiceArea(s.coords) &&
+      (!selectedCity || `${s.sublabel} ${s.label}`.toLowerCase().includes(selectedCity.toLowerCase()))
+    );
 
     const cities = selectedCity ? [selectedCity] : (["Islamabad", "Rawalpindi"] as const);
     const fallbackResults = cities.flatMap((city) =>

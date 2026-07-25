@@ -12,6 +12,8 @@ import {
   Eye,
   EyeOff,
   ChevronLeft,
+  Check,
+  Circle,
 } from "lucide-react";
 import { useAuth, extractApiError } from "@/context/AuthContext";
 import type { SignupPayload } from "@/services/authService";
@@ -22,18 +24,65 @@ function isValidEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 }
 
-/** Accepts: 03XX-XXXXXXX, +923XXXXXXXXX, 923XXXXXXXXX, 03XXXXXXXXX … */
+function formatNameInput(v: string): string {
+  return v.replace(/[^\p{L}\s]/gu, "");
+}
+
+function hasMinimumNameLength(v: string): boolean {
+  return v.replace(/\s/g, "").length >= 3;
+}
+
+/** Accepts Pakistani mobile numbers as 03XXXXXXXXX, +923XXXXXXXXX, or 3XXXXXXXXX. */
 function isValidPakistaniPhone(v: string): boolean {
-  const digits = v.replace(/\D/g, "");
-  if (digits.startsWith("0092")) return /^00923\d{9}$/.test(digits);
-  if (digits.startsWith("92")) return /^923\d{9}$/.test(digits);
-  if (digits.startsWith("0")) return /^03\d{9}$/.test(digits);
-  return false;
+  return /^(?:03\d{9}|\+923\d{9}|3\d{9})$/.test(v.trim());
+}
+
+function formatPakistaniPhoneInput(v: string): string {
+  const cleaned = v.replace(/[^\d+]/g, "");
+  const withSingleLeadingPlus = cleaned.startsWith("+")
+    ? `+${cleaned.slice(1).replace(/\+/g, "")}`
+    : cleaned.replace(/\+/g, "");
+
+  if (withSingleLeadingPlus.startsWith("+")) {
+    return withSingleLeadingPlus.slice(0, 13);
+  }
+  if (withSingleLeadingPlus.startsWith("0")) {
+    return withSingleLeadingPlus.slice(0, 11);
+  }
+  return withSingleLeadingPlus.slice(0, 10);
+}
+
+function getPakistaniPhoneInputError(v: string): string | undefined {
+  if (!v) return undefined;
+  if (isValidPakistaniPhone(v)) return undefined;
+
+  const hasPossiblePrefix =
+    "03".startsWith(v) ||
+    "+923".startsWith(v) ||
+    (v.startsWith("03") && v.length <= 11) ||
+    (v.startsWith("+923") && v.length <= 13) ||
+    (v.startsWith("3") && v.length <= 10);
+
+  return hasPossiblePrefix
+    ? "Complete the Pakistani mobile number."
+    : "Start with 03, +923, or 3 (without the leading 0).";
 }
 
 function isValidPassword(v: string): boolean {
-  return v.length >= 6 && /[A-Z]/.test(v);
+  return (
+    v.length >= 6 &&
+    /[A-Z]/.test(v) &&
+    /[a-z]/.test(v) &&
+    /\d/.test(v)
+  );
 }
+
+const passwordRequirements = [
+  { label: "At least 6 characters", test: (v: string) => v.length >= 6 },
+  { label: "One uppercase letter", test: (v: string) => /[A-Z]/.test(v) },
+  { label: "One lowercase letter", test: (v: string) => /[a-z]/.test(v) },
+  { label: "One number", test: (v: string) => /\d/.test(v) },
+];
 
 // ── Field wrapper ──────────────────────────────────────────────────────────
 
@@ -128,6 +177,45 @@ export function AuthModal() {
     resetForm();
   }, [setAuthModalMode, resetForm]);
 
+  function handlePhoneChange(value: string) {
+    const nextPhone = formatPakistaniPhoneInput(value);
+    setPhone(nextPhone);
+    setErrors((current) => {
+      const nextErrors = { ...current };
+      const phoneError = getPakistaniPhoneInputError(nextPhone);
+      if (phoneError) nextErrors.phone = phoneError;
+      else delete nextErrors.phone;
+      return nextErrors;
+    });
+  }
+
+  function handleNameChange(value: string) {
+    const nextName = formatNameInput(value);
+    setName(nextName);
+    setErrors((current) => {
+      const nextErrors = { ...current };
+      if (nextName && !hasMinimumNameLength(nextName)) {
+        nextErrors.name = "Name must contain at least 3 letters.";
+      } else {
+        delete nextErrors.name;
+      }
+      return nextErrors;
+    });
+  }
+
+  function handleSignupEmailChange(value: string) {
+    setEmail(value);
+    setErrors((current) => {
+      const nextErrors = { ...current };
+      if (value && !isValidEmail(value)) {
+        nextErrors.email = "Enter a valid email address.";
+      } else {
+        delete nextErrors.email;
+      }
+      return nextErrors;
+    });
+  }
+
   if (!authModalMode) return null;
 
   // ── Validation ──────────────────────────────────────────────────────────
@@ -152,6 +240,8 @@ export function AuthModal() {
   function validateSignup() {
     const e: Record<string, string> = {};
     if (!name.trim()) e.name = "Full name is required.";
+    else if (!hasMinimumNameLength(name))
+      e.name = "Name must contain at least 3 letters.";
     if (!phone.trim()) e.phone = "Phone number is required.";
     else if (!isValidPakistaniPhone(phone))
       e.phone = "Enter a valid Pakistani number (e.g. 0300 1234567).";
@@ -159,7 +249,7 @@ export function AuthModal() {
     else if (!isValidEmail(email)) e.email = "Enter a valid email address.";
     if (!password) e.password = "Password is required.";
     else if (!isValidPassword(password))
-      e.password = "Min 6 characters with at least 1 uppercase letter.";
+      e.password = "Complete all four password requirements.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -241,7 +331,9 @@ export function AuthModal() {
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="fixed inset-x-3 top-1/2 z-[110] mx-auto max-h-[calc(100dvh-1.5rem)] max-w-md -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl border border-slate-100 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:inset-x-4 sm:max-h-[calc(100dvh-2rem)] sm:rounded-3xl"
+        className={`fixed inset-x-3 top-1/2 z-[110] mx-auto -translate-y-1/2 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:inset-x-4 sm:rounded-3xl ${
+          authModalMode === "signup" ? "max-w-2xl" : "max-w-lg"
+        }`}
       >
         {/* Back button (forgot mode) */}
         {authModalMode === "forgot" && (
@@ -263,9 +355,9 @@ export function AuthModal() {
           <X className="h-5 w-5" />
         </button>
 
-        <div className="p-4 sm:p-8">
+        <div className="p-4 sm:p-6">
           {/* Header */}
-          <div className="mb-4 pr-8 text-center sm:mb-6 sm:pr-0">
+          <div className="mb-4 pr-8 text-center sm:pr-0">
             <h2 className="text-xl sm:text-2xl font-black text-slate-900">{title}</h2>
             <p className="text-sm text-slate-500 mt-1.5">{sub}</p>
           </div>
@@ -278,7 +370,16 @@ export function AuthModal() {
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4" noValidate>
+          <form
+            onSubmit={handleSubmit}
+            autoComplete="on"
+            className={
+              authModalMode === "signup"
+                ? "grid gap-3 sm:grid-cols-2 sm:gap-x-5"
+                : "space-y-3 sm:space-y-4"
+            }
+            noValidate
+          >
             {/* ── Signup-only fields ── */}
             {authModalMode === "signup" && (
               <>
@@ -287,10 +388,12 @@ export function AuthModal() {
                     id="auth-name"
                     icon={<User className="h-4 w-4" />}
                     type="text"
+                    name="name"
                     autoComplete="name"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => handleNameChange(e.target.value)}
                     placeholder="e.g. Abdullah Siraj"
+                    aria-invalid={!!errors.name}
                     hasError={!!errors.name}
                   />
                 </Field>
@@ -300,10 +403,13 @@ export function AuthModal() {
                     id="auth-phone"
                     icon={<Phone className="h-4 w-4" />}
                     type="tel"
+                    name="tel"
+                    inputMode="tel"
                     autoComplete="tel"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="e.g. 0300 1234567"
+                    onChange={(e) => handlePhoneChange(e.target.value)}
+                    placeholder="03001234567 or +923001234567"
+                    aria-invalid={!!errors.phone}
                     hasError={!!errors.phone}
                   />
                 </Field>
@@ -349,6 +455,7 @@ export function AuthModal() {
                   id="auth-email"
                   icon={<Mail className="h-4 w-4" />}
                   type="email"
+                  name="email"
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -362,6 +469,7 @@ export function AuthModal() {
                   id="auth-phone-login"
                   icon={<Phone className="h-4 w-4" />}
                   type="tel"
+                  name="tel"
                   autoComplete="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
@@ -375,10 +483,12 @@ export function AuthModal() {
                   id="auth-email"
                   icon={<Mail className="h-4 w-4" />}
                   type="email"
+                  name="email"
                   autoComplete="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => handleSignupEmailChange(e.target.value)}
                   placeholder="name@example.com"
+                  aria-invalid={!!errors.email}
                   hasError={!!errors.email}
                 />
               </Field>
@@ -391,9 +501,20 @@ export function AuthModal() {
                   id="auth-password"
                   icon={<Lock className="h-4 w-4" />}
                   type={showPassword ? "text" : "password"}
+                  name="password"
                   autoComplete={authModalMode === "login" ? "current-password" : "new-password"}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    const nextPassword = e.target.value;
+                    setPassword(nextPassword);
+                    if (authModalMode === "signup" && isValidPassword(nextPassword)) {
+                      setErrors((current) => {
+                        const nextErrors = { ...current };
+                        delete nextErrors.password;
+                        return nextErrors;
+                      });
+                    }
+                  }}
                   placeholder="••••••••"
                   hasError={!!errors.password}
                   suffix={
@@ -411,12 +532,34 @@ export function AuthModal() {
                     </button>
                   }
                 />
+                {authModalMode === "signup" && (
+                  <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1" aria-live="polite">
+                    {passwordRequirements.map((requirement) => {
+                      const met = requirement.test(password);
+                      return (
+                        <div
+                          key={requirement.label}
+                          className={`flex items-center gap-1.5 text-[11px] font-medium ${
+                            met ? "text-emerald-600" : "text-slate-400"
+                          }`}
+                        >
+                          {met ? (
+                            <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          ) : (
+                            <Circle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                          )}
+                          <span>{requirement.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </Field>
             )}
 
             {/* ── Channel Selector (signup & forgot) ── */}
             {(authModalMode === "signup" || authModalMode === "forgot") && (
-              <div className="space-y-1.5">
+              <div className={`space-y-1.5 ${authModalMode === "signup" ? "sm:col-span-2" : ""}`}>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
                   {authModalMode === "forgot" ? "Receive OTP via" : "Verification Channel"}
                 </label>
@@ -456,6 +599,7 @@ export function AuthModal() {
                   id="auth-forgot-phone"
                   icon={<Phone className="h-4 w-4" />}
                   type="tel"
+                  name="tel"
                   autoComplete="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
@@ -469,6 +613,7 @@ export function AuthModal() {
                   id="auth-forgot-email"
                   icon={<Mail className="h-4 w-4" />}
                   type="email"
+                  name="email"
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -494,7 +639,9 @@ export function AuthModal() {
               type="submit"
               id="auth-submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-emerald-700 text-white font-bold py-3.5 rounded-2xl text-sm transition-all shadow-lg shadow-primary/20 disabled:opacity-60 mt-2"
+              className={`w-full flex items-center justify-center gap-2 bg-primary hover:bg-emerald-700 text-white font-bold py-3.5 rounded-2xl text-sm transition-all shadow-lg shadow-primary/20 disabled:opacity-60 mt-2 ${
+                authModalMode === "signup" ? "sm:col-span-2" : ""
+              }`}
             >
               {isLoading ? (
                 <>
