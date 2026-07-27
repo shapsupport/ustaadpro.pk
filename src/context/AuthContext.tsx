@@ -55,6 +55,7 @@ interface AuthContextValue {
   // ── OTP modal ──────────────────────────────────────────────────────────
   otpModal: OtpModalState | null;
   closeOtpModal: () => void;
+  returnFromOtp: () => void;
 
   // ── Auth actions ───────────────────────────────────────────────────────
   signup: (data: SignupPayload) => Promise<void>;
@@ -265,6 +266,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const closeOtpModal = useCallback(() => setOtpModal(null), []);
+  const returnFromOtp = useCallback(() => {
+    if (!otpModal) return;
+    setAuthModalMode(
+      otpModal.mode === "forgot-password-verify" ? "forgot" : "signup"
+    );
+    setOtpModal(null);
+  }, [otpModal]);
 
   return (
     <AuthContext.Provider
@@ -275,6 +283,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthModalMode,
         otpModal,
         closeOtpModal,
+        returnFromOtp,
         signup,
         verifySignupOtp,
         login,

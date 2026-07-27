@@ -65,7 +65,15 @@ export default function CheckoutPageClient() {
 
   // ── Derived values ──────────────────────────────────────────────────────
   const selectedAddress = useMemo(
-    () => location.shortLabel || location.label || "",
+    () => {
+      const label = location.label || location.shortLabel || "";
+      if (!location.coords) return label;
+      return [
+        label,
+        `Latitude: ${location.coords.lat.toFixed(6)}`,
+        `Longitude: ${location.coords.lng.toFixed(6)}`,
+      ].filter(Boolean).join(" · ");
+    },
     [location]
   );
 
@@ -89,7 +97,9 @@ export default function CheckoutPageClient() {
       setLivePaymentMethod(paymentMethod);
 
       const isOnline = paymentMethod === "easypaisa" || paymentMethod === "jazzcash";
-      const address = [selectedAddress, formData.houseNumber, formData.landmark]
+      // Keep the precise map point and the user-entered house details together
+      // in the single address value expected by the checkout APIs.
+      const address = [formData.houseNumber, formData.landmark, selectedAddress]
         .filter(Boolean)
         .join(" · ")
         .replace(/\s+/g, " ")

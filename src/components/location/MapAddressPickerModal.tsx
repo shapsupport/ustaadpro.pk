@@ -62,14 +62,14 @@ export default function MapAddressPickerModal({
         const display = data.display_name || "";
         const parts = display.split(",").slice(0, 4).join(",").trim();
         const addrString = parts
-          ? `${parts} (Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)})`
-          : `Point (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+          ? `${parts} · Latitude: ${lat.toFixed(6)} · Longitude: ${lng.toFixed(6)}`
+          : `Latitude: ${lat.toFixed(6)} · Longitude: ${lng.toFixed(6)}`;
         setFormattedAddress(addrString);
       } else {
-        setFormattedAddress(`Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+        setFormattedAddress(`Latitude: ${lat.toFixed(6)} · Longitude: ${lng.toFixed(6)}`);
       }
     } catch {
-      setFormattedAddress(`Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+      setFormattedAddress(`Latitude: ${lat.toFixed(6)} · Longitude: ${lng.toFixed(6)}`);
     } finally {
       setIsGeocoding(false);
     }
@@ -106,7 +106,7 @@ export default function MapAddressPickerModal({
     }
     const finalAddr =
       formattedAddress ||
-      `Selected Location (Lat: ${position.lat.toFixed(4)}, Lng: ${position.lng.toFixed(4)})`;
+      `Latitude: ${position.lat.toFixed(6)} · Longitude: ${position.lng.toFixed(6)}`;
     onSelectAddress(finalAddr, position.lat, position.lng);
     onClose();
   };

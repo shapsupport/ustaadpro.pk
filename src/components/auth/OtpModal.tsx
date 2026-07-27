@@ -16,9 +16,10 @@ import {
   Eye,
   EyeOff,
   RefreshCw,
+  ChevronLeft,
 } from "lucide-react";
 import { useAuth, extractApiError } from "@/context/AuthContext";
-import { signupUser, requestPasswordResetOtp } from "@/services/authService";
+import { requestPasswordResetOtp } from "@/services/authService";
 
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 180; // 3 minutes
@@ -35,6 +36,7 @@ export function OtpModal() {
   const {
     otpModal,
     closeOtpModal,
+    returnFromOtp,
     verifySignupOtp,
     resetPassword,
     isLoading,
@@ -226,6 +228,16 @@ export function OtpModal() {
         aria-label={heading}
         className="fixed inset-x-3 top-1/2 z-[130] mx-auto max-h-[calc(100dvh-1.5rem)] max-w-md -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl border border-slate-100 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:inset-x-4 sm:max-h-[calc(100dvh-2rem)] sm:rounded-3xl"
       >
+        <button
+          type="button"
+          onClick={returnFromOtp}
+          className="absolute left-4 top-4 z-10 inline-flex items-center gap-1 rounded-full px-2 py-1.5 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+          aria-label={isForgot ? "Back to reset details" : "Back to account details"}
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Back
+        </button>
+
         {/* Close button */}
         <button
           onClick={closeOtpModal}
@@ -237,7 +249,7 @@ export function OtpModal() {
 
         <div className="p-5 sm:p-8">
           {/* Icon + Header */}
-          <div className="text-center mb-6">
+          <div className="mb-6 pt-7 text-center sm:pt-5">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 mb-4">
               {isForgot ? (
                 <Lock className="h-7 w-7 text-primary" />

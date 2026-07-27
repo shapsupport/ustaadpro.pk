@@ -26,6 +26,9 @@ export function LocationSection({
 
   const selectedLabel =
     location.shortLabel || location.label || "No location selected";
+  const coordinateLabel = location.coords
+    ? `${location.coords.lat.toFixed(6)}, ${location.coords.lng.toFixed(6)}`
+    : "";
 
   return (
     <fieldset className="space-y-4">
@@ -47,6 +50,11 @@ export function LocationSection({
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-emerald-900">{selectedLabel}</p>
+            {coordinateLabel ? (
+              <p className="mt-1 font-mono text-[11px] text-emerald-700">
+                Lat/Lng: {coordinateLabel}
+              </p>
+            ) : null}
             <p className="mt-0.5 text-xs text-emerald-600">Service area confirmed</p>
           </div>
           <button
@@ -93,43 +101,49 @@ export function LocationSection({
         </div>
       )}
 
-      {/* House number */}
-      <div>
-        <label
-          htmlFor="houseNumber"
-          className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500"
-        >
-          House / Apartment number <span className="text-red-500">*</span>
-        </label>
-        <Input
-          id="houseNumber"
-          name="houseNumber"
-          value={houseNumber}
-          onChange={onHouseNumberChange}
-          placeholder="House 12, Flat 3, Gate A…"
-          className="rounded-2xl border-slate-200 bg-slate-50 py-5 text-sm focus-visible:ring-primary"
-        />
-      </div>
+      {/* One location block: precise map point + user-entered house details */}
+      <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+        <p className="text-xs font-semibold leading-5 text-slate-500">
+          Your selected map location is filled above. Add the exact house,
+          apartment, street, or gate details below.
+        </p>
+        <div>
+          <label
+            htmlFor="houseNumber"
+            className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500"
+          >
+            House / Apartment number <span className="text-red-500">*</span>
+          </label>
+          <Input
+            id="houseNumber"
+            name="houseNumber"
+            value={houseNumber}
+            onChange={onHouseNumberChange}
+            placeholder="House 12, Flat 3, Gate A…"
+            className="rounded-2xl border-slate-200 bg-slate-50 py-5 text-sm focus-visible:ring-primary"
+          />
+        </div>
 
-      {/* Landmark */}
-      <div>
-        <label
-          htmlFor="landmark"
-          className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500"
-        >
-          Landmark / Directions{" "}
-          <span className="font-normal normal-case tracking-normal text-slate-400">
-            (optional)
-          </span>
-        </label>
-        <Input
-          id="landmark"
-          name="landmark"
-          value={landmark}
-          onChange={onLandmarkChange}
-          placeholder="Near city hospital, blue gate…"
-          className="rounded-2xl border-slate-200 bg-slate-50 py-5 text-sm focus-visible:ring-primary"
-        />
+        {/* Landmark */}
+        <div>
+          <label
+            htmlFor="landmark"
+            className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500"
+          >
+            Landmark / Directions{" "}
+            <span className="font-normal normal-case tracking-normal text-slate-400">
+              (optional)
+            </span>
+          </label>
+          <Input
+            id="landmark"
+            name="landmark"
+            value={landmark}
+            onChange={onLandmarkChange}
+            placeholder="Near city hospital, blue gate…"
+            className="rounded-2xl border-slate-200 bg-slate-50 py-5 text-sm focus-visible:ring-primary"
+          />
+        </div>
       </div>
 
       {/* GPS detect */}

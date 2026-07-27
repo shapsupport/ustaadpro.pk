@@ -294,7 +294,6 @@ export function AuthModal() {
           verificationChannel,
         };
         await signup(payload);
-        resetForm();
       } else if (authModalMode === "forgot") {
         if (!validateForgot()) return;
         if (verificationChannel === "phone") {
@@ -302,7 +301,6 @@ export function AuthModal() {
         } else {
           await requestPasswordReset(email.trim(), "email");
         }
-        resetForm();
       }
     } catch (err) {
       setApiError(extractApiError(err));

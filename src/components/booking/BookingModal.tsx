@@ -30,13 +30,6 @@ function isWithinServiceArea(lat: number, lng: number): boolean {
     lng >= SERVICE_AREA.west && lng <= SERVICE_AREA.east;
 }
 
-const CITY_KEYWORDS = ["rawalpindi", "islamabad", "rwp", "isb", "pindi"];
-
-function isAddressInServiceCity(addr: string): boolean {
-  const lower = addr.toLowerCase();
-  return CITY_KEYWORDS.some((kw) => lower.includes(kw));
-}
-
 interface BookingModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -60,7 +53,8 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
   // Basic Form State
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState("");
+  const [specificAddress, setSpecificAddress] = useState("");
   const [requirements, setRequirements] = useState("");
 
   // Feature 1: Time Slot State
@@ -130,16 +124,16 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
       setError("Please enter your phone number.");
       return;
     }
-    if (!address.trim()) {
-      setError("Please enter or pick your service address from the map.");
+    if (!selectedLocation.trim() || !addressCoords) {
+      setError("Please select your service location from the map.");
       return;
     }
 
-    const addressValue = address.trim();
+    const addressValue = specificAddress.trim();
 
     // Minimum length check
-    if (addressValue.length < 15) {
-      setError("Please enter your complete address with house number, street, area and city.");
+    if (addressValue.length < 8) {
+      setError("Please enter your house number and street details.");
       return;
     }
 
@@ -149,10 +143,10 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
       return;
     }
 
-    // Must have at least 4 words (House, Street, Area, City)
+    // The map supplies area/city; this field supplies the exact premises.
     const addressWords = addressValue.split(/\s+/).filter(w => w.length > 1);
-    if (addressWords.length < 4) {
-      setError("Please enter complete address: house number, street, area/colony, and city/town/village.");
+    if (addressWords.length < 2) {
+      setError("Please enter a specific house and street address.");
       return;
     }
     if (!fromDate) {
@@ -173,6 +167,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
     setLoading(true);
 
     try {
+      const completeAddress = `${specificAddress.trim()} · ${selectedLocation.trim()}`;
       const workIdNum = Number(service.selectedWorkPriceId);
       const items: ServiceItemInput[] = [
         {
@@ -196,7 +191,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
       const response = await createBooking({
         name: name.trim(),
         phone: phone.trim(),
-        address: address.trim(),
+        address: completeAddress,
         date: fromDate,
         time: selectedTime,
         requirements: noteWithReceipt,
@@ -237,7 +232,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                 createdAt: new Date().toISOString(),
                 customerName: name,
                 phone,
-                address,
+                address: completeAddress,
                 paymentMethod,
                 recurringDays: daysCount,
                 quantity,
@@ -416,9 +411,9 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
               </div>
 
               {/* FEATURE 3: Address & Map Picker */}
-              <div>
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3">
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-600">Service Address *</label>
+                  <label className="block text-xs font-bold text-slate-600">Service Location *</label>
                   <button
                     type="button"
                     onClick={() => setIsMapOpen(true)}
@@ -432,23 +427,29 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                   <MapPin className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <input
                     type="text"
-                    required
-                    value={address}
-                    onChange={(e) => {
-                      setAddress(e.target.value);
-                      setAddressCoords(null); // manual edit clears map coords
-                    }}
-                    placeholder="House #, Street #, Area or click 'Pick from Map'"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    readOnly
+                    value={selectedLocation}
+                    placeholder="Pick a location from the map"
+                    className="w-full cursor-default rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-600"
                   />
                 </div>
-                {/* Amber warning: manual address doesn't mention RWP/ISB */}
-                {address.trim().length > 10 && !addressCoords && !isAddressInServiceCity(address) && (
-                  <div className="mt-1.5 flex items-start gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    <span className="shrink-0">⚠️</span>
-                    <span>We currently only serve in <strong>Rawalpindi &amp; Islamabad</strong>. Please confirm your address is within these cities.</span>
-                  </div>
-                )}
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-600">
+                    House / Street Address *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={specificAddress}
+                    onChange={(e) => setSpecificAddress(e.target.value)}
+                    placeholder="House 12, Street 4, Flat 3, blue gate…"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    This is combined with the selected location and coordinates as one address.
+                  </p>
+                </div>
               </div>
 
               {/* FEATURE 2: Recurring Booking Picker */}
@@ -550,9 +551,9 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
       <MapAddressPickerModal
         isOpen={isMapOpen}
         onClose={() => setIsMapOpen(false)}
-        initialAddress={address}
+        initialAddress={selectedLocation}
         onSelectAddress={(newAddress, lat, lng) => {
-          setAddress(newAddress);
+          setSelectedLocation(newAddress);
           if (lat !== undefined && lng !== undefined) {
             setAddressCoords({ lat, lng });
           }
