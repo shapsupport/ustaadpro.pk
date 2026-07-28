@@ -65,41 +65,41 @@ export function Navbar() {
         )}
       >
         <nav
-          className="mx-auto flex h-20 max-w-[1760px] items-center justify-between px-3 sm:px-5 lg:px-6"
+          className="mx-auto flex h-16 max-w-[1760px] items-center justify-between gap-3 px-3 sm:px-5 lg:px-6"
           aria-label="Main navigation"
         >
           {/* Logo */}
           <Link
             href="/"
-            className="flex shrink-0 items-center gap-3"
+            className="flex shrink-0 items-center gap-2"
             aria-label="Ustaad Pro Home"
           >
             <Image
               src="/brand/ustaad-pro-mark.webp"
               alt=""
-              width={44}
-              height={44}
+              width={40}
+              height={40}
               priority
-              className="h-11 w-11 rounded-xl object-contain shadow-md shadow-primary/15"
+              className="h-10 w-10 rounded-xl object-contain shadow-md shadow-primary/15"
             />
-
-            <span className="text-2xl font-black tracking-tight text-slate-900">
+            <span className="text-xl font-black tracking-tight text-slate-900">
               Ustaad<span className="font-bold text-primary">Pro</span>
             </span>
           </Link>
 
-          <div className="mx-3 hidden min-w-0 max-w-[1000px] flex-1 lg:block xl:mx-5">
+          {/* Search bar — shows from md upwards */}
+          <div className="hidden min-w-0 flex-1 md:block xl:mx-4">
             <UniversalSearch key={searchScope} defaultScope={searchScope} />
           </div>
 
-          {/* Desktop Navigation */}
-          <div className="hidden items-center gap-1 2xl:flex">
+          {/* Desktop Navigation links — show from lg upwards */}
+          <div className="hidden items-center gap-0.5 lg:flex">
             {visibleNavItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "rounded-xl px-3.5 py-2.5 text-sm font-bold transition-all hover:bg-emerald-50 hover:text-primary",
+                  "rounded-xl px-3 py-2 text-sm font-bold transition-all hover:bg-emerald-50 hover:text-primary whitespace-nowrap",
                   pathname === item.href
                     ? "bg-emerald-50 text-primary"
                     : "text-slate-600"
@@ -111,33 +111,28 @@ export function Navbar() {
           </div>
 
           {/* Right Side */}
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            {/* Location */}
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Location — show from xl upwards to avoid crowding on 1024–1280px */}
             <button
               onClick={() => setShowPicker(true)}
-              className="hidden cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-sm transition-all hover:border-primary hover:text-primary 2xl:flex"
+              className="hidden cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm transition-all hover:border-primary hover:text-primary xl:flex"
             >
-              <MapPin className="h-4 w-4 text-primary" />
-
-              <span className="max-w-[150px] truncate font-semibold text-slate-700">
-                {location.shortLabel ||
-                  location.label ||
-                  "Set location"}
+              <MapPin className="h-4 w-4 shrink-0 text-primary" />
+              <span className="max-w-[120px] truncate font-semibold text-slate-700">
+                {location.shortLabel || location.label || "Set location"}
               </span>
-
               <ChevronDown className="h-3 w-3 opacity-60" />
             </button>
 
-            {/* Desktop User/Profile */}
+            {/* Desktop User/Profile — show from lg upwards */}
             {user ? (
               <button
                 onClick={() => setProfileOpen(true)}
-                className="hidden h-11 cursor-pointer items-center gap-2 rounded-xl bg-gradient-to-br from-primary to-emerald-700 px-5 font-bold text-white shadow-md shadow-primary/10 transition-all hover:opacity-90 2xl:flex"
+                className="hidden h-10 cursor-pointer items-center gap-2 rounded-xl bg-gradient-to-br from-primary to-emerald-700 px-4 font-bold text-white shadow-md shadow-primary/10 transition-all hover:opacity-90 lg:flex"
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20">
                   <UserRound className="h-4 w-4" />
                 </div>
-
                 <span className="max-w-[80px] truncate text-sm">
                   {user.name}
                 </span>
@@ -145,23 +140,23 @@ export function Navbar() {
             ) : (
               <button
                 onClick={() => setAuthModalMode("login")}
-                className="hidden h-10 items-center gap-1.5 rounded-xl bg-primary px-3.5 text-xs font-bold text-white shadow-md shadow-primary/20 transition-all hover:bg-emerald-700 2xl:flex"
+                className="hidden h-10 items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-bold text-white shadow-md shadow-primary/20 transition-all hover:bg-emerald-700 lg:flex"
               >
                 <UserRound className="h-4 w-4" />
                 Account
               </button>
             )}
 
-            {/* Mobile Hamburger */}
+            {/* Mobile Hamburger — hidden on lg+ */}
             <button
-              className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 2xl:hidden"
+              className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 lg:hidden"
               onClick={() => setMobileOpen(true)}
               aria-label="Open menu"
             >
               <Menu className="h-5 w-5" />
             </button>
 
-            {/* Cart stays at the far-right edge of the navbar. */}
+            {/* Cart — always visible */}
             <div className="relative">
               <button
                 type="button"
