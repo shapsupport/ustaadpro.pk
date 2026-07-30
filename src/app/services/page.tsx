@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ServicesPageContent } from "./ServicesPageContent";
-import { getCategories, getServices, getServicesWithReviewStats } from "@/lib/server-api";
+import { getCategories, getCatalog, getServices, getServicesWithReviewStats } from "@/lib/server-api";
 
 export const metadata: Metadata = {
   title: "Services | Ustaad Pro",
@@ -14,7 +14,18 @@ export default async function ServicesPage({
   searchParams: Promise<{ search?: string }>;
 }) {
   const { search = "" } = await searchParams;
-  const [services, categories] = await Promise.all([getServices(), getCategories()]);
+  const [services, categories, catalog] = await Promise.all([
+    getServices(),
+    getCategories(),
+    getCatalog(),
+  ]);
   const reviewedServices = await getServicesWithReviewStats(services);
-  return <ServicesPageContent initialServices={reviewedServices} initialCategories={categories} initialSearch={search} />;
+  return (
+    <ServicesPageContent
+      initialServices={reviewedServices}
+      initialCategories={categories}
+      initialCatalog={catalog}
+      initialSearch={search}
+    />
+  );
 }
