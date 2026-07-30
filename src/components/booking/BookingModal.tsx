@@ -124,31 +124,37 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
       setError("Please enter your phone number.");
       return;
     }
-    if (!selectedLocation.trim() || !addressCoords) {
-      setError("Please select your service location from the map.");
+
+    const hasMapLocation = !!(selectedLocation.trim() && addressCoords);
+    const hasSpecificAddress = !!specificAddress.trim();
+
+    if (!hasMapLocation && !hasSpecificAddress) {
+      setError("Please pick your location from the map or enter your house/street address.");
       return;
     }
 
-    const addressValue = specificAddress.trim();
+    if (hasSpecificAddress) {
+      const addressValue = specificAddress.trim();
+      // Minimum length check
+      if (addressValue.length < 8) {
+        setError("Please enter your house number and street details (min 8 characters).");
+        return;
+      }
 
-    // Minimum length check
-    if (addressValue.length < 8) {
-      setError("Please enter your house number and street details.");
-      return;
+      // Must contain a number (house/street number)
+      if (!/\d/.test(addressValue)) {
+        setError("Please include your house or street number in the address.");
+        return;
+      }
+
+      // The map supplies area/city; this field supplies the exact premises.
+      const addressWords = addressValue.split(/\s+/).filter(w => w.length > 1);
+      if (addressWords.length < 2) {
+        setError("Please enter a specific house and street address.");
+        return;
+      }
     }
 
-    // Must contain a number (house/street number)
-    if (!/\d/.test(addressValue)) {
-      setError("Please include your house or street number in the address.");
-      return;
-    }
-
-    // The map supplies area/city; this field supplies the exact premises.
-    const addressWords = addressValue.split(/\s+/).filter(w => w.length > 1);
-    if (addressWords.length < 2) {
-      setError("Please enter a specific house and street address.");
-      return;
-    }
     if (!fromDate) {
       setError("Please select a service date.");
       return;
@@ -167,7 +173,10 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
     setLoading(true);
 
     try {
-      const completeAddress = `${specificAddress.trim()} · ${selectedLocation.trim()}`;
+      const addressParts = [];
+      if (specificAddress.trim()) addressParts.push(specificAddress.trim());
+      if (selectedLocation.trim()) addressParts.push(selectedLocation.trim());
+      const completeAddress = addressParts.join(" · ");
       const workIdNum = Number(service.selectedWorkPriceId);
       const items: ServiceItemInput[] = [
         {
@@ -413,7 +422,9 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
               {/* FEATURE 3: Address & Map Picker */}
               <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3">
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-600">Service Location *</label>
+                  <label className="block text-xs font-bold text-slate-600">
+                    Service Location{!specificAddress.trim() && " *"}
+                  </label>
                   <button
                     type="button"
                     onClick={() => setIsMapOpen(true)}
@@ -436,11 +447,11 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
 
                 <div>
                   <label className="mb-1 block text-xs font-bold text-slate-600">
-                    House / Street Address *
+                    House / Street Address{!(selectedLocation.trim() && addressCoords) && " *"}
                   </label>
                   <input
                     type="text"
-                    required
+                    required={!(selectedLocation.trim() && addressCoords)}
                     value={specificAddress}
                     onChange={(e) => setSpecificAddress(e.target.value)}
                     placeholder="House 12, Street 4, Flat 3, blue gate…"

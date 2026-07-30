@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import {
   ArrowRight,
-  BadgeCheck,
+  ArrowLeft,
   Calendar,
   Camera,
   Clock,
@@ -24,7 +24,7 @@ import {
   ShieldCheck,
   Headphones,
   CircleCheck,
-  Tag,
+  CheckCircle2,
 } from "lucide-react";
 import type { ApiCategory, ApiCatalogCategory, ApiService, ApiSubcategory } from "@/lib/api-types";
 import { orderServices } from "@/lib/service-order";
@@ -37,6 +37,21 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 function imgSrc(url: string | undefined | null) {
   if (!url) return null;
   return url.startsWith("http") ? url : `${API_BASE.replace(/\/$/, "")}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
+function SafeImage({ src, alt, fallback, className }: { src: string; alt: string; fallback: React.ReactNode; className?: string }) {
+  const [error, setError] = useState(false);
+  if (error) return <>{fallback}</>;
+  return (
+    <Image
+      src={src}
+      alt={alt}
+      fill
+      className={className ?? "object-cover"}
+      onError={() => setError(true)}
+      unoptimized
+    />
+  );
 }
 
 const CATEGORY_ALIASES: Record<string, string[]> = {
@@ -84,6 +99,18 @@ const CAT_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   hvac: Snowflake,
 };
 
+const CAT_GRADIENTS: Record<string, string> = {
+  "ac-services": "from-blue-500 to-indigo-600",
+  electrician: "from-amber-400 to-orange-500",
+  plumber: "from-sky-500 to-blue-600",
+  "home-services": "from-emerald-500 to-teal-600",
+  painter: "from-pink-500 to-rose-600",
+  carpenter: "from-yellow-500 to-amber-600",
+  cctv: "from-violet-500 to-purple-600",
+  welder: "from-red-500 to-rose-600",
+  subscriptions: "from-purple-500 to-violet-600",
+};
+
 const PRIMARY_CATEGORIES: ApiCategory[] = [
   { id: "ac-services", title: "AC Services", subtitle: "Maintenance, installation & gas refill", icon: "air-conditioner", tint: "#4F46E5" },
   { id: "electrician", title: "Electrician", subtitle: "Wiring, breakers, fans & repairs", icon: "lightning-bolt", tint: "#F59E0B" },
@@ -103,48 +130,207 @@ interface ServicesPageContentProps {
   initialSearch?: string;
 }
 
+// Which step are we on?
+type Step = "category" | "subcategory" | "services";
+
+// Subcategory item — covers both ApiSubcategory and fallback plain objects
+type SubcatItem = ApiSubcategory & { description?: string };
+
 export function ServicesPageContent({
   initialServices,
   initialCatalog = [],
   initialSearch = "",
 }: ServicesPageContentProps) {
   const { location, setShowPicker } = useLocation();
+  const [step, setStep] = useState<Step>("category");
   const [activeCategory, setActiveCategory] = useState<string>("all");
-  const [activeSubcategory, setActiveSubcategory] = useState<string>("all");
+  const [activeSubcategory, setActiveSubcategory] = useState<SubcatItem | null>(null);
   const [searchedServices, setSearchedServices] = useState<ApiService[]>([]);
   const [completedSearch, setCompletedSearch] = useState("");
   const [bookingService, setBookingService] = useState<ApiService | null>(null);
 
-  const servicesRef = useRef<HTMLDivElement>(null);
-
+  const stepRef = useRef<HTMLDivElement>(null);
   const activeAliases = useMemo(() => getCategoryAliases(activeCategory), [activeCategory]);
 
-  const selectCategory = (catId: string) => {
-    setActiveCategory(catId);
-    setActiveSubcategory("all");
-    window.requestAnimationFrame(() => {
-      servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  };
+  const activeCategoryObj = PRIMARY_CATEGORIES.find((c) => activeAliases.includes(c.id));
 
-  // Derive subcategories for the active main category
+  function scrollToStep() {
+    window.requestAnimationFrame(() => {
+      stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  // Step 1 → Step 2: select main category, show subcategories
+  function selectCategory(catId: string) {
+    setActiveCategory(catId);
+    setActiveSubcategory(null);
+    setStep("subcategory");
+    scrollToStep();
+  }
+
+  // Step 2 → Step 3: select sub-category, show services
+  function selectSubcategory(sub: SubcatItem) {
+    setActiveSubcategory(sub);
+    setStep("services");
+    scrollToStep();
+  }
+
+  // Back from Step 2 → Step 1
+  function backToCategories() {
+    setActiveCategory("all");
+    setActiveSubcategory(null);
+    setStep("category");
+    scrollToStep();
+  }
+
+  // Back from Step 3 → Step 2
+  function backToSubcategories() {
+    setActiveSubcategory(null);
+    setStep("subcategory");
+    scrollToStep();
+  }
+
+  // Build subcategories list for selected main category
   const currentSubcategories = useMemo(() => {
     if (activeCategory === "all") return [];
-    const map = new Map<string, ApiSubcategory>();
+    const subcatsMap = new Map<string, ApiSubcategory>();
 
-    initialCatalog.forEach((catalogCat) => {
-      if (activeAliases.includes(catalogCat.id) && catalogCat.subcategories) {
+    // Normalize for flexible matching: lowercase + remove spaces/hyphens/underscores
+    const normalize = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, "");
+    const activeAliasesNorm = activeAliases.map(normalize);
+
+    // Also match by category title (e.g. catalog has title "Electrician" matching our category)
+    const activeCategoryTitle = PRIMARY_CATEGORIES.find((c) => activeAliases.includes(c.id))?.title?.toLowerCase() ?? "";
+
+    // Find all catalog entries that match this category (flexible matching)
+    const matchingCatalogEntries = initialCatalog.filter((catalogCat) => {
+      const catIdNorm = normalize(catalogCat.id);
+      const catTitleNorm = (catalogCat.title ?? "").toLowerCase();
+      return (
+        activeAliasesNorm.includes(catIdNorm) ||
+        activeAliases.includes(catalogCat.id) ||
+        (activeCategoryTitle && (catTitleNorm === activeCategoryTitle || catTitleNorm.includes(activeCategoryTitle) || activeCategoryTitle.includes(catTitleNorm)))
+      );
+    });
+
+    // Log what we found for debugging
+    if (typeof window !== "undefined") {
+      console.log("[Services] Category selected:", activeCategory, "| aliases:", activeAliases);
+      console.log("[Services] Catalog IDs:", initialCatalog.map((c) => c.id));
+      console.log("[Services] Matching catalog entries:", matchingCatalogEntries.map((c) => ({ id: c.id, title: c.title, subcats: c.subcategories?.length ?? 0 })));
+    }
+
+    matchingCatalogEntries.forEach((catalogCat) => {
+      if (catalogCat.subcategories) {
         catalogCat.subcategories.forEach((subCat) => {
-          if (!map.has(subCat.id) && !subCat.id.endsWith("-main")) {
-            map.set(subCat.id, subCat);
+          if (!subCat.id.endsWith("-main")) {
+            const matchingServices = initialServices.filter((s) => {
+              const subCatId = s.subcategory_id || s.subcategoryId || "";
+              return subCatId === subCat.id;
+            });
+
+            let finalServices = matchingServices;
+            if (finalServices.length === 0 && subCat.services && subCat.services.length > 0) {
+              finalServices = subCat.services.map((subS) => {
+                const found = initialServices.find((s) => s.id === subS.id);
+                return found || subS;
+              });
+            }
+
+            // Even if no services yet, keep the subcategory — we'll try to match later
+            const existing = subcatsMap.get(subCat.id);
+            const mergedServices = existing
+              ? [...existing.services!, ...finalServices.filter(fs => !existing.services!.some(es => es.id === fs.id))]
+              : finalServices;
+
+            subcatsMap.set(subCat.id, { ...subCat, services: mergedServices });
           }
         });
       }
+
+      // Also try directServices / services at the catalog level (not nested in subcategory)
+      const directSvcs = catalogCat.directServices || catalogCat.services || [];
+      directSvcs.forEach((svc) => {
+        // These are top-level services — group them under a virtual "General" subcategory
+        const virtualId = `${catalogCat.id}-direct`;
+        const existing = subcatsMap.get(virtualId);
+        if (!existing) {
+          subcatsMap.set(virtualId, {
+            id: virtualId,
+            title: "General Services",
+            services: [initialServices.find((s) => s.id === svc.id) ?? svc],
+          });
+        } else {
+          if (!existing.services!.some((es) => es.id === svc.id)) {
+            existing.services!.push(initialServices.find((s) => s.id === svc.id) ?? svc);
+          }
+        }
+      });
     });
 
-    return Array.from(map.values());
-  }, [activeCategory, activeAliases, initialCatalog]);
+    const uniqueList: ApiSubcategory[] = [];
+    const seenIds = new Set<string>();
+    const seenTitles = new Set<string>();
 
+    Array.from(subcatsMap.values()).forEach((sub) => {
+      const normalizedTitle = sub.title.trim().toLowerCase();
+      if (!seenIds.has(sub.id) && !seenTitles.has(normalizedTitle)) {
+        seenIds.add(sub.id);
+        seenTitles.add(normalizedTitle);
+        uniqueList.push(sub);
+      }
+    });
+
+    const withServices = uniqueList.filter((sub) => sub.services && sub.services.length > 0);
+
+    // FALLBACK: If still empty, show all services for this category grouped by subcategory_id
+    if (withServices.length === 0) {
+      const normalize2 = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, "");
+      const activeAliasesNorm2 = activeAliases.map(normalize2);
+      const categoryServices = initialServices.filter((s) => {
+        const catId = normalize2(s.category_id || s.categoryId || "");
+        return activeAliases.includes(s.category_id || s.categoryId || "") || activeAliasesNorm2.includes(catId);
+      });
+      if (categoryServices.length > 0) {
+        // Group by subcategory
+        const bySubcat = new Map<string, ApiService[]>();
+        categoryServices.forEach((s) => {
+          const key = s.subcategory_id || s.subcategoryId || "general";
+          const arr = bySubcat.get(key) ?? [];
+          arr.push(s);
+          bySubcat.set(key, arr);
+        });
+        return Array.from(bySubcat.entries()).map(([subId, svcs]) => ({
+          id: subId,
+          title: subId === "general" ? "General Services" : svcs[0].title.split(" ").slice(0, 3).join(" "),
+          services: svcs,
+        }));
+      }
+    }
+
+    return withServices;
+  }, [activeCategory, activeAliases, initialCatalog, initialServices]);
+
+  // Services for selected sub-category
+  const subcategoryServices = useMemo(() => {
+    if (!activeSubcategory) return [];
+    if (activeSubcategory.services && activeSubcategory.services.length > 0) {
+      const initialServicesMap = new Map(initialServices.map((s) => [s.id, s]));
+      const merged = activeSubcategory.services.map((catalogSvc) => {
+        const live = initialServicesMap.get(catalogSvc.id);
+        return live ?? catalogSvc;
+      });
+      return orderServices(merged);
+    }
+    // Fallback: match by subcategory_id
+    const byId = initialServices.filter((s) => {
+      const subCatId = s.subcategory_id || s.subcategoryId || "";
+      return subCatId === activeSubcategory.id;
+    });
+    return orderServices(byId);
+  }, [activeSubcategory, initialServices]);
+
+  // Search
   useEffect(() => {
     const query = initialSearch.trim();
     if (!query) return;
@@ -154,9 +340,7 @@ export function ServicesPageContent({
         if (!controller.signal.aborted) {
           setSearchedServices(results as ApiService[]);
           setCompletedSearch(query);
-          window.requestAnimationFrame(() => {
-            servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-          });
+          scrollToStep();
         }
       })
       .catch(() => {
@@ -166,53 +350,25 @@ export function ServicesPageContent({
         }
       });
     return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearch]);
 
-  const filtered = useMemo(() => {
-    if (initialSearch.trim()) return searchedServices;
-
-    return orderServices(initialServices).filter((s) => {
-      const catId = s.category_id || s.categoryId || "";
-      const subCatId = s.subcategory_id || s.subcategoryId || "";
-
-      // Level 1 match: Category match
-      const matchCat = activeCategory === "all" || activeAliases.includes(catId);
-      if (!matchCat) return false;
-
-      // Level 2 match: Subcategory match if a subcategory pill is active
-      if (activeSubcategory !== "all") {
-        if (subCatId === activeSubcategory) return true;
-
-        // Check if catalog subcategory services match this service id
-        const selectedSubcatObj = currentSubcategories.find((sc) => sc.id === activeSubcategory);
-        if (selectedSubcatObj?.services?.some((subS) => subS.id === s.id)) {
-          return true;
-        }
-
-        return false;
-      }
-
-      return true;
-    });
-  }, [initialServices, activeCategory, activeAliases, activeSubcategory, currentSubcategories, initialSearch, searchedServices]);
+  const searching = Boolean(initialSearch.trim() && completedSearch !== initialSearch.trim());
+  const isSearchMode = Boolean(initialSearch.trim());
 
   const startingPrice = initialServices.length
-    ? Math.min(...initialServices.map((service) => service.price).filter((price) => price > 0))
+    ? Math.min(...initialServices.map((s) => s.price).filter((p) => p > 0))
     : 0;
-  const reviewedServices = initialServices.filter((service) => Number(service.reviews || 0) > 0).length;
-  const searching = Boolean(initialSearch.trim() && completedSearch !== initialSearch.trim());
-
-  const activeCategoryObj = PRIMARY_CATEGORIES.find((c) => activeAliases.includes(c.id));
 
   return (
-    <div className="min-h-screen bg-slate-50 pt-0">
-      {/* Hero Section */}
+    <div className="min-h-screen bg-slate-50">
+      {/* Hero */}
       <section className="relative overflow-hidden border-b border-emerald-100 bg-[radial-gradient(circle_at_68%_20%,#d1fae5_0,transparent_28%),linear-gradient(108deg,#fff_0%,#f7fffb_58%,#059669_58%,#047857_100%)]">
         <div
           className="absolute right-0 top-0 hidden h-full w-[42%] opacity-20 lg:block"
           style={{ backgroundImage: "radial-gradient(#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }}
         />
-        <div className="relative mx-auto grid min-h-[570px] max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[1.08fr_.92fr] lg:items-center lg:px-8">
+        <div className="relative mx-auto grid min-h-[500px] max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.08fr_.92fr] lg:items-center lg:px-8">
           <div className="relative z-10">
             <button
               type="button"
@@ -224,232 +380,308 @@ export function ServicesPageContent({
               <ChevronDown className="h-3.5 w-3.5" />
             </button>
             <span className="mt-6 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-emerald-600">
-              <Sparkles className="h-4 w-4" /> Services built around your day
+              <Sparkles className="h-4 w-4" /> Book a service in 3 easy steps
             </span>
             <h1 className="mt-3 max-w-2xl text-4xl font-black leading-[1.06] tracking-tight text-slate-950 sm:text-5xl xl:text-6xl">
               Find the right expert.
               <span className="mt-2 block text-emerald-600">Get the job done right.</span>
             </h1>
-            <p className="mt-5 max-w-xl text-base leading-7 text-slate-600 sm:text-lg">
-              Explore repairs, maintenance, installations, cleaning, and specialist work with clear service details and straightforward booking.
-            </p>
+            {/* Step indicator */}
+            <div className="mt-8 flex items-center gap-3">
+              {[
+                { n: 1, label: "Category" },
+                { n: 2, label: "Sub-service" },
+                { n: 3, label: "Book" },
+              ].map(({ n, label }, i) => {
+                const isActive = (step === "category" && n === 1) || (step === "subcategory" && n === 2) || (step === "services" && n === 3);
+                const isDone = (step === "subcategory" && n === 1) || (step === "services" && n <= 2);
+                return (
+                  <div key={n} className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-black transition-all ${
+                        isDone ? "bg-emerald-600 text-white" : isActive ? "bg-white text-emerald-700 ring-2 ring-emerald-500 shadow-md" : "bg-white/30 text-white/70"
+                      }`}>
+                        {isDone ? <CheckCircle2 className="h-4 w-4" /> : n}
+                      </div>
+                      <span className={`text-xs font-bold ${isActive ? "text-white" : isDone ? "text-emerald-200" : "text-white/60"}`}>{label}</span>
+                    </div>
+                    {i < 2 && <div className={`h-px w-8 ${isDone ? "bg-emerald-400" : "bg-white/30"}`} />}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div className="relative z-10 lg:pl-8">
             <div className="rounded-3xl border border-white/70 bg-white/95 p-5 shadow-2xl backdrop-blur sm:p-7">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <span className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Live service catalogue</span>
-                  <h2 className="mt-1 text-2xl font-black text-slate-950">Everything your space needs</h2>
+                  <span className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">How it works</span>
+                  <h2 className="mt-1 text-xl font-black text-slate-950">3 steps to book</h2>
                 </div>
                 <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
                   <Wrench className="h-6 w-6" />
                 </span>
               </div>
-              <div className="mt-6 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <strong className="block text-2xl font-black text-slate-950">{initialServices.length}</strong>
-                  <span className="text-xs text-slate-500">Bookable services</span>
-                </div>
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <strong className="block text-2xl font-black text-slate-950">{PRIMARY_CATEGORIES.length}</strong>
-                  <span className="text-xs text-slate-500">Service categories</span>
-                </div>
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <strong className="block text-2xl font-black text-slate-950">
-                    {startingPrice ? `Rs ${startingPrice.toLocaleString()}` : "—"}
-                  </strong>
-                  <span className="text-xs text-slate-500">Lowest starting price</span>
-                </div>
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <strong className="block text-2xl font-black text-slate-950">{reviewedServices}</strong>
-                  <span className="text-xs text-slate-500">Services with reviews</span>
-                </div>
-              </div>
-              <div className="mt-5 space-y-3 border-t border-slate-100 pt-5">
+              <div className="mt-5 space-y-3">
                 {[
-                  { icon: ShieldCheck, text: "Clear scope and pricing before booking" },
-                  { icon: CircleCheck, text: "Real customer ratings from completed orders" },
-                  { icon: Headphones, text: "Support for bookings and service concerns" },
+                  { icon: Layers, step: "1", text: "Choose a main service category" },
+                  { icon: CheckCircle2, step: "2", text: "Select the specific sub-service" },
+                  { icon: ArrowRight, step: "3", text: "Pick a rate & book instantly" },
+                ].map(({ icon: Icon, step: s, text }) => (
+                  <div key={s} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 font-black text-sm">
+                      {s}
+                    </span>
+                    <span className="text-sm font-medium text-slate-700">{text}</span>
+                    <Icon className="ml-auto h-4 w-4 text-slate-300" />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-5 border-t border-slate-100 pt-5 space-y-2">
+                {[
+                  { icon: ShieldCheck, text: "Clear pricing before booking" },
+                  { icon: CircleCheck, text: "Real customer ratings" },
+                  { icon: Headphones, text: "Support for every booking" },
                 ].map(({ icon: Icon, text }) => (
                   <div key={text} className="flex items-center gap-3 text-sm font-medium text-slate-600">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
                       <Icon className="h-4 w-4" />
                     </span>
                     {text}
                   </div>
                 ))}
               </div>
+              <div className="mt-4 rounded-xl bg-emerald-50 p-3 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-emerald-700 font-semibold">Starting from</p>
+                  <p className="text-lg font-black text-emerald-800">Rs {startingPrice ? startingPrice.toLocaleString() : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-emerald-700 font-semibold">Categories</p>
+                  <p className="text-lg font-black text-emerald-800">{PRIMARY_CATEGORIES.length}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-emerald-700 font-semibold">Services</p>
+                  <p className="text-lg font-black text-emerald-800">{initialServices.length}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Dynamic Step Area */}
+      <div ref={stepRef} className="mx-auto max-w-7xl scroll-mt-20 px-4 py-10 sm:px-6 lg:px-8">
+
+        {/* ── SEARCH MODE ── */}
+        {isSearchMode && (
+          <div>
+            <h2 className="mb-6 text-2xl font-black text-slate-900">
+              {searching ? "Searching…" : `Results for "${initialSearch.trim()}"`}
+            </h2>
+            {searching ? (
+              <LoadingGrid />
+            ) : searchedServices.length === 0 ? (
+              <EmptyState onReset={backToCategories} />
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {searchedServices.map((service, i) => (
+                  <ServiceCard key={`${service.id}-${i}`} service={service} onBook={() => setBookingService(service)} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── STEP 1: SELECT MAIN CATEGORY ── */}
+        {!isSearchMode && step === "category" && (
+          <div>
+            <StepHeader step={1} title="Select a Service Category" subtitle="Choose the type of work you need done" />
+            <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              {PRIMARY_CATEGORIES.map((category) => {
+                const IconComponent = CAT_ICONS[category.id] || Wrench;
+                const gradient = CAT_GRADIENTS[category.id] || "from-slate-500 to-slate-600";
+                const catalogMatch = initialCatalog.find((item) =>
+                  (CATEGORY_ALIASES[category.id] || [category.id]).includes(item.id)
+                );
+                const webImgPath = catalogMatch?.mainCategory?.webImageUrl || catalogMatch?.mainCategory?.mobileIconUrl || "";
+                const imageUrl = imgSrc(webImgPath);
+
+                return (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => selectCategory(category.id)}
+                    className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-emerald-300"
+                  >
+                    {/* Image / Gradient banner */}
+                    <div className={`relative h-28 w-full bg-gradient-to-br ${gradient} overflow-hidden`}>
+                      {imageUrl ? (
+                        <SafeImage
+                          src={imageUrl}
+                          alt={category.title}
+                          className="object-cover opacity-80 group-hover:scale-105 transition-transform duration-500"
+                          fallback={
+                            <div className="flex h-full w-full items-center justify-center">
+                              <IconComponent className="h-10 w-10 text-white/80" />
+                            </div>
+                          }
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <IconComponent className="h-10 w-10 text-white/90" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+                    </div>
+                    {/* Text */}
+                    <div className="flex flex-1 flex-col p-3">
+                      <span className="font-bold text-sm text-slate-900 leading-tight">{category.title}</span>
+                      <span className="mt-1 text-[11px] text-slate-500 leading-snug line-clamp-2">{category.subtitle}</span>
+                      <span className="mt-2 flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                        View sub-services <ArrowRight className="h-3 w-3" />
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 2: SELECT SUB-SERVICE ── */}
+        {!isSearchMode && step === "subcategory" && (
+          <div>
+            <div className="flex items-center gap-3 mb-2">
               <button
                 type="button"
-                onClick={() => servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-emerald-700"
+                onClick={backToCategories}
+                className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 transition"
               >
-                Browse all services <ArrowRight className="h-4 w-4" />
+                <ArrowLeft className="h-3.5 w-3.5" /> Back
               </button>
+              <nav className="flex items-center gap-1.5 text-xs text-slate-500">
+                <span className="font-medium text-emerald-700">{activeCategoryObj?.title}</span>
+                <span>›</span>
+                <span>Select sub-service</span>
+              </nav>
             </div>
-          </div>
-        </div>
-      </section>
+            <StepHeader step={2} title={`Choose a Sub-Service`} subtitle={`Pick the specific ${activeCategoryObj?.title?.toLowerCase() || "service"} type you need`} />
 
-      {/* LEVEL 1: Main Service Categories Grid */}
-      <section className="border-b border-slate-100 bg-white py-7">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-extrabold text-slate-900">1. Select Main Service Category</h2>
-              <p className="text-xs text-slate-500">Choose a service category to view its sub-services and pricing</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => selectCategory("all")}
-              className="flex items-center gap-1 text-sm font-bold text-emerald-700 transition hover:text-emerald-800"
-            >
-              View all <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-5 lg:grid-cols-10">
-            {PRIMARY_CATEGORIES.map((category) => {
-              const IconComponent = CAT_ICONS[category.id] || Wrench;
-              const isSelected = activeAliases.includes(category.id);
-              return (
-                <button
-                  key={category.id}
-                  type="button"
-                  onClick={() => selectCategory(category.id)}
-                  className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl border px-2 py-3 text-center transition-all hover:-translate-y-0.5 hover:shadow-md ${
-                    isSelected
-                      ? "border-emerald-600 bg-emerald-60 text-emerald-900 shadow-md ring-2 ring-emerald-500/20"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300"
-                  }`}
-                >
-                  <IconComponent className={`h-6 w-6 ${isSelected ? "text-emerald-700" : "text-emerald-600"}`} />
-                  <span className="text-[11px] font-bold leading-tight capitalize">{category.title}</span>
+            {currentSubcategories.length === 0 ? (
+              <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-10 text-center">
+                <p className="text-lg font-bold text-slate-400">No sub-services available</p>
+                <button onClick={backToCategories} className="mt-4 rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 transition">
+                  ← Choose another category
                 </button>
-              );
-            })}
-            <button
-              type="button"
-              onClick={() => selectCategory("all")}
-              className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl border px-2 py-3 transition-all hover:shadow-md ${
-                activeCategory === "all"
-                  ? "border-emerald-600 bg-emerald-60 text-emerald-900 shadow-md ring-2 ring-emerald-500/20"
-                  : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300"
-              }`}
-            >
-              <Layers className="h-6 w-6 text-emerald-600" />
-              <span className="text-[11px] font-bold">All services</span>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* LEVEL 2: Sub-services Filter Pills (Shows when a main category is selected) */}
-      {activeCategory !== "all" && (
-        <section className="border-b border-emerald-100 bg-emerald-50/70 py-5 transition-all">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-emerald-900">
-                <Tag className="h-4 w-4 text-emerald-700" /> 2. Select Sub-Service:
-              </span>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveSubcategory("all")}
-                  className={`rounded-full px-4 py-2 text-xs font-bold transition-all ${
-                    activeSubcategory === "all"
-                      ? "bg-emerald-700 text-white shadow-md"
-                      : "border border-slate-200 bg-white text-slate-700 hover:bg-emerald-100/80"
-                  }`}
-                >
-                  All {activeCategoryObj?.title || "Services"}
-                </button>
+              </div>
+            ) : (
+              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {currentSubcategories.map((subCat) => {
-                  const isSubSelected = activeSubcategory === subCat.id;
-                  const serviceCount = subCat.services?.length || 0;
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const subCatAny = subCat as any;
+                  const subImgSrc = imgSrc(
+                    subCatAny.webImageUrl ||
+                    subCatAny.webimageurl ||
+                    subCatAny.imageUrl ||
+                    subCatAny.image_url ||
+                    subCatAny.imageurl ||
+                    subCatAny.mobileIconUrl ||
+                    subCatAny.mobileiconurl
+                  );
+                  const IconComponent = CAT_ICONS[activeCategory] || Wrench;
+                  const gradient = CAT_GRADIENTS[activeCategory] || "from-emerald-500 to-teal-600";
+                  const serviceCount = subCat.services?.length ?? 0;
+
                   return (
                     <button
                       key={subCat.id}
                       type="button"
-                      onClick={() => setActiveSubcategory(subCat.id)}
-                      className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold transition-all ${
-                        isSubSelected
-                          ? "bg-emerald-700 text-white shadow-md"
-                          : "border border-slate-200 bg-white text-slate-700 hover:bg-emerald-100/80 hover:border-emerald-300"
-                      }`}
+                      onClick={() => selectSubcategory(subCat)}
+                      className="group flex items-start gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-emerald-300"
                     >
-                      <span>{subCat.title}</span>
-                      {serviceCount > 0 && (
-                        <span
-                          className={`rounded-full px-1.5 py-0.5 text-[10px] ${
-                            isSubSelected ? "bg-emerald-800 text-emerald-100" : "bg-emerald-100 text-emerald-800"
-                          }`}
-                        >
-                          {serviceCount}
-                        </span>
-                      )}
+                      {/* Thumbnail */}
+                      <div className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br ${gradient}`}>
+                        {subImgSrc ? (
+                          <SafeImage
+                            src={subImgSrc}
+                            alt={subCat.title}
+                            className="object-cover"
+                            fallback={
+                              <div className="flex h-full w-full items-center justify-center">
+                                <IconComponent className="h-8 w-8 text-white/80" />
+                              </div>
+                            }
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center">
+                            <IconComponent className="h-8 w-8 text-white/80" />
+                          </div>
+                        )}
+                      </div>
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-slate-900 leading-tight">{subCat.title}</p>
+                        {subCatAny.description && (
+                          <p className="mt-1 text-xs text-slate-500 line-clamp-2 leading-snug">{subCatAny.description}</p>
+                        )}
+                        <div className="mt-2.5 flex items-center justify-between">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                            {serviceCount} service{serviceCount !== 1 ? "s" : ""}
+                          </span>
+                          <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 group-hover:gap-1.5 transition-all">
+                            Select <ArrowRight className="h-3.5 w-3.5" />
+                          </span>
+                        </div>
+                      </div>
                     </button>
                   );
                 })}
               </div>
-            </div>
+            )}
           </div>
-        </section>
-      )}
+        )}
 
-      {/* LEVEL 3: Relevant Services & Rates Listing */}
-      <div ref={servicesRef} className="mx-auto max-w-7xl scroll-mt-36 px-4 py-10 sm:px-6 lg:px-8">
-        <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        {/* ── STEP 3: VIEW & BOOK SERVICES ── */}
+        {!isSearchMode && step === "services" && activeSubcategory && (
           <div>
-            <h2 className="text-2xl font-black text-slate-900">
-              {initialSearch.trim()
-                ? `Results for "${initialSearch.trim()}"`
-                : activeCategory !== "all"
-                ? activeSubcategory !== "all"
-                  ? currentSubcategories.find((sc) => sc.id === activeSubcategory)?.title || "Sub-Service Services"
-                  : `${activeCategoryObj?.title || "Services"} Options`
-                : "All Bookable Services"}
-            </h2>
-            <p className="text-sm text-slate-500">
-              {searching
-                ? "Searching service catalogue…"
-                : `${filtered.length} service rate${filtered.length !== 1 ? "s" : ""} available for booking.`}
-            </p>
-          </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 shadow-sm">
-            <BadgeCheck className="h-4 w-4 text-emerald-600" />
-            Clear rates & instant booking
-          </div>
-        </div>
+            <div className="flex items-center gap-3 mb-2">
+              <button
+                type="button"
+                onClick={backToSubcategories}
+                className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 transition"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Back
+              </button>
+              <nav className="flex items-center gap-1.5 text-xs text-slate-500">
+                <button onClick={backToCategories} className="font-medium text-emerald-700 hover:underline">{activeCategoryObj?.title}</button>
+                <span>›</span>
+                <span className="font-medium text-emerald-700">{activeSubcategory.title}</span>
+                <span>›</span>
+                <span>Services</span>
+              </nav>
+            </div>
 
-        {searching ? (
-          <div className="rounded-3xl border border-emerald-100 bg-white p-10 text-center shadow-sm">
-            <p className="font-bold text-emerald-700">Searching services…</p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-            <p className="text-xl font-bold text-slate-400">No services match your selection</p>
-            <p className="mt-2 text-slate-500">Try selecting a different sub-service filter above.</p>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveCategory("all");
-                setActiveSubcategory("all");
-              }}
-              className="mt-6 rounded-xl bg-emerald-600 px-6 py-3 font-bold text-white transition hover:bg-emerald-700"
-            >
-              Reset filters
-            </button>
-          </div>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((service, index) => (
-              <ServiceCardWithBooking
-                key={`${service.id}-${service.title}-${index}`}
-                service={service}
-                onBook={() => setBookingService(service)}
-              />
-            ))}
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <StepHeader step={3} title={activeSubcategory.title} subtitle={`${subcategoryServices.length} service rate${subcategoryServices.length !== 1 ? "s" : ""} available — select one to book`} />
+              </div>
+              <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 shadow-sm">
+                <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                Clear rates & instant booking
+              </div>
+            </div>
+
+            {subcategoryServices.length === 0 ? (
+              <EmptyState onReset={backToSubcategories} />
+            ) : (
+              <div className="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {subcategoryServices.map((service, i) => (
+                  <ServiceCard key={`${service.id}-${i}`} service={service} onBook={() => setBookingService(service)} />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -465,7 +697,49 @@ export function ServicesPageContent({
   );
 }
 
-function ServiceCardWithBooking({ service, onBook }: { service: ApiService; onBook: () => void }) {
+/* ── Helper Components ── */
+
+function StepHeader({ step, title, subtitle }: { step: number; title: string; subtitle: string }) {
+  return (
+    <div className="flex items-start gap-4">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white font-black text-lg shadow-md shadow-emerald-600/20">
+        {step}
+      </div>
+      <div>
+        <h2 className="text-2xl font-black text-slate-900">{title}</h2>
+        <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+function LoadingGrid() {
+  return (
+    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="h-64 animate-pulse rounded-2xl bg-slate-200" />
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({ onReset }: { onReset: () => void }) {
+  return (
+    <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-10 text-center">
+      <p className="text-xl font-bold text-slate-400">No services found</p>
+      <p className="mt-2 text-slate-500">Try selecting a different option.</p>
+      <button
+        type="button"
+        onClick={onReset}
+        className="mt-6 rounded-xl bg-emerald-600 px-6 py-3 font-bold text-white transition hover:bg-emerald-700"
+      >
+        ← Go Back
+      </button>
+    </div>
+  );
+}
+
+function ServiceCard({ service, onBook }: { service: ApiService; onBook: () => void }) {
   const src = imgSrc(service.serviceImageUrl || service.imageUrl || service.image_url);
   const originalPrice = Number(service.original_price || service.originalPrice || 0);
   const discount = originalPrice > service.price ? Math.round(((originalPrice - service.price) / originalPrice) * 100) : 0;
