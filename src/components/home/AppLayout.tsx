@@ -14,11 +14,14 @@ import { useLocation } from "@/context/LocationContext";
 import { orderCategories, orderServices } from "@/lib/service-order";
 import { AppStoreButtons } from "@/components/shared/AppStoreButtons";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
+// Always use the live public API origin for images so relative paths
+// like /uploads/... resolve correctly in all environments.
+const IMAGE_BASE = "https://api.ustaadpro.pk";
 
-function imgSrc(url?: string) {
+function imgSrc(url?: string | null) {
   if (!url) return null;
-  return url.startsWith("http") ? url : `${API_BASE}${url}`;
+  if (url.startsWith("http")) return url;
+  return `${IMAGE_BASE}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
 const CAT_ICONS: Record<string, LucideIcon> = {
@@ -40,6 +43,55 @@ const trustItems = [
   { icon: CheckCircle2, title: "Customer support", text: "We’re here to help" },
 ];
 
+/** Image chip for the "Browse by category" grid. */
+function CatImage({ src, alt, priority, className }: { src: string; alt: string; priority: boolean; className?: string }) {
+  const [error, setError] = useState(false);
+  if (error) return (
+    <div className={`flex items-center justify-center bg-emerald-50 ${className ?? "h-full w-full"}`}>
+      <Wrench className="h-10 w-10 text-emerald-300" />
+    </div>
+  );
+  return (
+    <Image
+      src={src}
+      alt={alt}
+      fill
+      sizes="(max-width:640px) 50vw, 33vw"
+      className="object-cover"
+      priority={priority}
+      onError={() => setError(true)}
+      unoptimized
+    />
+  );
+}
+
+// Service category_ids don't always match API category ids
+// (e.g. services use "plumbers" but API returns "plumber").
+const CAT_ALIASES: string[][] = [
+  ["home-services", "home-cleaning", "cleaning", "home_service", "home"],
+  ["plumber", "plumbers", "plumbing"],
+  ["painter", "painters", "painting"],
+  ["welder", "welder-fabricator", "welder_fabricator"],
+  ["ac-services", "hvac", "ac_services"],
+  ["subscriptions", "office-maintenance", "office_maintenance"],
+  ["electrician", "electrical"],
+  ["carpenter", "carpentry"],
+  ["cctv", "cameras"],
+];
+
+function findCategory(categories: ApiCategory[], id: string) {
+  const exact = categories.find((c) => c.id === id);
+  if (exact) return exact;
+  const group = CAT_ALIASES.find((g) => g.includes(id));
+  if (group) {
+    for (const alias of group) {
+      const match = categories.find((c) => c.id === alias);
+      if (match) return match;
+    }
+  }
+  return null;
+}
+
 interface AppLayoutProps {
   initialServices: ApiService[];
   categories: ApiCategory[];
@@ -54,9 +106,9 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
 
   const orderedServices = useMemo(() => orderServices(initialServices), [initialServices]);
   const categoryList = useMemo(() => {
-    const ids = [...new Set(orderedServices.map((service) => service.category_id))];
-    return orderCategories(ids.map((id) => categories.find((category) => category.id === id) ?? {
-      id, title: id.replace(/-/g, " "), subtitle: "", icon: "", tint: "#059669",
+    const ids = [...new Set(orderedServices.map((service) => service.category_id || service.categoryId).filter(Boolean) as string[])];
+    return orderCategories(ids.map((id) => findCategory(categories, id) ?? {
+      id: id || "", title: id ? id.replace(/-/g, " ") : "", subtitle: "", icon: "", tint: "#059669",
     }));
   }, [categories, orderedServices]);
 
@@ -122,26 +174,87 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
         </div>
       </section>
 
-      <section className="border-b border-slate-100 bg-white py-7">
+      <section className="border-b border-slate-100 bg-slate-50/60 py-10 sm:py-14">
         <div className="container-wide px-4 sm:px-6 lg:px-8">
-          <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-lg font-extrabold">Browse by category</h2>
-            <button type="button" onClick={() => showCategory("all")} className="flex items-center gap-1 text-sm font-bold text-emerald-700">View all <ArrowRight className="h-4 w-4" /></button>
+
+          {/* Section header */}
+          <div className="mb-6 flex items-end justify-between gap-4 sm:mb-8">
+            <div>
+              <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Browse by category</h2>
+              <p className="mt-1 text-sm text-slate-500">Choose a service to get started</p>
+            </div>
+            <button type="button" onClick={() => showCategory("all")} className="flex shrink-0 items-center gap-1 text-sm font-bold text-emerald-700 hover:text-emerald-800">
+              View all <ArrowRight className="h-4 w-4" />
+            </button>
           </div>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-10">
-            {categoryList.slice(0, 9).map((category) => {
+
+          {/* Category grid — 2 cols mobile, 3 cols tablet+ */}
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 md:gap-5 lg:gap-6">
+            {categoryList.slice(0, 9).map((category, index) => {
               const Icon = CAT_ICONS[category.id] || Wrench;
+              const imageUrl = imgSrc(
+                category.webImageUrl || category.web_image_url ||
+                category.mobileIconUrl || category.mobile_icon_url ||
+                category.imageUrl || category.image_url
+              );
+              const isActive = activeCategory === category.id;
               return (
-                <button key={category.id} type="button" onClick={() => showCategory(category.id)} className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border px-2 py-3 text-center transition hover:-translate-y-0.5 hover:shadow-md ${activeCategory === category.id ? "border-emerald-400 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700"}`}>
-                  <Icon className="h-6 w-6 text-emerald-600" />
-                  <span className="text-[11px] font-bold leading-tight capitalize">{category.title}</span>
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => showCategory(category.id)}
+                  className={`group overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition-all duration-300 hover:scale-[1.02] hover:shadow-lg ${
+                    isActive ? "border-emerald-400 ring-2 ring-emerald-300" : "border-slate-200"
+                  }`}
+                >
+                  {/* Image area */}
+                  <div className="relative h-36 w-full overflow-hidden bg-slate-100 sm:h-44 md:h-48 lg:h-52">
+                    {imageUrl ? (
+                      <CatImage src={imageUrl} alt={category.title} priority={index < 4} />
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <Icon className="h-12 w-12 text-slate-300" />
+                      </div>
+                    )}
+                    {/* Active badge */}
+                    {isActive && (
+                      <span className="absolute right-2 top-2 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                        Selected
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Title area */}
+                  <div className="p-3 sm:p-4">
+                    <h3 className={`text-sm font-bold leading-tight sm:text-base ${
+                      isActive ? "text-emerald-700" : "text-slate-900 group-hover:text-emerald-700"
+                    }`}>
+                      {category.title}
+                    </h3>
+                    {category.subtitle && (
+                      <p className="mt-0.5 truncate text-xs text-slate-500">{category.subtitle}</p>
+                    )}
+                  </div>
                 </button>
               );
             })}
-            <button type="button" onClick={() => showCategory("all")} className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-3 transition hover:shadow-md">
-              <Layers3 className="h-6 w-6 text-emerald-600" /><span className="text-[11px] font-bold">More</span>
+
+            {/* View all card */}
+            <button
+              type="button"
+              onClick={() => showCategory("all")}
+              className="group flex flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-sm transition-all duration-300 hover:border-emerald-400 hover:shadow-md"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 transition group-hover:bg-emerald-100">
+                <Layers3 className="h-6 w-6 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-700 group-hover:text-emerald-700">View all</p>
+                <p className="text-xs text-slate-400">See everything</p>
+              </div>
             </button>
           </div>
+
         </div>
       </section>
 
@@ -237,7 +350,7 @@ function FeaturedCard({ service }: { service: ApiService }) {
   return (
     <div className="absolute right-0 top-24 z-20 w-72 overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-2xl backdrop-blur xl:w-80">
       {imgSrc(service.image_url || service.imageUrl) && <div className="relative h-28"><Image src={imgSrc(service.image_url || service.imageUrl)!} alt="" fill unoptimized className="object-cover" sizes="320px" /></div>}
-      <div className="p-5"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">Featured service</span><h2 className="mt-3 line-clamp-1 text-lg font-black">{service.title}</h2><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-4 flex items-end justify-between"><div><span className="block text-[10px] text-slate-400">Starting from</span><strong className="text-xl">Rs {service.price.toLocaleString()}</strong></div><Link href={`/services/${service.id}`} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div><div className="mt-4 flex items-center gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span className="flex items-center gap-1"><Star className={`h-3.5 w-3.5 ${service.reviews > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {service.reviews > 0 ? `${service.rating.toFixed(1)} (${service.reviews})` : "0.0 · No reviews"}</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div></div>
+      <div className="p-5"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">Featured service</span><h2 className="mt-3 line-clamp-1 text-lg font-black">{service.title}</h2><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-4 flex items-end justify-between"><div><span className="block text-[10px] text-slate-400">Starting from</span><strong className="text-xl">Rs {service.price.toLocaleString()}</strong></div><Link href={`/services/${service.id}`} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div><div className="mt-4 flex items-center gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span className="flex items-center gap-1"><Star className={`h-3.5 w-3.5 ${Number(service.reviews || 0) > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {Number(service.reviews || 0) > 0 ? `${Number(service.rating || 0).toFixed(1)} (${service.reviews})` : "0.0 · No reviews"}</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div></div>
     </div>
   );
 }
@@ -251,7 +364,7 @@ function ServiceCard({ service }: { service: ApiService }) {
       <Link href={`/services/${service.id}`} className="relative block h-44 overflow-hidden bg-slate-100">
         {source ? <Image src={source} alt={service.title} fill unoptimized className="object-cover transition duration-500 group-hover:scale-105" sizes="(max-width:640px) 100vw,(max-width:1024px) 50vw,25vw" /> : <div className="flex h-full items-center justify-center"><Wrench className="h-10 w-10 text-slate-300" /></div>}
         <div className="absolute left-3 top-3 flex gap-2">{service.badge && <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white">{service.badge}</span>}{discount > 0 && <span className="rounded-full bg-rose-500 px-2.5 py-1 text-[10px] font-bold text-white">{discount}% OFF</span>}</div>
-        <span className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold"><Star className={`h-3 w-3 ${service.reviews > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {service.reviews > 0 ? `${service.rating.toFixed(1)} (${service.reviews})` : "0.0 · No reviews"}</span>
+        <span className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold"><Star className={`h-3 w-3 ${Number(service.reviews || 0) > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {Number(service.reviews || 0) > 0 ? `${Number(service.rating || 0).toFixed(1)} (${service.reviews})` : "0.0 · No reviews"}</span>
       </Link>
       <div className="flex flex-1 flex-col p-4"><Link href={`/services/${service.id}`}><h3 className="line-clamp-1 font-extrabold group-hover:text-emerald-700">{service.title}</h3></Link><p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-3 flex items-center gap-3 text-[10px] font-medium text-slate-500"><span className="flex items-center gap-1 text-emerald-700"><BadgeCheck className="h-3.5 w-3.5" /> Professional</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div><div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-3"><div><span className="block text-[9px] text-slate-400">Starting from</span><strong>Rs {service.price.toLocaleString()}</strong>{discount > 0 && <span className="ml-1 text-[10px] text-slate-400 line-through">Rs {original.toLocaleString()}</span>}</div><Link href={`/services/${service.id}`} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-emerald-700">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div></div>
     </article>
