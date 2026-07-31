@@ -1,6 +1,7 @@
 "use client";
 
-import { X, Mail, Phone, User, LogOut, CheckCircle2, ShieldAlert } from "lucide-react";
+import Link from "next/link";
+import { X, Mail, Phone, LogOut, CheckCircle2, Wallet, CalendarDays, MessageCircle, ChevronRight } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 interface UserProfileModalProps {
@@ -48,6 +49,15 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
 
           {/* Details list */}
           <div className="py-6 space-y-4">
+            <Link href="/wallet" onClick={onClose} className="flex items-center gap-3 rounded-2xl bg-emerald-50 p-3 transition hover:bg-emerald-100">
+              <div className="h-9 w-9 bg-white rounded-xl flex items-center justify-center text-emerald-600 shrink-0">
+                <Wallet className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Wallet Balance</p>
+                <p className="text-sm font-bold text-emerald-900">PKR {Number(user.walletBalance || 0).toLocaleString("en-PK")}</p>
+              </div>
+            </Link>
             <div className="flex items-center gap-3">
               <div className="h-9 w-9 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 shrink-0">
                 <Mail className="h-4 w-4" />
@@ -71,6 +81,14 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
 
           {/* Actions */}
           <div className="space-y-2 pt-2 border-t border-slate-100">
+            <Link href="/track-booking" onClick={onClose} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-600"><CalendarDays className="h-4 w-4" /></span>
+              <span className="flex-1 text-left">My Bookings</span><ChevronRight className="h-4 w-4 text-slate-300" />
+            </Link>
+            <Link href="/contact" onClick={onClose} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-amber-50 text-amber-600"><MessageCircle className="h-4 w-4" /></span>
+              <span className="flex-1 text-left">Contact Us</span><ChevronRight className="h-4 w-4 text-slate-300" />
+            </Link>
             <button
               onClick={() => {
                 logout();

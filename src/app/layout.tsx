@@ -12,6 +12,8 @@ import { OtpModal } from "@/components/auth/OtpModal";
 import { WhatsAppBot } from "@/components/shared/WhatsAppBot";
 import { CartProvider } from "@/context/CartContext";
 import { ToastProvider } from "@/context/ToastContext";
+import { ServiceCartProvider } from "@/context/ServiceCartContext";
+import FloatingServiceCart from "@/components/booking/FloatingServiceCart";
 import { siteConfig } from "@/lib/constants";
 import "./globals.css";
 
@@ -109,15 +111,18 @@ export default function RootLayout({
         <ToastProvider>
           <AuthProvider>
             <CartProvider>
-              <LocationProvider>
-                <Navbar />
-                <LocationModal />
-                <AuthModal />
-                <OtpModal />
-                <MainWrapper>{children}</MainWrapper>
-                <WhatsAppBot />
-                <Footer />
-              </LocationProvider>
+              <ServiceCartProvider>
+                <LocationProvider>
+                  <Navbar />
+                  <LocationModal />
+                  <AuthModal />
+                  <OtpModal />
+                  <MainWrapper>{children}</MainWrapper>
+                  <FloatingServiceCart />
+                  <WhatsAppBot />
+                  <Footer />
+                </LocationProvider>
+              </ServiceCartProvider>
             </CartProvider>
           </AuthProvider>
         </ToastProvider>

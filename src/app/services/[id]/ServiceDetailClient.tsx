@@ -20,17 +20,50 @@ import {
   SlidersHorizontal,
   Minus,
   Plus,
+  Wallet,
+  Info,
 } from "lucide-react";
 import type { ApiReview, ApiService, WorkPrice } from "@/lib/api-types";
 import BookingModal from "@/components/booking/BookingModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StickyCheckoutBar } from "@/components/shared/StickyCheckoutBar";
+import { useServiceCart } from "@/context/ServiceCartContext";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 
 function imgSrc(url: string | undefined | null) {
   if (!url) return null;
   return url.startsWith("http") ? url : `${API_BASE.replace(/\/$/, "")}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
+function normalizedText(value?: string | null) {
+  return (value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function isPricingUnitText(value: string, unitText: string) {
+  const detail = normalizedText(value);
+  const unit = normalizedText(unitText);
+  return Boolean(detail) && (
+    detail === unit ||
+    /^per\b/.test(detail) ||
+    /\bvisit\b.*\binspection\b|\binspection\b.*\bvisit\b/.test(detail)
+  );
+}
+
+function pricingExplanation(unitText: string, price: number) {
+  const unit = unitText.trim();
+  const normalized = normalizedText(unit);
+  const formattedPrice = `Rs ${price.toLocaleString("en-PK")}`;
+  if (/\bvisit\b|\binspection\b/.test(normalized)) {
+    return `${formattedPrice} covers the professional's visit and inspection. Any repair, labour, parts, or materials needed will be assessed on-site and quoted for your approval before work begins.`;
+  }
+  if (/^per\b/.test(normalized)) {
+    const subject = unit.replace(/^per\s+/i, "").trim() || "item";
+    return `The displayed rate is ${formattedPrice} for each ${subject}. Your estimated service total changes with the quantity selected; any additional work or materials will be confirmed before work begins.`;
+  }
+  return unit
+    ? `The displayed rate is ${formattedPrice} ${unit.toLowerCase()}. Any additional work or materials will be confirmed before work begins.`
+    : `The service starts from ${formattedPrice}. The professional will confirm any additional work or material cost before starting.`;
 }
 
 function StarRating({ rating }: { rating: number }) {
@@ -48,6 +81,7 @@ function StarRating({ rating }: { rating: number }) {
 
 export function ServiceDetailClient({ service, initialReviews }: { service: ApiService; initialReviews: ApiReview[] }) {
   const router = useRouter();
+  const { addService } = useServiceCart();
   const [selectedWork, setSelectedWork] = useState<WorkPrice | null>(
     service.workPrices?.[0] ?? null,
   );
@@ -55,6 +89,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
   const [quantity, setQuantity] = useState(1);
   const [showStickyCheckout, setShowStickyCheckout] = useState(false);
   const [reviewsOpen, setReviewsOpen] = useState(false);
+  const [serviceInfoOpen, setServiceInfoOpen] = useState(false);
   const [reviewSnapshot, setReviewSnapshot] = useState(initialReviews);
   const bookingButtonRef = useRef<HTMLButtonElement>(null);
   const reviewsRef = useRef<HTMLDivElement>(null);
@@ -67,7 +102,17 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
   );
   const bookingPrice = selectedWork?.price ?? service.price;
   const unitText = service.unitDescription || service.serviceType || service.service_type || "";
-  const allowsQuantity = /\bper\b/i.test(selectedWork?.description || unitText || service.description || "");
+  const rawDescription = service.detailDescription || service.detail_description || service.description || "";
+  const displayDescription = isPricingUnitText(rawDescription, unitText) ? "" : rawDescription;
+  const meaningfulDetails = (service.details || []).filter((detail) => !isPricingUnitText(detail, unitText));
+  const howItWorks = meaningfulDetails.length > 0 ? meaningfulDetails : [
+    "Choose your preferred date, time, and service address.",
+    "Choose the Rs 200 booking advance or pay the listed charge in full, then upload the screenshot.",
+    "Admin verifies the payment and confirms the booking; you will be notified shortly.",
+    "The professional visits your home, completes the approved work, and adjusts the Rs 200 advance in the final bill.",
+  ];
+  const quantityUnitText = selectedWork?.description || unitText || service.description || "";
+  const allowsQuantity = /^\s*per\b/i.test(quantityUnitText);
   const totalPrice = bookingPrice * (allowsQuantity ? quantity : 1);
   const liveRating = reviewSnapshot.length
     ? reviewSnapshot.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviewSnapshot.length
@@ -105,13 +150,33 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
   const addWorkToBooking = (work: WorkPrice, workQuantity = 1) => {
     selectWork(work);
     setQuantity(workQuantity);
-    setIsBookingOpen(true);
+    addService({
+      id: service.id,
+      title: service.title,
+      price: work.price,
+      quantity: /^\s*per\b/i.test(work.description || "") ? workQuantity : 1,
+      imageUrl: imgSrc(work.imageUrl || work.image_url) || displayImage,
+      selectedWorkPriceId: Number(work.id),
+      selectedWorkTitle: work.title,
+      unitDescription: work.description || unitText,
+    });
   };
 
   const changeWorkQuantity = (work: WorkPrice, nextQuantity: number) => {
     if (selectedWork?.id !== work.id) selectWork(work);
     setQuantity(Math.max(1, Math.min(10, nextQuantity)));
   };
+
+  const addCurrentServiceToCart = () => addService({
+    id: service.id,
+    title: service.title,
+    price: bookingPrice,
+    quantity: allowsQuantity ? quantity : 1,
+    imageUrl: displayImage,
+    selectedWorkPriceId: selectedWork?.id ? Number(selectedWork.id) : undefined,
+    selectedWorkTitle: selectedWork?.title || undefined,
+    unitDescription: unitText,
+  });
 
   return (
     <>
@@ -138,7 +203,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
             {/* LEFT: image + work prices */}
             <div className="lg:col-span-3 space-y-6">
               {/* Hero image */}
-              <div className="relative aspect-[4/3] sm:aspect-[16/9] rounded-2xl sm:rounded-3xl overflow-hidden bg-slate-100 shadow-md">
+              <div className="relative hidden aspect-[16/9] overflow-hidden rounded-3xl bg-slate-100 shadow-md sm:block">
                 {displayImage ? (
                   <Image
                     src={displayImage}
@@ -324,26 +389,50 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                 </div>
               )}
 
-              {/* Details checklist */}
-              {service.details && service.details.length > 0 && (
-                <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm">
-                  <h2 className="text-lg font-bold text-slate-900 mb-4">
-                    How it works
-                  </h2>
-                  <ol className="space-y-3">
-                    {service.details.map((d, i) => (
-                      <li key={i} className="flex items-start gap-3">
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold shrink-0 mt-0.5">
-                          {i + 1}
-                        </div>
-                        <span className="text-sm text-slate-600 leading-relaxed">
-                          {d}
-                        </span>
-                      </li>
-                    ))}
-                  </ol>
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-base font-bold text-slate-950">Before you book</h2>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">
+                      {pricingExplanation(unitText, bookingPrice)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setServiceInfoOpen((current) => !current)}
+                    aria-expanded={serviceInfoOpen}
+                    aria-label={serviceInfoOpen ? "Hide booking information" : "Show booking information"}
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 bg-slate-50 text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50"
+                  >
+                    <Info className="h-5 w-5" />
+                  </button>
                 </div>
-              )}
+
+                <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
+                  {["Choose date, time and address", "Pay Rs 200 or pay in full", "Upload receipt for verification"].map((item, index) => (
+                    <div key={item} className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-xs font-semibold text-slate-700">
+                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-100 text-[10px] font-black text-emerald-700">{index + 1}</span>
+                      {item}
+                    </div>
+                  ))}
+                </div>
+
+                {serviceInfoOpen && (
+                  <div className="mt-5 border-t border-slate-200 pt-5">
+                    <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                      <Wallet className="h-4 w-4 text-emerald-600" /> Payment and booking details
+                    </h3>
+                    <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+                      {howItWorks.slice(2).map((item) => (
+                        <li key={item} className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />{item}</li>
+                      ))}
+                      <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />The verified Rs 200 advance is deducted from the listed charge. Paying in full leaves no balance against that charge.</li>
+                      <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />Any approved inspection follow-up, labour, repair, parts, or materials can be paid after the quote.</li>
+                      <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />Eligible cancelled-booking payments are credited to your UstaadPro wallet.</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
 
               {/* Includes / Excludes */}
               {((service.includes?.length ?? 0) > 0 ||
@@ -390,10 +479,17 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
             </div>
 
             {/* RIGHT: sticky booking card */}
-            <div className="lg:col-span-2 mt-6 lg:mt-0">
+            <div className="order-first lg:order-none lg:col-span-2 mt-0">
               <div className="lg:sticky lg:top-32 space-y-4">
                 {/* Booking card */}
                 <div className="bg-white rounded-3xl border border-slate-100 shadow-lg p-6">
+                  <div className="relative mb-5 aspect-[16/9] overflow-hidden rounded-2xl bg-slate-100 lg:hidden">
+                    {displayImage ? (
+                      <Image src={displayImage} alt={service.title} fill unoptimized className="object-cover" sizes="100vw" priority />
+                    ) : (
+                      <div className="absolute inset-0 grid place-items-center bg-gradient-to-br from-slate-100 to-slate-200"><Layers className="h-12 w-12 text-slate-300" /></div>
+                    )}
+                  </div>
                   {/* Title + rating */}
                   <div className="mb-4">
                     {service.badge && (
@@ -417,11 +513,11 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                   </div>
 
                   {/* Description */}
-                  <p className="text-sm text-slate-600 leading-relaxed mb-5">
-                    {service.detailDescription ||
-                      service.detail_description ||
-                      service.description}
-                  </p>
+                  {displayDescription && (
+                    <p className="text-sm text-slate-600 leading-relaxed mb-5">
+                      {displayDescription}
+                    </p>
+                  )}
 
                   {/* Pricing */}
                   <div className="bg-slate-50 rounded-2xl p-4 mb-5">
@@ -433,10 +529,15 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                         <p className="font-semibold text-slate-800 text-sm mb-1">
                           {selectedWork.title}
                         </p>
-                        <div className="flex items-baseline gap-2">
+                        <div className="flex flex-wrap items-baseline gap-2">
                           <span className="text-2xl sm:text-3xl font-black text-slate-900">
-                            Rs {selectedWork.price.toLocaleString()}
+                            Rs {totalPrice.toLocaleString()}
                           </span>
+                          {allowsQuantity && quantity > 1 && (
+                            <span className="text-xs font-bold text-emerald-700">
+                              {quantity} × Rs {selectedWork.price.toLocaleString()}
+                            </span>
+                          )}
                         </div>
                         {selectedWork.description && (
                           <p className="mt-2 inline-flex rounded-lg border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-sm font-bold text-emerald-800">
@@ -476,21 +577,61 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                         )}
                       </>
                     ) : (
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-slate-900">
-                          Rs {service.price.toLocaleString()}
-                        </span>
-                        {originalPrice > service.price && (
-                          <span className="text-sm text-slate-400 line-through">
-                            Rs {originalPrice.toLocaleString()}
+                      <>
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <span className="text-3xl font-black text-slate-900">
+                            Rs {totalPrice.toLocaleString()}
                           </span>
+                          {allowsQuantity && quantity > 1 && (
+                            <span className="text-xs font-bold text-emerald-700">
+                              {quantity} × Rs {service.price.toLocaleString()}
+                            </span>
+                          )}
+                          {originalPrice > service.price && (
+                            <span className="text-sm text-slate-400 line-through">
+                              Rs {(originalPrice * (allowsQuantity ? quantity : 1)).toLocaleString()}
+                            </span>
+                          )}
+                          {discount > 0 && (
+                            <span className="text-xs bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded-full">
+                              {discount}% off
+                            </span>
+                          )}
+                        </div>
+                        {allowsQuantity && (
+                          <div className="mt-4 flex items-center justify-between gap-4 border-t border-slate-200 pt-4">
+                            <div>
+                              <p className="text-xs font-bold text-slate-700">Quantity</p>
+                              <p className="text-[11px] text-slate-400">
+                                {unitText || "Per item"} · select up to 10
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 items-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                              <button
+                                type="button"
+                                onClick={() => setQuantity((current) => Math.max(1, current - 1))}
+                                disabled={quantity <= 1}
+                                className="grid h-10 w-10 place-items-center text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+                                aria-label="Decrease service quantity"
+                              >
+                                <Minus className="h-4 w-4" />
+                              </button>
+                              <span className="grid h-10 min-w-10 place-items-center border-x border-slate-200 text-sm font-black text-slate-900">
+                                {quantity}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setQuantity((current) => Math.min(10, current + 1))}
+                                disabled={quantity >= 10}
+                                className="grid h-10 w-10 place-items-center text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+                                aria-label="Increase service quantity"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
                         )}
-                        {discount > 0 && (
-                          <span className="text-xs bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded-full">
-                            {discount}% off
-                          </span>
-                        )}
-                      </div>
+                      </>
                     )}
                   </div>
 
@@ -519,6 +660,14 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                   >
                     <ShoppingBag className="h-5 w-5" />
                     Book Now
+                  </button>
+                  <button
+                    type="button"
+                    onClick={addCurrentServiceToCart}
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-emerald-600 bg-white py-3.5 text-sm font-bold text-emerald-700 transition hover:bg-emerald-50"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add to service cart
                   </button>
                   <a
                     href="https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%2C%20I%20want%20to%20book%20a%20service."
@@ -578,6 +727,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
             quantity: allowsQuantity ? quantity : 1,
             selectedWorkPriceId: selectedWork?.id ? Number(selectedWork.id) : undefined,
             selectedWorkTitle: selectedWork?.title || undefined,
+            unitDescription: unitText,
           }}
         />
 

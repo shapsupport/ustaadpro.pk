@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 export function MainWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   return (
-    <main className="flex-1 pt-20">
+    <main className="min-h-[calc(100dvh-5rem)] flex-1 pt-20">
       {children}
     </main>
   );

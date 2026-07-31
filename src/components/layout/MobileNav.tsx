@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { navItems, quickAccessMenu } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { LogOut, LogIn, ShoppingCart } from "lucide-react";
+import { LogOut, LogIn, ShoppingCart, WalletCards } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -80,6 +80,10 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
                 </p>
               </div>
 
+              <Link href="/wallet" onClick={onClose} aria-label="Open wallet and rewards" title="Wallet & Rewards" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 transition hover:bg-emerald-100">
+                <WalletCards className="h-5 w-5" />
+              </Link>
+
               {/* Cart button */}
               <button
                 type="button"
@@ -99,17 +103,20 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
               </button>
             </div>
           ) : (
-            <div className="mb-6">
+            <div className="mb-6 flex gap-2">
               <button
                 onClick={() => {
                   onClose();
                   setAuthModalMode("login");
                 }}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white transition hover:bg-emerald-700"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white transition hover:bg-emerald-700"
               >
                 <LogIn className="h-4 w-4" />
                 Continue with account
               </button>
+              <Link href="/wallet" onClick={onClose} aria-label="View wallet benefits" title="Wallet & Rewards" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700">
+                <WalletCards className="h-5 w-5" />
+              </Link>
             </div>
           )}
 

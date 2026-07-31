@@ -1,4 +1,5 @@
 import axios from "axios";
+import { ensureAddress } from "./addressService";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:5000";
 
@@ -30,6 +31,9 @@ export interface CheckoutShopPayload {
   address: string;
   paymentMethod?: string;
   useRewardPoints?: boolean;
+  addressId?: number;
+  addressLat?: number;
+  addressLng?: number;
 }
 
 export interface ShopOrder {
@@ -63,11 +67,17 @@ export async function checkoutShopOrder(
   payload: CheckoutShopPayload
 ): Promise<CheckoutShopResponse> {
   try {
+    const addressId = payload.addressId ?? (await ensureAddress({
+      address: payload.address,
+      lat: payload.addressLat,
+      lng: payload.addressLng,
+    })).id;
     const res = await shopClient.post<CheckoutShopResponse>("/shop/checkout", {
       items: payload.items,
-      address: payload.address,
-      paymentMethod: payload.paymentMethod ?? "Cash on Delivery",
-      useRewardPoints: payload.useRewardPoints ?? false,
+      addressId,
+      paymentMethod: (payload.paymentMethod ?? "cod").toLowerCase().includes("cash")
+        ? "cod"
+        : payload.paymentMethod,
     });
     return res.data;
   } catch (err: unknown) {

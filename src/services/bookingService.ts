@@ -41,6 +41,10 @@ export interface CreateBookingPayload {
   tax?: number;
   recurringOccurrences?: number;
   receiptDataUrl?: string;
+  addressId?: number;
+  addressLat?: number;
+  addressLng?: number;
+  useRewardPoints?: boolean;
 }
 
 export interface BookingResponseOrder {
@@ -63,82 +67,54 @@ export interface BookingResponse {
   user?: any;
 }
 
-function formatBookedForDate(dateStr: string, timeStr: string, recurringOccurrences: number = 1): string {
-  if (!dateStr) return "Today, 6:00 PM";
-  try {
-    const parts = dateStr.split("-").map(Number);
-    const timeParts = (timeStr || "10:00").split(":").map(Number);
-    if (parts.length === 3) {
-      const year = parts[0];
-      const month = parts[1] - 1;
-      const day = parts[2];
-      const hours = timeParts[0] || 10;
-      const minutes = timeParts[1] || 0;
+function normalizeServicePayment(method?: string): "Rs 200 Advance" | "Full Payment in Advance" {
+  return method === "Full Payment in Advance" ? method : "Rs 200 Advance";
+}
 
-      const d = new Date(year, month, day, hours, minutes);
-
-      const formattedDate = d.toLocaleDateString("en-PK", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
-
-      const formattedTime = d.toLocaleTimeString("en-PK", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      });
-
-      const baseString = `${formattedDate} at ${formattedTime}`;
-      if (recurringOccurrences > 1) {
-        return `${baseString} (${recurringOccurrences} Days Recurring Service)`;
-      }
-      return baseString;
-    }
-  } catch {
-    // fallback
-  }
-  return `${dateStr} ${timeStr || ""}`.trim();
+function formatBookedFor(date: string, time: string): string {
+  const value = new Date(`${date}T${time || "10:00"}:00+05:00`);
+  if (Number.isNaN(value.getTime())) return `${date} ${time}`.trim();
+  const datePart = value.toLocaleDateString("en-US", {
+    timeZone: "Asia/Karachi",
+    weekday: "short",
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+  const timePart = value.toLocaleTimeString("en-US", {
+    timeZone: "Asia/Karachi",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return `${datePart.toUpperCase()} - ${timePart}`;
 }
 
 export async function createBooking(data: CreateBookingPayload): Promise<BookingResponse> {
-  const recurringOccurrences = Math.max(1, Number(data.recurringOccurrences || 1));
-  const bookedFor = formatBookedForDate(data.date, data.time, recurringOccurrences);
-
-  const cart = data.items.map((item) => {
-    const serviceObj: any = {
-      id: item.serviceId,
-      title: item.serviceTitle || "Selected Service",
-      price: item.servicePrice || 0,
-    };
-
-    const hasWorkId = Boolean(item.workPriceId && Number(item.workPriceId) > 0);
-    if (hasWorkId) {
-      serviceObj.selectedWorkPriceId = Number(item.workPriceId);
-    }
-    if (item.workTitle) {
-      serviceObj.selectedWorkTitle = item.workTitle;
-    }
-
-    return {
-      service: serviceObj,
-      quantity: item.quantity || 1,
-      ...(hasWorkId ? { workPriceId: Number(item.workPriceId) } : {}),
-    };
-  });
+  const firstItem = data.items[0];
+  if (!firstItem?.serviceId) throw new Error("Please select a service before checkout.");
 
   const payload = {
-    cart,
-    bookedFor,
-    paymentMethod: data.paymentMethod || "Cash After Work Done",
+    cart: data.items.map((item) => ({
+      service: {
+        id: item.serviceId,
+        title: item.serviceTitle || "Selected Service",
+        price: Number(item.servicePrice || 0),
+        ...(item.workPriceId ? { selectedWorkPriceId: item.workPriceId } : {}),
+        ...(item.workTitle ? { selectedWorkTitle: item.workTitle } : {}),
+      },
+      quantity: Math.max(1, Number(item.quantity || 1)),
+      unitPrice: Number(item.servicePrice || 0),
+      amount: Number(item.servicePrice || 0) * Math.max(1, Number(item.quantity || 1)),
+    })),
+    bookedFor: formatBookedFor(data.date, data.time),
+    paymentMethod: normalizeServicePayment(data.paymentMethod),
     address: data.address,
     specialInstructions: data.requirements || "",
-    inspectionFee: data.inspectionFee || 0,
-    tax: data.tax || 0,
-    recurringOccurrences,
-    useRewardPoints: false,
-    customerName: data.name,
-    customerPhone: data.phone,
+    recurringOccurrences: Math.max(1, Number(data.recurringOccurrences || 1)),
+    useRewardPoints: Boolean(data.useRewardPoints),
+    inspectionFee: 0,
+    tax: 0,
   };
 
   try {
@@ -146,31 +122,6 @@ export async function createBooking(data: CreateBookingPayload): Promise<Booking
     return res.data;
   } catch (err: any) {
     const serverMessage = err.response?.data?.message || err.response?.data?.error || err.message || "";
-
-    // If backend reports work price ID not found in DB, retry without workPriceId
-    if (serverMessage.includes("work price") || serverMessage.includes("Selected service work price")) {
-      const sanitizedCart = payload.cart.map((cartItem) => {
-        const copyService = { ...cartItem.service };
-        delete copyService.selectedWorkPriceId;
-        delete copyService.workPriceId;
-        const newCartItem = { ...cartItem, service: copyService };
-        delete (newCartItem as any).workPriceId;
-        delete (newCartItem as any).serviceWorkPriceId;
-        return newCartItem;
-      });
-
-      try {
-        const retryRes = await bookingClient.post<BookingResponse>("/orders/checkout", {
-          ...payload,
-          cart: sanitizedCart,
-        });
-        return retryRes.data;
-      } catch (retryErr: any) {
-        const retryMsg = retryErr.response?.data?.message || retryErr.response?.data?.error || retryErr.message;
-        if (retryMsg) throw new Error(retryMsg);
-        throw retryErr;
-      }
-    }
 
     // Handle stale user token (foreign key constraint failure)
     if (serverMessage.includes("foreign key constraint") || serverMessage.includes("orders_user_id_fkey")) {
@@ -191,14 +142,12 @@ export async function createBooking(data: CreateBookingPayload): Promise<Booking
 export async function uploadPaymentReceipt(
   orderId: string,
   dataUrl: string,
-  amount: number = 0
+  amount: number,
+  filename = "payment-receipt.jpg"
 ): Promise<{ message: string; receiptUrl: string }> {
   const res = await bookingClient.post<{ message: string; receiptUrl: string }>(
     `/orders/${orderId}/payment-receipt`,
-    {
-      dataUrl,
-      amount,
-    }
+    { dataUrl, filename, amount }
   );
   return res.data;
 }

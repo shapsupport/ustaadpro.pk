@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { type ChangeEvent, useCallback, useEffect, useState } from "react";
-import { AlertCircle, ArrowRight, CalendarDays, Camera, ChevronDown, MapPin, MessageSquareWarning, Package, RefreshCw, ShoppingBag, Star, UserRound, Wrench, XCircle } from "lucide-react";
+import { AlertCircle, ArrowRight, CalendarDays, Camera, ChevronDown, Clock3, CreditCard, MapPin, MessageSquareWarning, Package, ReceiptText, RefreshCw, ShoppingBag, Star, UserRound, WalletCards, Wrench, XCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,6 +17,12 @@ type Booking = {
   paymentMethod: string; status: string; createdAt: string; userEmail?: string; address?: string;
   preferredTime?: string; notes?: string; kind?: "service" | "shop";
   items?: OrderItem[];
+  paymentReceipt?: { amount?: number; status?: string; paymentStage?: string; receiptUrl?: string };
+  paymentReceipts?: Array<{ amount?: number; status?: string; paymentStage?: string; receiptUrl?: string }>;
+  unitDescription?: string;
+  pendingPayment?: number;
+  apiTotal?: number;
+  paidAmount?: number;
 };
 
 type OrderItem = {
@@ -40,33 +46,46 @@ function listFrom(payload: unknown, kind: "service" | "shop"): Booking[] {
   const object = payload as { orders?: Record<string, unknown>[]; data?: Record<string, unknown>[] };
   const rows = Array.isArray(payload) ? payload : object?.orders || object?.data || [];
   return (rows as Record<string, unknown>[]).map((row) => {
-    const rawItems = Array.isArray(row.items) ? row.items as Record<string, unknown>[] : [];
+    const rawItems = Array.isArray(row.items) ? row.items as Record<string, unknown>[] : Array.isArray(row.cart) ? row.cart as Record<string, unknown>[] : [];
     const items = rawItems.map((item) => {
       const product = (item.product || {}) as Record<string, unknown>;
+      const serviceItem = (item.service || {}) as Record<string, unknown>;
       return {
         productId: String(item.productId || product.id || ""),
-        title: String(item.title || product.title || "Product"),
+        title: String(item.title || product.title || serviceItem.title || "Service"),
         quantity: Number(item.quantity || 1),
-        price: Number(item.price || product.price || 0),
+        price: Number(item.unitPrice || item.unit_price || item.price || product.price || serviceItem.price || 0),
         imageUrl: String(item.imageUrl || product.imageUrl || ""),
       };
     });
-    const address = typeof row.address === "string" ? row.address : ((row.address || {}) as { label?: string; fullAddress?: string }).fullAddress || ((row.address || {}) as { label?: string }).label || "";
+    const address = typeof row.address === "string" ? row.address : ((row.address || {}) as { address?: string; label?: string; fullAddress?: string }).address || ((row.address || {}) as { label?: string; fullAddress?: string }).fullAddress || ((row.address || {}) as { label?: string }).label || "";
     const firstItem = items[0];
+    const service = (row.service || {}) as Record<string, unknown>;
+    const listedItemsTotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const singleReceipt = (row.paymentReceipt || row.payment_receipt) as Booking["paymentReceipt"];
+    const receiptList = Array.isArray(row.paymentReceipts) ? row.paymentReceipts as Booking["paymentReceipts"] : Array.isArray(row.payment_receipts) ? row.payment_receipts as Booking["paymentReceipts"] : singleReceipt ? [singleReceipt] : [];
+    const receiptsPaid = (receiptList || []).filter((receipt) => receipt.status !== "rejected").reduce((sum, receipt) => sum + Number(receipt.amount || 0), 0);
+    const apiTotal = Number(row.totalAmount || row.total || row.grandTotal || listedItemsTotal || 0);
     return {
       ...row,
       id: String(row.id || row.orderId || ""),
       kind,
-      serviceId: String(row.serviceId || ((row.service || {}) as { id?: string }).id || ""),
-      serviceTitle: String(row.serviceTitle || ((row.service || {}) as { title?: string }).title || (kind === "shop" ? (items.length > 1 ? `${items.length} products` : firstItem?.title || "Shop order") : "Service booking")),
+      serviceId: String(row.serviceId || service.id || ""),
+      serviceTitle: String(row.serviceTitle || service.title || (kind === "shop" ? (items.length > 1 ? `${items.length} products` : firstItem?.title || "Shop order") : "Service booking")),
       workTitle: String(row.workTitle || ""),
-      servicePrice: Number(row.servicePrice || row.totalAmount || row.total || row.grandTotal || items.reduce((sum, item) => sum + item.price * item.quantity, 0)),
-      paymentMethod: String(row.paymentMethod || "Not specified"),
+      servicePrice: Number(row.servicePrice || (kind === "service" && listedItemsTotal > 0 ? listedItemsTotal : 0) || row.totalAmount || row.total || row.grandTotal || listedItemsTotal),
+      paymentMethod: String(row.paymentMethod || row.payment_method || "Not specified"),
       status: String(row.status || (kind === "shop" ? "placed" : "confirmed")),
       createdAt: String(row.createdAt || row.created_at || new Date().toISOString()),
       preferredTime: String(row.preferredTime || row.bookedFor || row.scheduledAt || ""),
       address,
       items,
+      paymentReceipt: singleReceipt || receiptList?.[receiptList.length - 1],
+      paymentReceipts: receiptList,
+      unitDescription: String(row.unitDescription || row.unit_description || row.serviceType || row.service_type || service.unitDescription || service.unit_description || service.serviceType || service.service_type || service.description || ""),
+      pendingPayment: Number(row.pendingPayment || row.pending_payment || row.remainingAmount || row.remaining_amount || row.amountPayable || row.amount_payable || 0),
+      apiTotal,
+      paidAmount: Number(row.paidAmount || row.paid_amount || row.amountPaid || row.amount_paid || receiptsPaid),
     } as Booking;
   }).filter((item) => item.id);
 }
@@ -126,54 +145,113 @@ export default function TrackBookingPage() {
   return (
     <div className="mx-auto max-w-6xl px-3 sm:px-6 lg:px-8 py-6 sm:py-10">
       <div className="mb-6 sm:mb-8 flex flex-col gap-3 sm:gap-4 rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm sm:flex-row sm:items-end sm:justify-between">        <div><p className="text-sm font-semibold uppercase tracking-[.25em] text-emerald-600">My bookings</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Track every order in one place</h1><p className="mt-2 text-sm text-slate-600">Open a booking for its schedule, progress, review, payment, or support options.</p></div>
-        <div className="flex gap-2"><Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh</Button><Link href="/services" className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white">Book service <ArrowRight className="h-4 w-4" /></Link></div>
+        <div className="flex flex-wrap gap-2"><Link href="/wallet" className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800"><WalletCards className="h-4 w-4" />PKR {Number(user.walletBalance || 0).toLocaleString("en-PK")}</Link><Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh</Button><Link href="/services" className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white">Book service <ArrowRight className="h-4 w-4" /></Link></div>
       </div>
       {loadError && <div className="mb-5 flex gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"><AlertCircle className="h-5 w-5 shrink-0" />{loadError}</div>}
       {bookings.length > 0 && <div className="mb-5 flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
         {(["all", "service", "shop"] as const).map((item) => <button key={item} type="button" onClick={() => setView(item)} className={`shrink-0 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-bold transition ${view === item ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{item === "all" ? `All (${bookings.length})` : item === "service" ? `Services (${bookings.filter((b) => b.kind === "service").length})` : `Shop (${bookings.filter((b) => b.kind === "shop").length})`}</button>)}
       </div>}
-      {loading && !bookings.length ? <div className="grid gap-4" role="status" aria-label="Loading bookings"><span className="sr-only">Loading bookings…</span>{Array.from({ length: 4 }).map((_, index) => <div key={index} className="rounded-3xl border border-slate-200 bg-white p-5"><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-2xl" /><div className="flex-1 space-y-2"><Skeleton className="h-3 w-28" /><Skeleton className="h-6 w-2/3" /><Skeleton className="h-4 w-40" /></div><Skeleton className="h-8 w-24 rounded-full" /></div></div>)}</div> : bookings.length === 0 ? <Empty /> : visibleBookings.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-600">No orders in this section.</div> : <div className="grid gap-4">{visibleBookings.map((booking) => <BookingCard key={`${booking.kind}-${booking.id}`} booking={booking} onUpdate={(updates) => updateBooking(booking.id, booking.kind, updates)} />)}</div>}
+      {loading && !bookings.length ? <div className="grid gap-4 md:grid-cols-2" role="status" aria-label="Loading bookings"><span className="sr-only">Loading bookings…</span>{Array.from({ length: 4 }).map((_, index) => <div key={index} className="rounded-3xl border border-slate-200 bg-white p-5"><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-2xl" /><div className="flex-1 space-y-2"><Skeleton className="h-3 w-28" /><Skeleton className="h-6 w-2/3" /><Skeleton className="h-4 w-40" /></div><Skeleton className="h-8 w-24 rounded-full" /></div></div>)}</div> : bookings.length === 0 ? <Empty /> : visibleBookings.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-600">No orders in this section.</div> : <div className="grid items-start gap-4 md:grid-cols-2">{visibleBookings.map((booking) => <BookingCard key={`${booking.kind}-${booking.id}`} booking={booking} onUpdate={(updates) => updateBooking(booking.id, booking.kind, updates)} />)}</div>}
     </div>
   );
 }
 
 function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate: (updates: Partial<Booking>) => void }) {
   const [open, setOpen] = useState(false);
-  const normalized = booking.status.toLowerCase().replace(/\s+/g, "_");
+  const rawStatus = booking.status.toLowerCase().replace(/\s+/g, "_");
+  const receipts = booking.paymentReceipts?.length ? booking.paymentReceipts : booking.paymentReceipt ? [booking.paymentReceipt] : [];
+  const latestReceipt = receipts[receipts.length - 1];
+  const receiptStatus = latestReceipt?.status?.toLowerCase();
+  const paid = Number(booking.paidAmount ?? receipts.filter((receipt) => receipt.status !== "rejected").reduce((sum, receipt) => sum + Number(receipt.amount || 0), 0));
+  const paymentTotal = Number(booking.apiTotal || booking.servicePrice || 0);
+  const serverPending = Number(booking.pendingPayment || 0);
+  const paymentRemaining = serverPending > 0 ? serverPending : Math.max(0, paymentTotal - paid);
+  const isAdvance = booking.paymentMethod.toLowerCase().includes("200 advance");
+  let normalized = rawStatus;
+  if (booking.kind !== "shop") {
+    if (receiptStatus === "rejected") normalized = "payment_receipt_rejected";
+    else if (!latestReceipt || receiptStatus === "submitted" || receiptStatus === "pending") normalized = "payment_receipt_checking";
+    else if (isAdvance && paymentRemaining > 0) normalized = rawStatus === "completed" ? "payment_pending" : rawStatus;
+    else if (["placed", "pending", "confirmed"].includes(rawStatus)) normalized = receiptStatus === "verified" ? "confirmed" : "payment_receipt_checking";
+  }
   const isCancelled = normalized === "cancelled" || normalized === "canceled";
   const steps = booking.kind === "shop" ? shopStatusSteps : serviceStatusSteps;
-  const active = isCancelled ? -1 : Math.max(0, steps.indexOf(normalized));
+  const active = isCancelled ? -1 : steps.indexOf(normalized);
   const isShop = booking.kind === "shop";
-  const isEasyPaisa = booking.paymentMethod?.toLowerCase().includes("easypaisa");
+  const acceptsReceipt = booking.kind !== "shop" && ["rs 200 advance", "full payment", "full payment in advance"].includes(booking.paymentMethod?.toLowerCase());
   const isCompleted = normalized === "completed" || normalized === "delivered";
+  const title = booking.workTitle || booking.serviceTitle;
+  const total = paymentTotal;
+  const remaining = paymentRemaining;
+  const created = new Date(booking.createdAt).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" });
+  const statusClass = isCancelled ? "bg-red-50 text-red-700 ring-red-200" : isCompleted ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-amber-200";
 
-  return <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-    <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 text-left">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${isShop ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"}`}>{isShop ? <ShoppingBag className="h-6 w-6" /> : <Wrench className="h-6 w-6" />}</div>
-        <div className="min-w-0"><p className={`text-xs font-extrabold uppercase tracking-[0.16em] ${isShop ? "text-blue-600" : "text-emerald-600"}`}>{isShop ? "Product order" : "Service booking"}</p><p className="truncate text-base sm:text-lg font-semibold text-slate-900">
-          {booking.workTitle || booking.serviceTitle}</p><p className="mt-1 text-sm text-slate-500">#{booking.id} · {new Date(booking.createdAt).toLocaleDateString("en-PK", { dateStyle: "medium" })}</p></div>
+  return <article className={`overflow-hidden rounded-3xl border bg-white shadow-sm transition hover:shadow-md ${open ? "border-emerald-200 ring-2 ring-emerald-50 md:col-span-2" : "border-slate-200"}`}>
+    <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="w-full p-4 text-left sm:p-5">
+      <div className="flex items-start gap-3 sm:gap-4">
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl sm:h-14 sm:w-14 ${isShop ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"}`}>{isShop ? <ShoppingBag className="h-6 w-6" /> : <Wrench className="h-6 w-6" />}</div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${isShop ? "text-blue-600" : "text-emerald-600"}`}>{isShop ? "Product order" : "Home service"}</span>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold capitalize ring-1 ${statusClass}`}>{normalized.replaceAll("_", " ")}</span>
+          </div>
+          <h2 className="mt-1 truncate text-base font-black text-slate-900 sm:text-lg">{title}</h2>
+          <p className="mt-1 text-xs text-slate-500">#{booking.id} <span className="mx-1 text-slate-300">•</span> Placed {created}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1 text-xs font-bold text-slate-500"><span className="hidden sm:inline">{open ? "Hide details" : "View details"}</span><ChevronDown className={`h-5 w-5 transition ${open ? "rotate-180 text-emerald-600" : ""}`} /></div>
       </div>
-      <div className="flex shrink-0 items-center gap-3">
-        <span className={`rounded-full px-3 py-1.5 text-xs font-bold capitalize ${isCancelled ? "bg-red-50 text-red-700" : isCompleted ? "bg-emerald-100 text-emerald-800" : "bg-amber-50 text-amber-700"}`}>{normalized.replaceAll("_", " ")}</span>
-        <ChevronDown className={`h-5 w-5 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+      <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-4 sm:grid-cols-4">
+        <SummaryValue label="Total" value={`PKR ${total.toLocaleString("en-PK")}`} />
+        <SummaryValue label={isShop ? "Payment" : "Paid online"} value={isShop ? booking.paymentMethod : `PKR ${paid.toLocaleString("en-PK")}`} />
+        <SummaryValue label={isShop ? "Items" : "Remaining"} value={isShop ? String(booking.items?.length || 0) : `PKR ${remaining.toLocaleString("en-PK")}`} />
+        <SummaryValue label="Schedule" value={booking.preferredTime || (isShop ? "Delivery pending" : "Awaiting confirmation")} truncate />
       </div>
     </button>
-    {open && <div className="border-t border-slate-100 p-5">
-      {!isCancelled && <div className={`mb-6 grid gap-1 ${isShop ? "grid-cols-5" : "grid-cols-4"}`}>{steps.map((step, i) => <div key={step} className="text-center"><div className={`mx-auto h-2 rounded-full ${i <= active ? (isShop ? "bg-blue-500" : "bg-emerald-500") : "bg-slate-200"}`} /><p className="mt-2 text-[10px] font-semibold capitalize text-slate-500">{step.replace("_", " ")}</p></div>)}</div>}
-      {isCancelled && <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-center"><p className="text-sm font-bold text-red-700">This order has been cancelled</p></div>}
-      {isShop && booking.items && booking.items.length > 0 && <div className="mb-4 space-y-2"><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-slate-500">Products ordered</p>{booking.items.map((item, index) => <div key={`${item.productId}-${index}`} className="flex items-center gap-3 rounded-2xl border border-slate-200 p-3">{item.imageUrl ? <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100"><Image src={absoluteImage(item.imageUrl)} alt={item.title} fill unoptimized className="object-cover" sizes="64px" /></div> : <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-slate-100"><Package className="h-6 w-6 text-slate-400" /></div>}<div className="min-w-0 flex-1"><p className="truncate font-bold text-slate-900">{item.title}</p><p className="text-sm text-slate-500">Quantity {item.quantity}</p></div><p className="text-sm font-bold text-slate-900">PKR {(item.price * item.quantity).toLocaleString("en-PK")}</p></div>)}</div>}
-      <div className="grid gap-2 sm:gap-3 rounded-xl sm:rounded-2xl bg-slate-50 p-3 sm:p-4 text-xs sm:text-sm text-slate-700 grid-cols-1 sm:grid-cols-2">        <p><strong>Payment:</strong> {booking.paymentMethod}</p><p><strong>Amount:</strong> PKR {Number(booking.servicePrice || 0).toLocaleString("en-PK")}</p>
-        {booking.preferredTime && (
-          <p className="flex gap-2"><CalendarDays className="h-4 w-4 text-slate-400" />{booking.preferredTime}</p>
-        )}        {booking.address && <p className="flex gap-2"><MapPin className="h-4 w-4 text-slate-400" />{booking.address}</p>}
+
+    {open && <div className="border-t border-slate-200 bg-slate-50/50 p-4 sm:p-6">
+      {!isCancelled ? <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-slate-500">Order progress</h3>
+        <div className={`mt-4 grid gap-1 ${isShop ? "grid-cols-5" : "grid-cols-4"}`}>{steps.map((step, i) => <div key={step} className="text-center"><div className={`mx-auto h-2 rounded-full ${i <= active ? (isShop ? "bg-blue-500" : "bg-emerald-500") : "bg-slate-200"}`} /><p className={`mt-2 text-[9px] font-bold capitalize sm:text-[10px] ${i <= active ? "text-slate-700" : "text-slate-400"}`}>{step.replace("_", " ")}</p></div>)}</div>
+      </section> : <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">This order has been cancelled.</div>}
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+          <h3 className="flex items-center gap-2 font-bold text-slate-900"><ReceiptText className="h-4 w-4 text-emerald-600" /> Booking information</h3>
+          <div className="mt-4 space-y-3 text-sm">
+            <DetailRow icon={<CalendarDays className="h-4 w-4" />} label="Created" value={created} />
+            <DetailRow icon={<Clock3 className="h-4 w-4" />} label={isShop ? "Delivery" : "Appointment"} value={booking.preferredTime || "Awaiting confirmation"} />
+            <DetailRow icon={<MapPin className="h-4 w-4" />} label={isShop ? "Delivery address" : "Service address"} value={booking.address || "Address unavailable"} />
+            {booking.notes && <DetailRow icon={<MessageSquareWarning className="h-4 w-4" />} label="Special instructions" value={booking.notes} />}
+          </div>
+        </section>
+        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+          <h3 className="flex items-center gap-2 font-bold text-slate-900"><CreditCard className="h-4 w-4 text-emerald-600" /> Payment summary</h3>
+          <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-slate-900 p-3 text-center text-white">
+            <SummaryValue label="Total" value={`PKR ${total.toLocaleString("en-PK")}`} dark />
+            <SummaryValue label="Paid" value={`PKR ${paid.toLocaleString("en-PK")}`} dark accent />
+            <SummaryValue label="Remaining" value={`PKR ${remaining.toLocaleString("en-PK")}`} dark />
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="text-slate-500">Method</span><span className="text-right font-bold text-slate-800">{booking.paymentMethod}</span></div>
+          {latestReceipt && <div className="mt-2 flex items-center justify-between gap-3 text-xs"><span className="text-slate-500">Latest receipt</span><span className={`rounded-full px-2 py-1 font-bold capitalize ${receiptStatus === "verified" ? "bg-emerald-50 text-emerald-700" : receiptStatus === "rejected" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{latestReceipt.status || "submitted"}</span></div>}
+        </section>
       </div>
-      <BookingActions booking={booking} completed={isCompleted} isCancelled={isCancelled} isEasyPaisa={isEasyPaisa} onUpdate={onUpdate} />
+
+      {isShop && booking.items && booking.items.length > 0 && <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4"><h3 className="font-bold text-slate-900">Products ordered</h3><div className="mt-3 grid gap-2 sm:grid-cols-2">{booking.items.map((item, index) => <div key={`${item.productId}-${index}`} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">{item.imageUrl ? <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-slate-100"><Image src={absoluteImage(item.imageUrl)} alt={item.title} fill unoptimized className="object-cover" sizes="56px" /></div> : <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-slate-100"><Package className="h-5 w-5 text-slate-400" /></div>}<div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-900">{item.title}</p><p className="text-xs text-slate-500">Qty {item.quantity}</p></div><p className="text-xs font-black text-slate-900">PKR {(item.price * item.quantity).toLocaleString("en-PK")}</p></div>)}</div></section>}
+
+      <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4"><h3 className="mb-3 text-xs font-extrabold uppercase tracking-[0.16em] text-slate-500">Available actions</h3><BookingActions booking={booking} completed={isCompleted} isCancelled={isCancelled} acceptsReceipt={acceptsReceipt} onUpdate={onUpdate} /></section>
     </div>}
   </article>;
 }
 
-function BookingActions({ booking, completed, isCancelled, isEasyPaisa, onUpdate }: { booking: Booking; completed: boolean; isCancelled: boolean; isEasyPaisa: boolean; onUpdate: (updates: Partial<Booking>) => void }) {
+function SummaryValue({ label, value, truncate = false, dark = false, accent = false }: { label: string; value: string; truncate?: boolean; dark?: boolean; accent?: boolean }) {
+  return <div className="min-w-0"><p className={`text-[9px] font-bold uppercase tracking-wide ${dark ? "text-slate-400" : "text-slate-400"}`}>{label}</p><p className={`mt-1 text-xs font-black sm:text-sm ${accent ? "text-lime-300" : dark ? "text-white" : "text-slate-800"} ${truncate ? "truncate" : ""}`}>{value}</p></div>;
+}
+
+function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return <div className="flex items-start gap-3"><div className="mt-0.5 text-slate-400">{icon}</div><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</p><p className="mt-0.5 break-words font-semibold leading-5 text-slate-700">{value}</p></div></div>;
+}
+
+function BookingActions({ booking, completed, isCancelled, acceptsReceipt, onUpdate }: { booking: Booking; completed: boolean; isCancelled: boolean; acceptsReceipt: boolean; onUpdate: (updates: Partial<Booking>) => void }) {
   const [panel, setPanel] = useState<"review" | "issue" | "receipt" | "cancel" | null>(null);
   const [now] = useState(Date.now);
   const normalized = booking.status.toLowerCase().replace(/\s+/g, "_");
@@ -184,6 +262,12 @@ function BookingActions({ booking, completed, isCancelled, isEasyPaisa, onUpdate
   const cancellationHint = booking.kind === "service" && !terminal && !canCancel
     ? hoursRemaining === null ? "Cancellation is unavailable because this booking has no valid appointment time." : "Online cancellation closes six hours before the appointment. Please contact support for urgent help."
     : "";
+  const receipts = booking.paymentReceipts?.length ? booking.paymentReceipts : booking.paymentReceipt ? [booking.paymentReceipt] : [];
+  const paid = Number(booking.paidAmount ?? receipts.filter((receipt) => receipt.status !== "rejected").reduce((sum, receipt) => sum + Number(receipt.amount || 0), 0));
+  const calculatedPending = Math.max(0, Number(booking.apiTotal || booking.servicePrice || 0) - paid);
+  const isInspection = /visit|inspection/i.test(booking.unitDescription || "");
+  const knownPending = booking.pendingPayment ? Number(booking.pendingPayment) : calculatedPending;
+  const canUploadPayment = acceptsReceipt && (!receipts.length || receipts[receipts.length - 1]?.status === "rejected" || (booking.status.toLowerCase() === "completed" && (knownPending > 0 || isInspection)));
 
   if (isCancelled) {
     return <div className="mt-5"><div className="flex flex-wrap gap-2">
@@ -194,7 +278,7 @@ function BookingActions({ booking, completed, isCancelled, isEasyPaisa, onUpdate
   return <div className="mt-5">
     <div className="flex flex-wrap gap-2">
       {completed && <Button onClick={() => setPanel(panel === "review" ? null : "review")}><Star className="mr-2 h-4 w-4" />{booking.kind === "shop" ? "Review products" : "Review service"}</Button>}
-      {completed && isEasyPaisa && booking.kind !== "shop" && <Button variant="outline" onClick={() => setPanel(panel === "receipt" ? null : "receipt")}><Camera className="mr-2 h-4 w-4 text-emerald-600" />Upload Payment Receipt</Button>}
+      {canUploadPayment && <Button variant="outline" onClick={() => setPanel(panel === "receipt" ? null : "receipt")}><Camera className="mr-2 h-4 w-4 text-emerald-600" />{!receipts.length ? "Upload Booking Payment Receipt" : isInspection && !knownPending ? "Pay Professional Quote" : "Upload Pending Payment"}</Button>}
       {canCancel && <Button variant="outline" className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800" onClick={() => setPanel(panel === "cancel" ? null : "cancel")}><XCircle className="mr-2 h-4 w-4" />Cancel {booking.kind === "shop" ? "order" : "booking"}</Button>}
       <Button variant="outline" onClick={() => setPanel(panel === "issue" ? null : "issue")}><MessageSquareWarning className="mr-2 h-4 w-4" />Raise an issue</Button>
     </div>
@@ -213,6 +297,16 @@ function UploadReceiptForm({ booking }: { booking: Booking }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const isFullPayment = booking.paymentMethod.toLowerCase().includes("full payment");
+  const receipts = booking.paymentReceipts?.length ? booking.paymentReceipts : booking.paymentReceipt ? [booking.paymentReceipt] : [];
+  const isInitialPayment = !receipts.length;
+  const paid = Number(booking.paidAmount ?? receipts.filter((receipt) => receipt.status !== "rejected").reduce((sum, receipt) => sum + Number(receipt.amount || 0), 0));
+  const calculatedPending = Math.max(0, Number(booking.apiTotal || booking.servicePrice || 0) - paid);
+  const isInspection = /visit|inspection/i.test(booking.unitDescription || "");
+  const knownPending = booking.pendingPayment ? Number(booking.pendingPayment) : calculatedPending;
+  const initialAmount = isFullPayment ? Number(booking.servicePrice || 0) : 200;
+  const [quotedAmount, setQuotedAmount] = useState(knownPending > 0 ? String(knownPending) : "");
+  const amountDue = isInitialPayment ? initialAmount : isInspection ? Number(quotedAmount || 0) : knownPending;
 
   const handleCopyNumber = () => {
     navigator.clipboard.writeText(EASYPAISA_NUMBER);
@@ -222,16 +316,17 @@ function UploadReceiptForm({ booking }: { booking: Booking }) {
 
   async function submit() {
     if (!dataUrl) { setMessage("Please select a valid receipt image."); return; }
+    if (!Number.isFinite(amountDue) || amountDue <= 0) { setMessage("Please enter the approved payment amount."); return; }
     setBusy(true); setMessage("");
     try {
       const res = await fetch(`${API_BASE}/api/orders/${booking.id}/payment-receipt`, {
         method: "POST",
         headers: authHeaders(),
-        body: JSON.stringify({ dataUrl, amount: booking.servicePrice || 0 }),
+        body: JSON.stringify({ dataUrl, filename: `${isInitialPayment ? (isFullPayment ? "full-payment" : "advance") : isInspection ? "professional-quote" : "pending-payment"}-${booking.id}.jpg`, amount: amountDue }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Receipt upload failed.");
-      setMessage("Receipt uploaded successfully! Admin will verify your payment.");
+      setMessage("Payment receipt uploaded. It is now being checked by admin. Review will unlock after the final payment is verified.");
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Receipt upload failed.");
     } finally { setBusy(false); }
@@ -240,6 +335,7 @@ function UploadReceiptForm({ booking }: { booking: Booking }) {
   return (
     <div className="mt-4 space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5">
       <p className="font-bold text-slate-900 text-base">Upload EasyPaisa Proof of Payment</p>
+      {isInspection && !isInitialPayment ? <div><label className="mb-1 block text-xs font-bold text-slate-700">Amount quoted by the professional (PKR)</label><input type="number" min="1" step="1" value={quotedAmount} onChange={(event) => setQuotedAmount(event.target.value)} placeholder="Enter the approved quote" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:border-emerald-500" /><p className="mt-1 text-[11px] text-slate-500">Enter only the amount you approved after the visit or inspection.</p></div> : <p className="rounded-xl bg-amber-100 px-3 py-2 text-sm font-bold text-amber-900">{isInitialPayment ? (isFullPayment ? "Full listed service payment" : "Booking confirmation advance") : "Pending listed payment"}: PKR {amountDue.toLocaleString("en-PK")}</p>}
       <div className="rounded-xl border border-emerald-200 bg-white p-4 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-emerald-900">EasyPaisa Account Details</span>
@@ -267,7 +363,7 @@ function ReviewForm({ booking }: { booking: Booking }) {
 
 function CancelForm({ booking, onCancelled }: { booking: Booking; onCancelled: () => void }) {
   const [reason, setReason] = useState(""), [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
-  async function cancel() { if (reason.trim().length < 5) { setMessage("Please provide a short cancellation reason."); return; } setBusy(true); setMessage(""); try { const path = booking.kind === "shop" ? `/api/shop/orders/${booking.id}/cancel` : `/api/orders/${booking.id}/cancel`; const res = await fetch(`${API_BASE}${path}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ reason: reason.trim() }) }); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.message || "Cancellation could not be completed."); onCancelled(); } catch (error) { setMessage(error instanceof Error ? error.message : "Cancellation could not be completed."); } finally { setBusy(false); } }
+  async function cancel() { if (reason.trim().length < 5) { setMessage("Please provide a short cancellation reason."); return; } setBusy(true); setMessage(""); try { const path = booking.kind === "shop" ? `/api/shop/orders/${booking.id}/cancel` : `/api/orders/${booking.id}/cancel`; const body = booking.kind === "shop" ? { reason: reason.trim() } : { cancelReason: reason.trim() }; const res = await fetch(`${API_BASE}${path}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify(body) }); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.message || "Cancellation could not be completed."); onCancelled(); } catch (error) { setMessage(error instanceof Error ? error.message : "Cancellation could not be completed."); } finally { setBusy(false); } }
   return <div className="mt-4 space-y-3 rounded-2xl border border-red-200 bg-red-50/60 p-4"><div className="flex gap-3"><AlertCircle className="h-5 w-5 shrink-0 text-red-600" /><div><p className="font-bold text-slate-900">Cancel this {booking.kind === "shop" ? "order" : "booking"}?</p><p className="mt-1 text-sm text-slate-600">This action is sent immediately and may not be reversible.</p></div></div><Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Tell us why you need to cancel" />{message && <p className="text-sm font-medium text-red-700">{message}</p>}<Button className="bg-red-600 text-white hover:bg-red-700" onClick={() => void cancel()} disabled={busy}>{busy ? "Cancelling…" : "Confirm cancellation"}</Button></div>;
 }
 

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useLocation } from "@/context/LocationContext";
 import { createBooking } from "@/services/bookingService";
+import { checkoutShopOrder } from "@/services/shopService";
 
 import { CheckoutHeader } from "./components/CheckoutHeader";
 import { CheckoutForm } from "./components/CheckoutForm";
@@ -105,77 +106,24 @@ export default function CheckoutPageClient() {
         .replace(/\s+/g, " ")
         .trim();
 
-      const url = isShop
-        ? `${API_BASE_URL}/api/shop/checkout`
-        : `${API_BASE_URL}/api/orders/checkout`;
-
-      const payload = isShop
-        ? {
-            items: [
-              { productId, quantity }
-            ],
-            address,
-            paymentMethod: paymentMethod === "easypaisa" ? "Easypaisa" : (paymentMethod === "jazzcash" ? "Jazzcash" : "Cash"),
-            useRewardPoints: false,
-          }
-        : {
-            cart: [
-              {
-                service: {
-                  id: serviceId,
-                  title: serviceTitle,
-                  price: servicePrice,
-                  selectedWorkPriceId: workPriceId,
-                  selectedWorkTitle: workTitle,
-                },
-                quantity: 1,
-              },
-            ],
-            bookedFor: new Date(`${formData.preferredDate}T${formData.preferredTime}:00+05:00`).toISOString(),
-            paymentMethod: paymentMethod === "easypaisa" ? "Easypaisa After Work Done" : (paymentMethod === "jazzcash" ? "Jazzcash After Work Done" : "Cash After Work Done"),
-            address,
-            specialInstructions: formData.notes,
-            inspectionFee: settings.inspectionFee,
-            tax: taxAmount,
-            recurringOccurrences: 1,
-            useRewardPoints: false,
-          };
-
       try {
         let orderId = "";
         if (isShop) {
-          const url = `${API_BASE_URL}/api/shop/checkout`;
-          const payload = {
+          const data = await checkoutShopOrder({
             items: [{ productId, quantity }],
             address,
-            paymentMethod: paymentMethod === "easypaisa" ? "Easypaisa" : (paymentMethod === "jazzcash" ? "Jazzcash" : "Cash"),
-            useRewardPoints: false,
-          };
-          let token = "";
-          try {
-            const storedToken = localStorage.getItem("ustaadpro_token");
-            if (storedToken) token = storedToken;
-          } catch {}
-
-          const headers: Record<string, string> = { "Content-Type": "application/json" };
-          if (token) headers.Authorization = `Bearer ${token}`;
-          const res = await fetch(url, {
-            method: "POST",
-            headers,
-            body: JSON.stringify(payload),
+            addressLat: location.coords?.lat,
+            addressLng: location.coords?.lng,
+            paymentMethod: "cod",
           });
-
-          if (!res.ok) {
-            const responseBody = await res.json().catch(() => null) as { message?: string; error?: string } | null;
-            throw new Error(responseBody?.message || responseBody?.error || `The server could not place this order (${res.status}).`);
-          }
-          const data = await res.json();
           orderId = data.order?.id || `BK-${Date.now()}`;
         } else {
           const resData = await createBooking({
             name: formData.fullName,
             phone: formData.phone,
             address,
+            addressLat: location.coords?.lat,
+            addressLng: location.coords?.lng,
             date: formData.preferredDate,
             time: formData.preferredTime,
             requirements: formData.notes,
@@ -189,7 +137,7 @@ export default function CheckoutPageClient() {
                 quantity: 1,
               },
             ],
-            paymentMethod: paymentMethod === "easypaisa" ? "Easypaisa After Work Done" : (paymentMethod === "jazzcash" ? "Jazzcash After Work Done" : "Cash After Work Done"),
+            paymentMethod: "Rs 200 Advance",
             inspectionFee: settings.inspectionFee,
             tax: taxAmount,
           });
@@ -235,7 +183,7 @@ export default function CheckoutPageClient() {
         setIsSubmitting(false);
       }
     },
-    [selectedAddress, serviceTitle, workTitle, servicePrice, user, serviceId, workPriceId, settings, API_BASE_URL, isShop, productId, productTitle, productPrice, productImage, quantity, checkoutTitle, checkoutPrice, taxAmount]
+    [selectedAddress, serviceTitle, workTitle, servicePrice, user, serviceId, workPriceId, settings, isShop, productId, productTitle, productPrice, productImage, quantity, checkoutTitle, checkoutPrice, taxAmount, location.coords]
   );
 
 

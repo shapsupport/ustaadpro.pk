@@ -13,6 +13,7 @@ import {
   LogIn,
   Map as MapIcon,
   Calendar,
+  Info,
 } from "lucide-react";
 import { createBooking, uploadPaymentReceipt, ServiceItemInput } from "@/services/bookingService";
 import { useAuth } from "@/context/AuthContext";
@@ -21,6 +22,7 @@ import RecurringPicker, { calculateDaysCount } from "./RecurringPicker";
 import MapAddressPickerModal from "../location/MapAddressPickerModal";
 import EasyPaisaPaymentSection from "./EasyPaisaPaymentSection";
 import { showSuccessToast } from "@/context/ToastContext";
+import { getProfile } from "@/services/authService";
 
 // ── Service Area: Rawalpindi + Islamabad ────────────────────────────────
 const SERVICE_AREA = { south: 33.40, north: 33.80, west: 72.85, east: 73.30 };
@@ -40,14 +42,27 @@ interface BookingModalProps {
     quantity?: number;
     selectedWorkPriceId?: number;
     selectedWorkTitle?: string;
+    unitDescription?: string;
   };
+  services?: BookingModalProps["service"][];
+  onBookingComplete?: () => void;
 }
 
 function getTodayString() {
   return new Date().toISOString().split("T")[0];
 }
 
-export default function BookingModal({ isOpen, onClose, service }: BookingModalProps) {
+function validateSpecificAddress(value: string, mapLocationSelected: boolean): string {
+  const address = value.trim();
+  if (!address) return mapLocationSelected ? "" : "Enter your house and street address, or select a precise map location.";
+  if (address.length < 8) return "Add a little more detail, including your house and street number.";
+  if (!/\d/.test(address)) return "Include your house, building, or street number.";
+  const words = address.match(/[a-zA-Z]{2,}/g) || [];
+  if (words.length < 2) return "Enter both the house/building and street details.";
+  return "";
+}
+
+export default function BookingModal({ isOpen, onClose, service, services, onBookingComplete }: BookingModalProps) {
   const { user, setAuthModalMode } = useAuth();
 
   // Basic Form State
@@ -55,6 +70,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
   const [phone, setPhone] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("");
   const [specificAddress, setSpecificAddress] = useState("");
+  const [addressTouched, setAddressTouched] = useState(false);
   const [requirements, setRequirements] = useState("");
 
   // Feature 1: Time Slot State
@@ -71,9 +87,12 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
   const [addressCoords, setAddressCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   // Feature 4: Payment & Receipt State
-  const [paymentMethod, setPaymentMethod] = useState("Cash After Work Done");
-  // const [receiptDataUrl, setReceiptDataUrl] = useState("");
-  // const [receiptFileName, setReceiptFileName] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"Rs 200 Advance" | "Full Payment in Advance">("Rs 200 Advance");
+  const [receiptDataUrl, setReceiptDataUrl] = useState("");
+  const [receiptFileName, setReceiptFileName] = useState("");
+  const [useRewardPoints, setUseRewardPoints] = useState(false);
+  const [rewardPoints, setRewardPoints] = useState(0);
+  const [rewardLoading, setRewardLoading] = useState(false);
 
   // Submission State
   const [loading, setLoading] = useState(false);
@@ -82,6 +101,10 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
     orderId: string;
     total: number;
     receiptUploaded?: boolean;
+    receiptError?: string;
+    paidAmount: number;
+    remainingAmount: number;
+    rewardApplied?: boolean;
   } | null>(null);
 
   // Auto-fill user details if logged in
@@ -92,14 +115,48 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
     }
   }, [user]);
 
+  useEffect(() => {
+    if (!isOpen || !user) {
+      setUseRewardPoints(false);
+      return;
+    }
+    setRewardLoading(true);
+    getProfile()
+      .then((profile) => setRewardPoints(Number(profile.rewardPoints || 0)))
+      .catch(() => setRewardPoints(Number(user.rewardPoints || 0)))
+      .finally(() => setRewardLoading(false));
+  }, [isOpen, user]);
+
   // Derived Calculations
+  const selectedServices = services?.length ? services : [service];
   const unitPrice = service.price;
   const quantity = Math.max(1, Math.min(10, Number(service.quantity || 1)));
   const daysCount = useMemo(
     () => (isRecurring ? calculateDaysCount(fromDate, toDate) : 1),
     [isRecurring, fromDate, toDate]
   );
-  const calculatedTotal = unitPrice * quantity * daysCount;
+  const listedServicesTotal = selectedServices.reduce((sum, item) => sum + Number(item.price) * Math.max(1, Math.min(10, Number(item.quantity || 1))), 0);
+  const calculatedTotal = listedServicesTotal * daysCount;
+  const rewardEligible = rewardPoints >= 200;
+  const rewardDiscount = useRewardPoints && rewardEligible ? Math.min(200, calculatedTotal) : 0;
+  const paymentNow = paymentMethod === "Rs 200 Advance"
+    ? Math.max(0, Math.min(200, calculatedTotal) - rewardDiscount)
+    : Math.max(0, calculatedTotal - rewardDiscount);
+  const amountCoveredNow = paymentMethod === "Rs 200 Advance" ? Math.min(200, calculatedTotal) : calculatedTotal;
+  const remainingAmount = Math.max(0, calculatedTotal - amountCoveredNow);
+  const isInspectionService = selectedServices.some((item) => /visit|inspection/i.test(item.unitDescription || ""));
+  const hasMapLocation = Boolean(selectedLocation.trim() && addressCoords);
+  const addressFieldError = validateSpecificAddress(specificAddress, hasMapLocation);
+
+  const handleReceiptSelect = (file: File | null) => {
+    setReceiptDataUrl("");
+    setReceiptFileName(file?.name || "");
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setReceiptDataUrl(String(reader.result || ""));
+    reader.onerror = () => setError("The selected receipt image could not be read.");
+    reader.readAsDataURL(file);
+  };
 
   if (!isOpen) return null;
 
@@ -125,34 +182,16 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
       return;
     }
 
-    const hasMapLocation = !!(selectedLocation.trim() && addressCoords);
     const hasSpecificAddress = !!specificAddress.trim();
 
     if (!hasMapLocation && !hasSpecificAddress) {
-      setError("Please pick your location from the map or enter your house/street address.");
+      setAddressTouched(true);
       return;
     }
 
-    if (hasSpecificAddress) {
-      const addressValue = specificAddress.trim();
-      // Minimum length check
-      if (addressValue.length < 8) {
-        setError("Please enter your house number and street details (min 8 characters).");
-        return;
-      }
-
-      // Must contain a number (house/street number)
-      if (!/\d/.test(addressValue)) {
-        setError("Please include your house or street number in the address.");
-        return;
-      }
-
-      // The map supplies area/city; this field supplies the exact premises.
-      const addressWords = addressValue.split(/\s+/).filter(w => w.length > 1);
-      if (addressWords.length < 2) {
-        setError("Please enter a specific house and street address.");
-        return;
-      }
+    if (hasSpecificAddress && addressFieldError) {
+      setAddressTouched(true);
+      return;
     }
 
     if (!fromDate) {
@@ -161,6 +200,10 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
     }
     if (!selectedTime) {
       setError("Please select a 30-minute time slot from the grid.");
+      return;
+    }
+    if (paymentNow > 0 && !receiptDataUrl) {
+      setError("Please upload the receipt for your booking payment.");
       return;
     }
 
@@ -177,17 +220,17 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
       if (specificAddress.trim()) addressParts.push(specificAddress.trim());
       if (selectedLocation.trim()) addressParts.push(selectedLocation.trim());
       const completeAddress = addressParts.join(" · ");
-      const workIdNum = Number(service.selectedWorkPriceId);
-      const items: ServiceItemInput[] = [
-        {
-          serviceId: service.id,
-          serviceTitle: service.title,
-          servicePrice: unitPrice,
+      const items: ServiceItemInput[] = selectedServices.map((item) => {
+        const workIdNum = Number(item.selectedWorkPriceId);
+        return {
+          serviceId: item.id,
+          serviceTitle: item.title,
+          servicePrice: Number(item.price),
           workPriceId: !isNaN(workIdNum) && workIdNum > 0 ? workIdNum : undefined,
-          workTitle: service.selectedWorkTitle || undefined,
-          quantity,
-        },
-      ];
+          workTitle: item.selectedWorkTitle || undefined,
+          quantity: Math.max(1, Math.min(10, Number(item.quantity || 1))),
+        };
+      });
 
       // const noteWithReceipt = receiptDataUrl
       //   ? `${requirements.trim()}\n[EasyPaisa Payment Screenshot Attached: ${receiptFileName || "receipt.png"}]`.trim()
@@ -201,31 +244,43 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
         name: name.trim(),
         phone: phone.trim(),
         address: completeAddress,
+        addressLat: addressCoords?.lat,
+        addressLng: addressCoords?.lng,
         date: fromDate,
         time: selectedTime,
         requirements: noteWithReceipt,
         items,
         paymentMethod,
         recurringOccurrences: daysCount,
+        useRewardPoints: useRewardPoints && rewardEligible,
       });
 
       if (response && response.order) {
         const orderId = response.order.id;
-        // let receiptUploaded = Boolean(receiptDataUrl);
-
-        // if (receiptDataUrl) {
-        //   try {
-        //     await uploadPaymentReceipt(orderId, receiptDataUrl, calculatedTotal);
-        //   } catch {
-        //     // Backend stores receipt upon work completion; saved locally for track booking
-        //   }
-        // }
+        let receiptUploaded = false;
+        let receiptError = "";
+        if (paymentNow > 0) {
+          try {
+            await uploadPaymentReceipt(orderId, receiptDataUrl, paymentNow, receiptFileName);
+            receiptUploaded = true;
+          } catch (uploadError) {
+            receiptError = uploadError instanceof Error ? uploadError.message : "Receipt upload failed.";
+          }
+        } else {
+          receiptUploaded = true;
+        }
 
         setBookingSuccess({
           orderId,
-          total: response.order.total || calculatedTotal,
+          total: calculatedTotal,
+          receiptUploaded,
+          receiptError,
+          paidAmount: amountCoveredNow,
+          remainingAmount,
+          rewardApplied: useRewardPoints && rewardEligible,
         });
         showSuccessToast(`${service.title} has been booked successfully.`);
+        onBookingComplete?.();
 
         // Local storage backup
         try {
@@ -235,7 +290,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
             JSON.stringify([
               {
                 id: orderId,
-                serviceTitle: service.title,
+                serviceTitle: selectedServices.map((item) => item.selectedWorkTitle || item.title).join(", "),
                 servicePrice: calculatedTotal,
                 status: response.order.status || "confirmed",
                 createdAt: new Date().toISOString(),
@@ -244,7 +299,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                 address: completeAddress,
                 paymentMethod,
                 recurringDays: daysCount,
-                quantity,
+                quantity: selectedServices.reduce((sum, item) => sum + Number(item.quantity || 1), 0),
                 // receiptDataUrl: receiptDataUrl || undefined,
               },
               ...stored,
@@ -286,17 +341,18 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
   const handleModalClose = () => {
     setBookingSuccess(null);
     setError("");
+    setAddressTouched(false);
     onClose();
   };
 
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-        <div className="relative w-full max-w-xl max-h-[85vh] mx-2 sm:mx-0 overflow-y-auto rounded-2xl sm:rounded-3xl bg-white shadow-2xl transition-all booking-modal-scrollbar">
+        <div className="relative w-full max-w-5xl max-h-[94vh] mx-2 sm:mx-0 overflow-y-auto rounded-2xl sm:rounded-3xl bg-white shadow-2xl transition-all booking-modal-scrollbar">
           <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-100 bg-white/95 px-4 sm:px-6 py-3 sm:py-4 backdrop-blur-md">
             <div>
               <h2 className="text-lg sm:text-xl font-black text-slate-900">Book Service</h2>
-              <p className="text-xs font-bold text-emerald-600 truncate max-w-xs">{service.title}</p>
+              <p className="text-xs font-bold text-emerald-600 truncate max-w-xs">{selectedServices.length > 1 ? `${selectedServices.length} services selected` : service.title}</p>
             </div>
             <button
               type="button"
@@ -313,21 +369,34 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-lg shadow-emerald-600/10">
                 <CheckCircle2 className="h-10 w-10" />
               </div>
-              <h3 className="text-2xl font-black text-slate-900">Booking Confirmed!</h3>
+              <h3 className="text-2xl font-black text-slate-900">Payment Submitted!</h3>
               <p className="text-sm text-slate-600 max-w-md mx-auto">
-                Your service request has been received. Our team will contact you shortly to dispatch your professional.
+                Your payment and service request were submitted. Admin will verify the payment and process your booking. You will be notified shortly.
               </p>
 
               {/* Order Reference Box */}
               <div className="my-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-1">
                 <p className="text-xs uppercase font-bold tracking-wider text-slate-400">Booking Reference ID</p>
                 <p className="text-2xl font-black text-emerald-700">{bookingSuccess.orderId}</p>
-                <p className="text-xs font-bold text-slate-700 pt-1">
-                  Total Payable: <span className="text-emerald-700">Rs {bookingSuccess.total.toLocaleString()}</span>
-                </p>
-                {bookingSuccess.receiptUploaded && (
+                <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-white p-3 text-xs">
+                  <div><p className="text-slate-400">Listed total</p><p className="font-black text-slate-800">Rs {bookingSuccess.total.toLocaleString("en-PK")}</p></div>
+                  <div><p className="text-slate-400">Paid</p><p className="font-black text-emerald-700">Rs {bookingSuccess.paidAmount.toLocaleString("en-PK")}</p></div>
+                  <div><p className="text-slate-400">Pay professional</p><p className="font-black text-slate-800">Rs {bookingSuccess.remainingAmount.toLocaleString("en-PK")}</p></div>
+                </div>
+                {isInspectionService && <p className="mt-2 text-[11px] text-slate-600">This covers the listed visit/inspection charge. Any labour, repair, parts, or materials quoted after inspection are separate and can be paid to the provided EasyPaisa account after you approve the work.</p>}
+                {bookingSuccess.rewardApplied && (
+                  <p className="text-[11px] font-bold text-violet-700 flex items-center justify-center gap-1 pt-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> PKR 200 loyalty reward redeemed successfully.
+                  </p>
+                )}
+                {bookingSuccess.receiptUploaded && (!bookingSuccess.rewardApplied || bookingSuccess.paidAmount > 200) && (
                   <p className="text-[11px] font-bold text-emerald-600 flex items-center justify-center gap-1 pt-1">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Payment receipt screenshot attached & verified!
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Payment receipt submitted for verification.
+                  </p>
+                )}
+                {bookingSuccess.receiptError && (
+                  <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
+                    Your booking was created, but the receipt was not uploaded: {bookingSuccess.receiptError} Use Track Booking to retry—do not create another booking.
                   </p>
                 )}
               </div>
@@ -341,10 +410,10 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
               </button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 items-start gap-4 bg-slate-50/40 p-3 sm:p-5 lg:grid-cols-2 lg:gap-5 lg:p-6">
               {/* Auth Notice if guest */}
               {!user && (
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900">
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900 lg:col-span-2">
                   <div className="flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
                     <span>Sign in required to confirm your order.</span>
@@ -361,33 +430,33 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
 
               {/* Error Alert */}
               {error && (
-                <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 lg:col-span-2">
                   <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
                   <span>{error}</span>
                 </div>
               )}
 
               {/* Service Summary Card */}
-              <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-3.5 border border-slate-200/80">
-                <div>
-                  <p className="text-[10px] uppercase font-bold text-slate-400">Selected Service</p>
-                  <p className="text-sm font-bold text-slate-800">
-                    {service.selectedWorkTitle || service.title}
-                  </p>
+              <div className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm lg:col-span-2">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-[10px] uppercase font-bold text-slate-400">Selected service{selectedServices.length === 1 ? "" : "s"}</p>
+                  <p className="text-sm font-black text-emerald-700">Rs {listedServicesTotal.toLocaleString()}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] uppercase font-bold text-slate-400">Unit Price</p>
-                  <p className="text-sm font-black text-emerald-600">Rs {unitPrice.toLocaleString()}</p>
-                  {quantity > 1 && (
-                    <p className="mt-0.5 text-[11px] font-bold text-slate-500">
-                      × {quantity} = Rs {(unitPrice * quantity).toLocaleString()}
-                    </p>
-                  )}
+                <div className="space-y-1.5">
+                  {selectedServices.map((item) => {
+                    const itemQuantity = Math.max(1, Number(item.quantity || 1));
+                    return <div key={`${item.id}:${item.selectedWorkPriceId || "service"}`} className="flex items-center justify-between gap-3 text-sm">
+                      <p className="min-w-0 truncate font-bold text-slate-800">{item.selectedWorkTitle || item.title} <span className="font-medium text-slate-400">× {itemQuantity}</span></p>
+                      <p className="shrink-0 font-bold text-slate-600">Rs {(item.price * itemQuantity).toLocaleString()}</p>
+                    </div>;
+                  })}
                 </div>
               </div>
 
               {/* Contact Information */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="mb-3 text-sm font-black text-slate-900">Your contact details</h3>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">Full Name *</label>
                   <div className="relative">
@@ -417,10 +486,12 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                     />
                   </div>
                 </div>
+                </div>
               </div>
 
               {/* FEATURE 3: Address & Map Picker */}
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3">
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="text-sm font-black text-slate-900">Where should we send the professional?</h3>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-600">
                     Service Location{!specificAddress.trim() && " *"}
@@ -445,6 +516,13 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                   />
                 </div>
 
+                {hasMapLocation && (
+                  <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-900">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                    <p><strong>Help the professional find you:</strong> add your house or building number, street, flat/apartment number, floor, and a nearby landmark below.</p>
+                  </div>
+                )}
+
                 <div>
                   <label className="mb-1 block text-xs font-bold text-slate-600">
                     House / Street Address{!(selectedLocation.trim() && addressCoords) && " *"}
@@ -453,26 +531,40 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                     type="text"
                     required={!(selectedLocation.trim() && addressCoords)}
                     value={specificAddress}
-                    onChange={(e) => setSpecificAddress(e.target.value)}
+                    onChange={(e) => {
+                      setSpecificAddress(e.target.value);
+                      if (e.target.value) setAddressTouched(true);
+                    }}
+                    onBlur={() => setAddressTouched(true)}
+                    aria-invalid={addressTouched && Boolean(addressFieldError)}
+                    aria-describedby="specific-address-help"
                     placeholder="House 12, Street 4, Flat 3, blue gate…"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    className={`w-full rounded-xl border bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-1 ${addressTouched && addressFieldError ? "border-red-400 focus:border-red-500 focus:ring-red-200" : "border-slate-200 focus:border-emerald-500 focus:ring-emerald-500"}`}
                   />
-                  <p className="mt-1 text-[11px] text-slate-500">
-                    This is combined with the selected location and coordinates as one address.
-                  </p>
+                  <div id="specific-address-help" aria-live="polite">
+                    {addressTouched && addressFieldError ? (
+                      <p className="mt-1.5 flex items-start gap-1.5 text-[11px] font-semibold text-red-600">
+                        <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {addressFieldError}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-slate-500">This is combined with the selected location and coordinates as one address.</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* FEATURE 2: Recurring Booking Picker */}
-              <RecurringPicker
-                isRecurring={isRecurring}
-                onToggleRecurring={setIsRecurring}
-                fromDate={fromDate}
-                toDate={toDate}
-                onFromDateChange={setFromDate}
-                onToDateChange={setToDate}
-                unitPrice={unitPrice * quantity}
-              />
+              <div className="space-y-4">
+                <h3 className="text-sm font-black text-slate-900">Choose booking date</h3>
+                {/* FEATURE 2: Recurring Booking Picker */}
+                <RecurringPicker
+                  isRecurring={isRecurring}
+                  onToggleRecurring={setIsRecurring}
+                  fromDate={fromDate}
+                  toDate={toDate}
+                  onFromDateChange={setFromDate}
+                  onToDateChange={setToDate}
+                  unitPrice={unitPrice * quantity}
+                />
 
               {/* Date selection if One Time */}
               {!isRecurring && (
@@ -494,22 +586,30 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                   </div>
                 </div>
               )}
+              </div>
 
               {/* FEATURE 1: 30-Min Time Slot Picker Grid */}
-              <TimeSlotPicker
-                selectedDate={fromDate}
-                selectedTime={selectedTime}
-                onSelectTime={setSelectedTime}
-              />
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <TimeSlotPicker selectedDate={fromDate} selectedTime={selectedTime} onSelectTime={setSelectedTime} />
+              </div>
 
               {/* FEATURE 4: Payment Option & EasyPaisa Receipt Upload */}
-              <EasyPaisaPaymentSection
-                paymentMethod={paymentMethod}
-                onSelectPaymentMethod={setPaymentMethod}
-              />
+              <div className="lg:col-span-2">
+                <EasyPaisaPaymentSection
+                  paymentMethod={paymentMethod}
+                  onPaymentMethodChange={(method) => { setPaymentMethod(method); setReceiptDataUrl(""); setReceiptFileName(""); }}
+                  total={calculatedTotal}
+                  receiptFileName={receiptFileName}
+                  onReceiptSelect={handleReceiptSelect}
+                  rewardEligible={rewardEligible}
+                  rewardLoading={rewardLoading}
+                  useRewardPoints={useRewardPoints && rewardEligible}
+                  onUseRewardPointsChange={(value) => { setUseRewardPoints(value); setReceiptDataUrl(""); setReceiptFileName(""); }}
+                />
+              </div>
 
               {/* Special Instructions */}
-              <div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
                 <label className="block text-xs font-bold text-slate-600 mb-1">
                   Requirements / Special Instructions
                 </label>
@@ -526,7 +626,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
               </div>
 
               {/* Submit Button */}
-              <div className="pt-2">
+              <div className="pt-2 lg:col-span-2">
                 {!user ? (
                   <button
                     type="button"
@@ -548,7 +648,7 @@ export default function BookingModal({ isOpen, onClose, service }: BookingModalP
                         Submitting Booking...
                       </>
                     ) : (
-                      `Confirm Booking (Rs ${calculatedTotal.toLocaleString()})`
+                      paymentNow > 0 ? `Pay Rs ${paymentNow.toLocaleString()} & Confirm Booking` : "Redeem Reward & Confirm Booking"
                     )}
                   </button>
                 )}

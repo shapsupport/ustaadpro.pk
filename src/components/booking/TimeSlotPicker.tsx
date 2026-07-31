@@ -75,7 +75,7 @@ export default function TimeSlotPicker({
         )}
       </div>
 
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1 rounded-2xl border border-slate-200 bg-slate-50/50">
+      <div className="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50/50 p-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
         {slots.map((slot) => {
           const disabled = isSlotInPast(slot.value, selectedDate);
           const isSelected = selectedTime === slot.value;

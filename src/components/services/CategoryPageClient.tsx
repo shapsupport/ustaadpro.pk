@@ -14,6 +14,8 @@ import {
   ChevronRight,
   Wrench,
   Star,
+  Minus,
+  Plus,
 } from "lucide-react";
 import type { ApiCatalogCategory, ApiService, ApiSubcategory } from "@/lib/api-types";
 import BookingModal from "@/components/booking/BookingModal";
@@ -34,6 +36,7 @@ export function CategoryPageClient({ catalogCategory }: CategoryPageClientProps)
   const router = useRouter();
   const [activeSubcategory, setActiveSubcategory] = useState<ApiSubcategory | null>(null);
   const [bookingService, setBookingService] = useState<ApiService | null>(null);
+  const [bookingQuantity, setBookingQuantity] = useState(1);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
 
   const subcategories = catalogCategory.subcategories ?? [];
@@ -52,8 +55,9 @@ export function CategoryPageClient({ catalogCategory }: CategoryPageClientProps)
     }
   };
 
-  const handleBookService = (service: ApiService) => {
+  const handleBookService = (service: ApiService, quantity = 1) => {
     setBookingService(service);
+    setBookingQuantity(Math.max(1, quantity));
     setIsBookingOpen(true);
   };
 
@@ -118,7 +122,7 @@ export function CategoryPageClient({ catalogCategory }: CategoryPageClientProps)
                 <ServiceCard
                   key={service.id}
                   service={service}
-                  onBook={() => handleBookService(service)}
+                  onBook={(quantity) => handleBookService(service, quantity)}
                 />
               ))}
             </div>
@@ -129,7 +133,7 @@ export function CategoryPageClient({ catalogCategory }: CategoryPageClientProps)
           <BookingModal
             isOpen={isBookingOpen}
             onClose={() => setIsBookingOpen(false)}
-            service={bookingService}
+            service={{ id: bookingService.id, title: bookingService.title, price: bookingService.price, quantity: bookingQuantity, unitDescription: bookingService.unitDescription || bookingService.serviceType || bookingService.service_type }}
           />
         )}
       </div>
@@ -222,7 +226,7 @@ export function CategoryPageClient({ catalogCategory }: CategoryPageClientProps)
                 <ServiceCard
                   key={service.id}
                   service={service}
-                  onBook={() => handleBookService(service)}
+                  onBook={(quantity) => handleBookService(service, quantity)}
                 />
               ))}
             </div>
@@ -247,7 +251,7 @@ export function CategoryPageClient({ catalogCategory }: CategoryPageClientProps)
         <BookingModal
           isOpen={isBookingOpen}
           onClose={() => setIsBookingOpen(false)}
-          service={bookingService}
+          service={{ id: bookingService.id, title: bookingService.title, price: bookingService.price, quantity: bookingQuantity, unitDescription: bookingService.unitDescription || bookingService.serviceType || bookingService.service_type }}
         />
       )}
     </div>
@@ -320,12 +324,14 @@ function ServiceCard({
   onBook,
 }: {
   service: ApiService;
-  onBook: () => void;
+  onBook: (quantity: number) => void;
 }) {
   const src = imgSrc(service.serviceImageUrl || service.imageUrl || service.image_url);
   const originalPrice = Number(service.original_price || service.originalPrice || 0);
   const discount = originalPrice > service.price ? Math.round(((originalPrice - service.price) / originalPrice) * 100) : 0;
   const unitText = service.unitDescription || service.serviceType || service.service_type || "";
+  const allowsQuantity = /^per\b/i.test(unitText.trim()) || /^per\b/i.test((service.description || "").trim());
+  const [quantity, setQuantity] = useState(1);
 
   return (
     <div className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
@@ -380,12 +386,14 @@ function ServiceCard({
           </div>
         )}
 
+        {allowsQuantity && <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-2.5"><div><p className="text-xs font-bold text-emerald-900">How many?</p><p className="text-[10px] text-emerald-700">{unitText || "Per item"}</p></div><div className="flex items-center overflow-hidden rounded-xl border border-emerald-200 bg-white"><button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))} disabled={quantity <= 1} aria-label="Decrease quantity" className="grid h-9 w-9 place-items-center disabled:opacity-30"><Minus className="h-4 w-4" /></button><span className="grid h-9 min-w-9 place-items-center border-x border-emerald-100 text-sm font-black">{quantity}</span><button type="button" onClick={() => setQuantity((value) => Math.min(10, value + 1))} disabled={quantity >= 10} aria-label="Increase quantity" className="grid h-9 w-9 place-items-center disabled:opacity-30"><Plus className="h-4 w-4" /></button></div></div>}
+
         {/* Price + Book */}
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
           <div>
             {unitText && <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{unitText}</p>}
             <div className="flex items-baseline gap-1.5">
-              <span className="text-xl font-black text-slate-900">Rs {service.price.toLocaleString()}</span>
+              <span className="text-xl font-black text-slate-900">Rs {(service.price * quantity).toLocaleString()}</span>
               {discount > 0 && (
                 <span className="text-xs text-slate-400 line-through">Rs {originalPrice.toLocaleString()}</span>
               )}
@@ -393,7 +401,7 @@ function ServiceCard({
           </div>
           <button
             type="button"
-            onClick={onBook}
+            onClick={() => onBook(quantity)}
             className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700"
           >
             Book <ArrowRight className="h-4 w-4" />

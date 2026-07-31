@@ -6,7 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { Menu, MapPin, ChevronDown, UserRound, ShoppingCart } from "lucide-react";
+import { Menu, MapPin, ChevronDown, UserRound, ShoppingCart, WalletCards } from "lucide-react";
 import { MobileNav } from "./MobileNav";
 import { useLocation } from "@/context/LocationContext";
 import { useAuth } from "@/context/AuthContext";
@@ -125,17 +125,24 @@ export function Navbar() {
             </button>
 
             {/* Desktop User/Profile — show from lg upwards */}
+            <Link
+              href="/wallet"
+              aria-label={user ? "Open wallet and rewards" : "View wallet benefits"}
+              title="Wallet & Rewards"
+              className="hidden h-10 w-10 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-100 lg:flex"
+            >
+              <WalletCards className="h-5 w-5" />
+            </Link>
             {user ? (
               <button
                 onClick={() => setProfileOpen(true)}
-                className="hidden h-10 cursor-pointer items-center gap-2 rounded-xl bg-gradient-to-br from-primary to-emerald-700 px-4 font-bold text-white shadow-md shadow-primary/10 transition-all hover:opacity-90 lg:flex"
+                aria-label="Open account menu"
+                title="My account"
+                className="hidden h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-gradient-to-br from-primary to-emerald-700 text-white shadow-md shadow-primary/10 transition-all hover:opacity-90 lg:flex"
               >
                 <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20">
                   <UserRound className="h-4 w-4" />
                 </div>
-                <span className="max-w-[80px] truncate text-sm">
-                  {user.name}
-                </span>
               </button>
             ) : (
               <button

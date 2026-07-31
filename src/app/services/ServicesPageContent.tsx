@@ -25,6 +25,8 @@ import {
   Headphones,
   CircleCheck,
   CheckCircle2,
+  Minus,
+  Plus,
 } from "lucide-react";
 import type { ApiCategory, ApiCatalogCategory, ApiService, ApiSubcategory } from "@/lib/api-types";
 import { orderServices } from "@/lib/service-order";
@@ -138,6 +140,7 @@ type SubcatItem = ApiSubcategory & { description?: string };
 
 export function ServicesPageContent({
   initialServices,
+  initialCategories = [],
   initialCatalog = [],
   initialSearch = "",
 }: ServicesPageContentProps) {
@@ -148,11 +151,27 @@ export function ServicesPageContent({
   const [searchedServices, setSearchedServices] = useState<ApiService[]>([]);
   const [completedSearch, setCompletedSearch] = useState("");
   const [bookingService, setBookingService] = useState<ApiService | null>(null);
+  const [bookingQuantity, setBookingQuantity] = useState(1);
 
   const stepRef = useRef<HTMLDivElement>(null);
   const activeAliases = useMemo(() => getCategoryAliases(activeCategory), [activeCategory]);
+  const displayCategories = useMemo(() => {
+    if (!initialCategories?.length) return PRIMARY_CATEGORIES;
+    return initialCategories
+      .filter((category) => category.isActive !== false && category.is_active !== false)
+      .map((category) => {
+        const aliases = getCategoryAliases(category.id);
+        const fallback = PRIMARY_CATEGORIES.find((item) => aliases.includes(item.id) || getCategoryAliases(item.id).includes(category.id));
+        return { ...fallback, ...category, subtitle: category.subtitle || fallback?.subtitle };
+      });
+  }, [initialCategories]);
 
-  const activeCategoryObj = PRIMARY_CATEGORIES.find((c) => activeAliases.includes(c.id));
+  const activeCategoryObj = displayCategories.find((c) => activeAliases.includes(c.id) || getCategoryAliases(c.id).some((id) => activeAliases.includes(id)));
+
+  function openBooking(service: ApiService, quantity = 1) {
+    setBookingQuantity(Math.max(1, quantity));
+    setBookingService(service);
+  }
 
   function scrollToStep() {
     window.requestAnimationFrame(() => {
@@ -200,7 +219,7 @@ export function ServicesPageContent({
     const activeAliasesNorm = activeAliases.map(normalize);
 
     // Also match by category title (e.g. catalog has title "Electrician" matching our category)
-    const activeCategoryTitle = PRIMARY_CATEGORIES.find((c) => activeAliases.includes(c.id))?.title?.toLowerCase() ?? "";
+    const activeCategoryTitle = displayCategories.find((c) => activeAliases.includes(c.id) || getCategoryAliases(c.id).some((id) => activeAliases.includes(id)))?.title?.toLowerCase() ?? "";
 
     // Find all catalog entries that match this category (flexible matching)
     const matchingCatalogEntries = initialCatalog.filter((catalogCat) => {
@@ -268,23 +287,33 @@ export function ServicesPageContent({
       });
     });
 
-    const uniqueList: ApiSubcategory[] = [];
-    const seenIds = new Set<string>();
-    const seenTitles = new Set<string>();
-
+    // The API can contain legacy and current IDs for the same subcategory title.
+    // Merge those records so an older empty entry cannot hide the populated one.
+    const subcategoriesByTitle = new Map<string, ApiSubcategory>();
     Array.from(subcatsMap.values()).forEach((sub) => {
-      const normalizedTitle = sub.title.trim().toLowerCase();
-      if (!seenIds.has(sub.id) && !seenTitles.has(normalizedTitle)) {
-        seenIds.add(sub.id);
-        seenTitles.add(normalizedTitle);
-        uniqueList.push(sub);
+      const key = sub.title.trim().toLowerCase().replace(/\s+/g, " ");
+      const existing = subcategoriesByTitle.get(key);
+      if (!existing) {
+        subcategoriesByTitle.set(key, { ...sub, services: [...(sub.services || [])] });
+        return;
       }
+      const mergedServices = [...(existing.services || [])];
+      (sub.services || []).forEach((service) => {
+        if (!mergedServices.some((item) => item.id === service.id)) mergedServices.push(service);
+      });
+      const preferIncoming = (sub.services?.length || 0) > (existing.services?.length || 0);
+      subcategoriesByTitle.set(key, {
+        ...(preferIncoming ? existing : sub),
+        ...(preferIncoming ? sub : existing),
+        id: preferIncoming ? sub.id : existing.id,
+        services: mergedServices,
+      });
     });
 
-    const withServices = uniqueList.filter((sub) => sub.services && sub.services.length > 0);
+    const uniqueList = Array.from(subcategoriesByTitle.values());
 
     // FALLBACK: If still empty, show all services for this category grouped by subcategory_id
-    if (withServices.length === 0) {
+    if (uniqueList.length === 0) {
       const normalize2 = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, "");
       const activeAliasesNorm2 = activeAliases.map(normalize2);
       const categoryServices = initialServices.filter((s) => {
@@ -308,8 +337,8 @@ export function ServicesPageContent({
       }
     }
 
-    return withServices;
-  }, [activeCategory, activeAliases, initialCatalog, initialServices]);
+    return uniqueList;
+  }, [activeCategory, activeAliases, displayCategories, initialCatalog, initialServices]);
 
   // Services for selected sub-category
   const subcategoryServices = useMemo(() => {
@@ -387,7 +416,7 @@ export function ServicesPageContent({
               <span className="mt-2 block text-emerald-600">Get the job done right.</span>
             </h1>
             {/* Step indicator */}
-            <div className="mt-8 flex items-center gap-3">
+            <div className="mt-8 flex w-fit max-w-full items-center gap-2 overflow-x-auto rounded-2xl border border-emerald-200 bg-white p-2.5 shadow-lg sm:gap-3">
               {[
                 { n: 1, label: "Category" },
                 { n: 2, label: "Sub-service" },
@@ -399,13 +428,13 @@ export function ServicesPageContent({
                   <div key={n} className="flex items-center gap-3">
                     <div className="flex items-center gap-2">
                       <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-black transition-all ${
-                        isDone ? "bg-emerald-600 text-white" : isActive ? "bg-white text-emerald-700 ring-2 ring-emerald-500 shadow-md" : "bg-white/30 text-white/70"
+                        isDone ? "bg-emerald-600 text-white" : isActive ? "bg-emerald-100 text-emerald-800 ring-2 ring-emerald-500 shadow-sm" : "bg-slate-100 text-slate-500"
                       }`}>
                         {isDone ? <CheckCircle2 className="h-4 w-4" /> : n}
                       </div>
-                      <span className={`text-xs font-bold ${isActive ? "text-white" : isDone ? "text-emerald-200" : "text-white/60"}`}>{label}</span>
+                      <span className={`whitespace-nowrap text-xs font-bold ${isActive ? "text-emerald-800" : isDone ? "text-emerald-700" : "text-slate-500"}`}>{label}</span>
                     </div>
-                    {i < 2 && <div className={`h-px w-8 ${isDone ? "bg-emerald-400" : "bg-white/30"}`} />}
+                    {i < 2 && <div className={`h-px w-5 sm:w-8 ${isDone ? "bg-emerald-400" : "bg-slate-200"}`} />}
                   </div>
                 );
               })}
@@ -487,7 +516,7 @@ export function ServicesPageContent({
             ) : (
               <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {searchedServices.map((service, i) => (
-                  <ServiceCard key={`${service.id}-${i}`} service={service} onBook={() => setBookingService(service)} />
+                  <ServiceCard key={`${service.id}-${i}`} service={service} onBook={(quantity) => openBooking(service, quantity)} />
                 ))}
               </div>
             )}
@@ -499,7 +528,7 @@ export function ServicesPageContent({
           <div>
             <StepHeader step={1} title="Select a Service Category" subtitle="Choose the type of work you need done" />
             <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-              {PRIMARY_CATEGORIES.map((category) => {
+              {displayCategories.map((category) => {
                 const IconComponent = CAT_ICONS[category.id] || Wrench;
                 const gradient = CAT_GRADIENTS[category.id] || "from-slate-500 to-slate-600";
                 const catalogMatch = initialCatalog.find((item) =>
@@ -678,7 +707,7 @@ export function ServicesPageContent({
             ) : (
               <div className="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {subcategoryServices.map((service, i) => (
-                  <ServiceCard key={`${service.id}-${i}`} service={service} onBook={() => setBookingService(service)} />
+                  <ServiceCard key={`${service.id}-${i}`} service={service} onBook={(quantity) => openBooking(service, quantity)} />
                 ))}
               </div>
             )}
@@ -690,7 +719,13 @@ export function ServicesPageContent({
         <BookingModal
           isOpen={Boolean(bookingService)}
           onClose={() => setBookingService(null)}
-          service={bookingService}
+          service={{
+            id: bookingService.id,
+            title: bookingService.title,
+            price: bookingService.price,
+            quantity: bookingQuantity,
+            unitDescription: bookingService.unitDescription || bookingService.serviceType || bookingService.service_type,
+          }}
         />
       )}
     </div>
@@ -739,11 +774,13 @@ function EmptyState({ onReset }: { onReset: () => void }) {
   );
 }
 
-function ServiceCard({ service, onBook }: { service: ApiService; onBook: () => void }) {
+function ServiceCard({ service, onBook }: { service: ApiService; onBook: (quantity: number) => void }) {
   const src = imgSrc(service.serviceImageUrl || service.imageUrl || service.image_url);
   const originalPrice = Number(service.original_price || service.originalPrice || 0);
   const discount = originalPrice > service.price ? Math.round(((originalPrice - service.price) / originalPrice) * 100) : 0;
   const unitText = service.unitDescription || service.serviceType || service.service_type || "";
+  const allowsQuantity = /^per\b/i.test(unitText.trim()) || /^per\b/i.test((service.description || "").trim());
+  const [quantity, setQuantity] = useState(1);
 
   return (
     <div className="group flex flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
@@ -793,19 +830,21 @@ function ServiceCard({ service, onBook }: { service: ApiService; onBook: () => v
           <span className="text-xs text-slate-400">{Number(service.reviews || 0) > 0 ? `(${service.reviews} reviews)` : "(No reviews)"}</span>
         </div>
 
+        {allowsQuantity && <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-2.5"><div><p className="text-xs font-bold text-emerald-900">How many?</p><p className="text-[10px] text-emerald-700">{unitText || "Per item"}</p></div><div className="flex items-center overflow-hidden rounded-xl border border-emerald-200 bg-white"><button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))} disabled={quantity <= 1} aria-label="Decrease quantity" className="grid h-9 w-9 place-items-center text-slate-600 disabled:opacity-30"><Minus className="h-4 w-4" /></button><span className="grid h-9 min-w-9 place-items-center border-x border-emerald-100 text-sm font-black text-slate-900">{quantity}</span><button type="button" onClick={() => setQuantity((value) => Math.min(10, value + 1))} disabled={quantity >= 10} aria-label="Increase quantity" className="grid h-9 w-9 place-items-center text-slate-600 disabled:opacity-30"><Plus className="h-4 w-4" /></button></div></div>}
+
         <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
               {unitText ? unitText : "Rate"}
             </p>
             <div className="mt-0.5 flex flex-wrap items-baseline gap-1.5">
-              <span className="text-2xl font-black text-slate-900">Rs {service.price.toLocaleString()}</span>
+              <span className="text-2xl font-black text-slate-900">Rs {(service.price * quantity).toLocaleString()}</span>
               {discount > 0 ? <span className="text-xs text-slate-400 line-through">Rs {originalPrice.toLocaleString()}</span> : null}
             </div>
           </div>
           <button
             type="button"
-            onClick={onBook}
+            onClick={() => onBook(quantity)}
             className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700"
           >
             Book Now <ArrowRight className="h-4 w-4" />
