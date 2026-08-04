@@ -16,8 +16,14 @@ import { PaymentSection } from "./PaymentSection";
 import { useLocation } from "@/context/LocationContext";
 import type { FormData, PaymentMethod } from "../types";
 
-function pakistanToday() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+function bookingTime(date: string, time: string) {
+  return new Date(`${date}T${time}:00+05:00`).getTime();
+}
+
+function pakistanDateAndTime(timestamp: number) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Karachi", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(timestamp));
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return { date: `${value.year}-${value.month}-${value.day}`, time: `${value.hour}:${value.minute}` };
 }
 
 interface CheckoutFormProps {
@@ -25,12 +31,13 @@ interface CheckoutFormProps {
   initialPhone: string;
   onSubmit: (
     formData: FormData,
-    paymentMethod: PaymentMethod,
-    screenshotName: string
+    paymentMethod: PaymentMethod
   ) => void;
   isSubmitting: boolean;
   isShop?: boolean;
+  minimumBookingLeadHours?: number;
   submitError?: string;
+  onScheduleChange?: () => void;
 }
 
 export function CheckoutForm({
@@ -39,7 +46,9 @@ export function CheckoutForm({
   onSubmit,
   isSubmitting,
   isShop = false,
+  minimumBookingLeadHours = 0,
   submitError = "",
+  onScheduleChange,
 }: CheckoutFormProps) {
   const { location } = useLocation();
 
@@ -52,9 +61,15 @@ export function CheckoutForm({
     preferredTime: "",
     notes: "",
   });
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
-  const [screenshotName, setScreenshotName] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(isShop ? "cod" : "Rs 200 Advance");
   const [error, setError] = useState("");
+  const [scheduleError, setScheduleError] = useState("");
+  const earliestBookingTime = Date.now() + minimumBookingLeadHours * 60 * 60 * 1000;
+  const earliestBooking = pakistanDateAndTime(earliestBookingTime);
+  const leadTimeError = minimumBookingLeadHours > 0 ? `Please choose a time at least ${minimumBookingLeadHours} hour(s) from now.` : "Please choose a future date and time.";
+  const isUnavailableTime = (time: string) => !formData.preferredDate || bookingTime(formData.preferredDate, time) < earliestBookingTime;
+  const apiScheduleError = /choose.*time|future date and time|hour\(s\).*from now|booking time/i.test(submitError) ? submitError : "";
+  const displayedScheduleError = scheduleError || apiScheduleError;
 
   const hasLocation =
     location.status === "serviceable" ||
@@ -86,21 +101,23 @@ export function CheckoutForm({
     }
     if (!isShop) {
       if (!formData.preferredDate || !formData.preferredTime) {
-        setError("Please choose both a service date and an arrival time.");
+        setScheduleError("Please choose both a service date and an arrival time.");
         return;
       }
       const selected = new Date(`${formData.preferredDate}T${formData.preferredTime}:00+05:00`);
-      if (Number.isNaN(selected.getTime()) || selected.getTime() <= Date.now()) {
-        setError("Please choose a date and time in the future.");
+      const earliest = Date.now() + minimumBookingLeadHours * 60 * 60 * 1000;
+      if (Number.isNaN(selected.getTime()) || selected.getTime() < earliest) {
+        setScheduleError(leadTimeError);
         return;
       }
       if (formData.preferredTime < "07:00" || formData.preferredTime > "23:00") {
-        setError("Available booking hours are 7:00 AM to 11:00 PM Pakistan time.");
+        setScheduleError("Available booking hours are 7:00 AM to 11:00 PM Pakistan time.");
         return;
       }
+      setScheduleError("");
     }
 
-    onSubmit(formData, paymentMethod, screenshotName);
+    onSubmit(formData, paymentMethod);
   };
 
   return (
@@ -165,8 +182,15 @@ export function CheckoutForm({
               <div className="relative">
                 <CalendarDays className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input id="preferredDate" name="preferredDate" type="date"
-                  min={pakistanToday()}
-                  value={formData.preferredDate} onChange={handleChange}
+                  min={earliestBooking.date}
+                  value={formData.preferredDate} onChange={(event) => {
+                    const date = event.target.value;
+                    if (date < earliestBooking.date) { setScheduleError(leadTimeError); return; }
+                    const keepTime = Boolean(formData.preferredTime) && bookingTime(date, formData.preferredTime) >= earliestBookingTime;
+                    setScheduleError(formData.preferredTime && !keepTime ? leadTimeError : "");
+                    setFormData((current) => ({ ...current, preferredDate: date, preferredTime: keepTime ? current.preferredTime : "" }));
+                    onScheduleChange?.();
+                  }}
                   className="rounded-2xl border-slate-200 bg-slate-50 py-5 pl-10 text-sm focus-visible:ring-primary" required />
               </div>
             </Field>
@@ -174,16 +198,23 @@ export function CheckoutForm({
               <div className="relative">
                 <Clock3 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input id="preferredTime" name="preferredTime" type="time" step="900"
-                  min="07:00" max="23:00"
-                  value={formData.preferredTime} onChange={handleChange}
+                  min={formData.preferredDate === earliestBooking.date && earliestBooking.time > "07:00" ? earliestBooking.time : "07:00"} max="23:00"
+                  value={formData.preferredTime} onChange={(event) => {
+                    const time = event.target.value;
+                    if (isUnavailableTime(time)) { setScheduleError(leadTimeError); return; }
+                    setFormData((current) => ({ ...current, preferredTime: time }));
+                    setScheduleError("");
+                    onScheduleChange?.();
+                  }}
                   className="rounded-2xl border-slate-200 bg-slate-50 py-5 pl-10 text-sm focus-visible:ring-primary" required />
               </div>
             </Field>
           </div>
           <div>
             <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Popular times</p>
-            <div className="flex flex-wrap gap-2">{["09:00", "12:00", "15:00", "18:00", "21:00"].map((time) => <button key={time} type="button" onClick={() => setFormData((current) => ({ ...current, preferredTime: time }))} className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${formData.preferredTime === time ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300"}`}>{new Date(`2000-01-01T${time}`).toLocaleTimeString("en-PK", { hour: "numeric", minute: "2-digit" })}</button>)}</div>
+            <div className="flex flex-wrap gap-2">{["09:00", "12:00", "15:00", "18:00", "21:00"].map((time) => { const disabled = isUnavailableTime(time); return <button key={time} type="button" disabled={disabled} onClick={() => { setFormData((current) => ({ ...current, preferredTime: time })); setScheduleError(""); onScheduleChange?.(); }} className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${disabled ? "cursor-not-allowed border-slate-100 bg-slate-100 text-slate-300" : formData.preferredTime === time ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300"}`}>{new Date(`2000-01-01T${time}`).toLocaleTimeString("en-PK", { hour: "numeric", minute: "2-digit" })}</button>; })}</div>
           </div>
+          {displayedScheduleError && <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" role="alert"><AlertCircle className="h-4 w-4 shrink-0" />{displayedScheduleError}</div>}
           <div className="flex gap-3 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
             <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
             <div><p className="font-bold">Bookings are available from 7:00 AM to 11:00 PM PKT.</p><p className="mt-1 leading-5 text-amber-800">Past times cannot be booked. Your selected slot is a request and our team will confirm it after checkout.</p></div>
@@ -195,9 +226,8 @@ export function CheckoutForm({
       <Section step={isShop ? 3 : 4} label="Payment" description="Choose how you'd like to pay.">
         <PaymentSection
           paymentMethod={paymentMethod}
-          screenshotName={screenshotName}
+          isShop={isShop}
           onPaymentChange={setPaymentMethod}
-          onScreenshotChange={setScreenshotName}
         />
       </Section>
 
@@ -223,7 +253,7 @@ export function CheckoutForm({
 
 
       {/* ─── Error ──────────────────────────────────────────── */}
-      {error || submitError ? (
+      {error || (submitError && !apiScheduleError) ? (
         <div className="flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
           <p>{error || submitError}</p>

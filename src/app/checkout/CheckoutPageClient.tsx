@@ -47,12 +47,12 @@ export default function CheckoutPageClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
-  // ── Fetch admin settings ────────────────────────────────────────────────
+  // ── Fetch public settings ───────────────────────────────────────────────
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE;
   useEffect(() => {
     if (!API_BASE_URL) return;
     let alive = true;
-    fetch(`${API_BASE_URL}/api/admin/settings`)
+    fetch(`${API_BASE_URL}/api/settings`)
       .then(async (res) => {
         if (!res.ok) throw new Error();
         const data = (await res.json()) as Partial<AdminSettings>;
@@ -78,7 +78,7 @@ export default function CheckoutPageClient() {
     [location]
   );
 
-  const [livePaymentMethod, setLivePaymentMethod] = useState<PaymentMethod>("cash");
+  const [livePaymentMethod, setLivePaymentMethod] = useState<PaymentMethod>(isShop ? "cod" : "Rs 200 Advance");
 
   const subtotal = isShop ? productPrice * quantity : servicePrice;
   const taxAmount = isShop ? 0 : subtotal * (settings.serviceTaxPercent / 100);
@@ -92,12 +92,11 @@ export default function CheckoutPageClient() {
 
   // ── Handle form submit ──────────────────────────────────────────────────
   const handleSubmit = useCallback(
-    async (formData: FormData, paymentMethod: PaymentMethod, screenshotName: string) => {
+    async (formData: FormData, paymentMethod: PaymentMethod) => {
       setIsSubmitting(true);
       setSubmitError("");
       setLivePaymentMethod(paymentMethod);
 
-      const isOnline = paymentMethod === "easypaisa" || paymentMethod === "jazzcash";
       // Keep the precise map point and the user-entered house details together
       // in the single address value expected by the checkout APIs.
       const address = [formData.houseNumber, formData.landmark, selectedAddress]
@@ -108,13 +107,16 @@ export default function CheckoutPageClient() {
 
       try {
         let orderId = "";
+        let confirmedTotal = totalPayable;
+        let confirmedInspectionFee = inspectionFee;
+        let confirmedTax = taxAmount;
         if (isShop) {
           const data = await checkoutShopOrder({
             items: [{ productId, quantity }],
             address,
             addressLat: location.coords?.lat,
             addressLng: location.coords?.lng,
-            paymentMethod: "cod",
+            paymentMethod,
           });
           orderId = data.order?.id || `BK-${Date.now()}`;
         } else {
@@ -137,11 +139,14 @@ export default function CheckoutPageClient() {
                 quantity: 1,
               },
             ],
-            paymentMethod: "Rs 200 Advance",
+            paymentMethod,
             inspectionFee: settings.inspectionFee,
             tax: taxAmount,
           });
           orderId = resData.order?.id || `BK-${Date.now()}`;
+          confirmedTotal = Number(resData.order?.total ?? totalPayable);
+          confirmedInspectionFee = Number(resData.order?.inspectionFee ?? inspectionFee);
+          confirmedTax = Number(resData.order?.tax ?? taxAmount);
         }
 
         const record: BookingRecord = {
@@ -149,8 +154,11 @@ export default function CheckoutPageClient() {
           serviceTitle: checkoutTitle,
           workTitle: isShop ? "" : workTitle,
           servicePrice: checkoutPrice,
+          total: confirmedTotal,
+          inspectionFee: isShop ? 0 : confirmedInspectionFee,
+          tax: isShop ? 0 : confirmedTax,
           paymentMethod,
-          status: isOnline ? (isShop ? "placed" : "Pending review") : (isShop ? "placed" : "Confirmed"),
+          status: isShop ? "placed" : "checking_receipt",
           createdAt: new Date().toISOString(),
           userEmail: user?.email ?? "",
           customerName: formData.fullName,
@@ -158,7 +166,6 @@ export default function CheckoutPageClient() {
           address,
           preferredTime: isShop ? "" : new Date(`${formData.preferredDate}T${formData.preferredTime}:00+05:00`).toISOString(),
           notes: formData.notes,
-          screenshotName,
           kind: isShop ? "shop" : "service",
           serviceId: isShop ? undefined : serviceId,
           items: isShop ? [{ productId, title: productTitle, quantity, price: productPrice, imageUrl: productImage }] : undefined,
@@ -218,13 +225,15 @@ export default function CheckoutPageClient() {
               </p>
             </div>
 
-            <CheckoutForm
+              <CheckoutForm
               initialName={user?.name ?? ""}
               initialPhone={user?.phone ?? ""}
               onSubmit={handleSubmit}
               isSubmitting={isSubmitting}
               isShop={isShop}
+              minimumBookingLeadHours={settings.minimumBookingLeadHours}
               submitError={submitError}
+              onScheduleChange={() => setSubmitError("")}
             />
           </div>
 

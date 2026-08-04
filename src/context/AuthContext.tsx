@@ -174,7 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { token, user: newUser } = await apiVerifySignupOtp({
         email: otpModal.email,
         phone: otpModal.phone,
-        code,
+        otp: code,
         verificationChannel: otpModal.verificationChannel,
       });
       persistSession(token, newUser);
@@ -248,7 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await resetPasswordWithOtp({
         email: otpModal.email,
         phone: otpModal.phone,
-        code,
+        otp: code,
         newPassword,
         channel: otpModal.verificationChannel,
       });

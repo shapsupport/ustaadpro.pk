@@ -7,14 +7,16 @@ interface TimeSlotPickerProps {
   selectedDate: string;
   selectedTime: string;
   onSelectTime: (time: string) => void;
+  minimumBookingLeadHours?: number;
+  error?: string;
 }
 
-/** Generate 30-min time slots from 6:00 AM (06:00) to 10:00 PM (22:00) */
+/** Generate 30-min time slots from 7:00 AM to 11:00 PM. */
 function generateTimeSlots(): { value: string; label: string }[] {
   const slots: { value: string; label: string }[] = [];
-  for (let hour = 6; hour <= 22; hour++) {
+  for (let hour = 7; hour <= 23; hour++) {
     for (let minute = 0; minute < 60; minute += 30) {
-      if (hour === 22 && minute > 0) break; // End at 22:00 (10:00 PM)
+      if (hour === 23 && minute > 0) break;
 
       const hStr = hour.toString().padStart(2, "0");
       const mStr = minute.toString().padStart(2, "0");
@@ -31,33 +33,18 @@ function generateTimeSlots(): { value: string; label: string }[] {
 }
 
 /** Check if slot is in the past for today's date in Pakistan Time */
-function isSlotInPast(slotValue: string, selectedDate: string): boolean {
-  if (!selectedDate) return false;
-
-  const todayStr = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Karachi",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-
-  if (selectedDate !== todayStr) return false;
-
-  const nowPkt = new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Asia/Karachi" })
-  );
-  const [slotHour, slotMin] = slotValue.split(":").map(Number);
-
-  const slotTimeInMin = slotHour * 60 + slotMin;
-  const currentTimeInMin = nowPkt.getHours() * 60 + nowPkt.getMinutes();
-
-  return slotTimeInMin <= currentTimeInMin;
+function isSlotUnavailable(slotValue: string, selectedDate: string, leadHours: number): boolean {
+  if (!selectedDate) return true;
+  const slot = new Date(`${selectedDate}T${slotValue}:00+05:00`).getTime();
+  return !Number.isFinite(slot) || slot < Date.now() + leadHours * 60 * 60 * 1000;
 }
 
 export default function TimeSlotPicker({
   selectedDate,
   selectedTime,
   onSelectTime,
+  minimumBookingLeadHours = 0,
+  error = "",
 }: TimeSlotPickerProps) {
   const slots = useMemo(() => generateTimeSlots(), []);
 
@@ -77,7 +64,7 @@ export default function TimeSlotPicker({
 
       <div className="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50/50 p-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
         {slots.map((slot) => {
-          const disabled = isSlotInPast(slot.value, selectedDate);
+          const disabled = isSlotUnavailable(slot.value, selectedDate, minimumBookingLeadHours);
           const isSelected = selectedTime === slot.value;
 
           return (
@@ -100,10 +87,10 @@ export default function TimeSlotPicker({
         })}
       </div>
 
-      {!selectedTime && (
+      {error ? <p className="flex items-center gap-1 text-sm font-semibold text-red-700" role="alert"><AlertCircle className="h-4 w-4 shrink-0" />{error}</p> : !selectedTime && (
         <p className="text-[11px] text-amber-700 flex items-center gap-1 mt-1">
           <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-          Please select a 30-minute arrival slot between 6:00 AM and 10:00 PM.
+          Please select a 30-minute arrival slot between 7:00 AM and 11:00 PM.
         </p>
       )}
     </div>

@@ -368,12 +368,31 @@ function CancelForm({ booking, onCancelled }: { booking: Booking; onCancelled: (
 }
 
 function IssueForm({ booking }: { booking: Booking }) {
-  const [details, setDetails] = useState(""), [images, setImages] = useState<string[]>([]), [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
-  async function submit() { if (!details.trim()) { setMessage("Please explain what went wrong."); return; } setBusy(true); setMessage(""); try { const path = booking.kind === "shop" ? `/api/shop/orders/${booking.id}/issues` : `/api/orders/${booking.id}/issues`; const res = await fetch(`${API_BASE}${path}`, { method: "POST", headers: authHeaders(), body: JSON.stringify({ description: details.trim(), images }) }); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.message || "Issue could not be sent. The support endpoint may not be enabled yet."); setMessage(data.message || "Your issue has been raised."); } catch (e) { setMessage(e instanceof Error ? e.message : "Issue could not be sent."); } finally { setBusy(false); } }
-  return <div className="mt-4 space-y-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4"><p className="font-bold text-slate-900">Tell support what happened</p><Textarea value={details} onChange={e => setDetails(e.target.value)} placeholder="Describe the problem, what you expected, and how we can help." /><ImagePicker onChange={setImages} />{message && <p className="text-sm font-medium text-slate-700">{message}</p>}<Button onClick={() => void submit()} disabled={busy}>{busy ? "Sending…" : "Send to support"}</Button></div>;
+  const { user } = useAuth();
+  const [details, setDetails] = useState(""), [images, setImages] = useState<File[]>([]), [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
+  async function submit() {
+    if (!details.trim()) { setMessage("Please explain what went wrong."); return; }
+    setBusy(true); setMessage("");
+    try {
+      const body = new FormData();
+      body.append("name", user?.name || "UstaadPro customer");
+      body.append("phone", user?.phone || "Not provided");
+      body.append("email", user?.email || "");
+      body.append("service", booking.kind === "shop" ? `Shop order #${booking.id}` : booking.serviceTitle);
+      if (booking.workTitle) body.append("subService", booking.workTitle);
+      body.append("description", `Order #${booking.id}: ${details.trim()}`);
+      images.forEach((file) => body.append("images", file, file.name));
+      const res = await fetch(`${API_BASE}/api/complaints`, { method: "POST", headers: { Authorization: `Bearer ${token()}` }, body });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Issue could not be sent.");
+      setMessage(data.message || "Your complaint has been submitted.");
+      setDetails(""); setImages([]);
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Issue could not be sent."); } finally { setBusy(false); }
+  }
+  return <div className="mt-4 space-y-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4"><p className="font-bold text-slate-900">Tell support what happened</p><Textarea value={details} onChange={e => setDetails(e.target.value)} placeholder="Describe the problem, what you expected, and how we can help." /><ImagePicker onChange={() => {}} onFiles={setImages} maxFiles={5} />{message && <p className="text-sm font-medium text-slate-700">{message}</p>}<Button onClick={() => void submit()} disabled={busy}>{busy ? "Sending…" : "Send to support"}</Button></div>;
 }
 
-function ImagePicker({ onChange }: { onChange: (images: string[]) => void }) { const [names, setNames] = useState<string[]>([]); async function choose(e: ChangeEvent<HTMLInputElement>) { const files = Array.from(e.target.files || []).slice(0, 3); setNames(files.map(f => f.name)); onChange(await filesToDataUrls(e.target.files)); } return <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-white p-3 text-sm text-slate-600"><Camera className="h-5 w-5 text-primary" /><input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e => void choose(e)} /><span>{names.length ? `${names.length} photo${names.length > 1 ? "s" : ""} attached` : "Attach photos"}</span></label>; }
+function ImagePicker({ onChange, onFiles, maxFiles = 3 }: { onChange: (images: string[]) => void; onFiles?: (files: File[]) => void; maxFiles?: number }) { const [names, setNames] = useState<string[]>([]); async function choose(e: ChangeEvent<HTMLInputElement>) { const files = Array.from(e.target.files || []).slice(0, maxFiles); setNames(files.map(f => f.name)); onFiles?.(files); if (!onFiles) onChange(await filesToDataUrls(e.target.files)); } return <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-white p-3 text-sm text-slate-600"><Camera className="h-5 w-5 text-primary" /><input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e => void choose(e)} /><span>{names.length ? `${names.length} photo${names.length > 1 ? "s" : ""} attached` : `Attach up to ${maxFiles} website photos`}</span></label>; }
 
 function SignIn({ onLogin }: { onLogin: () => void }) { return <div className="mx-auto flex min-h-[70vh] max-w-3xl items-center justify-center px-4"><div className="w-full rounded-3xl border bg-white p-8 text-center shadow-sm"><UserRound className="mx-auto h-12 w-12 text-primary" /><h1 className="mt-5 text-2xl font-bold">Sign in to view your bookings</h1><p className="mt-3 text-sm text-slate-600">Your order details and support conversations are private.</p><Button className="mt-6" onClick={onLogin}>Login to continue</Button></div></div>; }
 function Empty() { return <div className="rounded-3xl border border-dashed bg-slate-50 p-10 text-center"><CalendarDays className="mx-auto h-12 w-12 text-primary" /><h2 className="mt-4 text-xl font-semibold">No bookings yet</h2><p className="mt-2 text-sm text-slate-600">Choose a service to create your first booking.</p><Link href="/services" className="mt-5 inline-flex rounded-xl bg-primary px-5 py-3 font-semibold text-white">Explore services</Link></div>; }

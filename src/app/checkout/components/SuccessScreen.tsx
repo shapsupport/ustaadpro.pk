@@ -20,9 +20,9 @@ interface SuccessScreenProps {
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
-  cash: "Cash",
-  easypaisa: "EasyPaisa",
-  jazzcash: "JazzCash",
+  cod: "Cash on delivery",
+  "Rs 200 Advance": "Rs 200 Advance",
+  "Full Payment in Advance": "Full Payment in Advance",
 };
 
 function formatTime(iso: string): string {
@@ -37,6 +37,7 @@ function formatTime(iso: string): string {
 }
 
 export function SuccessScreen({ booking, currency: _currency }: SuccessScreenProps) {
+  const total = Number(booking.total ?? booking.servicePrice);
 
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-4 py-16">
@@ -106,6 +107,13 @@ export function SuccessScreen({ booking, currency: _currency }: SuccessScreenPro
                 </span>
               }
             />
+
+            {booking.kind !== "shop" && <>
+              <InfoRow icon={<CreditCard className="h-4 w-4 text-emerald-600" />} label="Service subtotal" value={<span className="font-semibold text-slate-900">PKR {booking.servicePrice.toLocaleString("en-PK")}</span>} />
+              <InfoRow icon={<CreditCard className="h-4 w-4 text-emerald-600" />} label="Inspection/service charge" value={<span className="text-slate-700">PKR {Number(booking.inspectionFee || 0).toLocaleString("en-PK")}</span>} />
+              <InfoRow icon={<CreditCard className="h-4 w-4 text-emerald-600" />} label="Service tax" value={<span className="text-slate-700">PKR {Number(booking.tax || 0).toLocaleString("en-PK")}</span>} />
+              <InfoRow icon={<CreditCard className="h-4 w-4 text-emerald-600" />} label="Final total" value={<span className="font-black text-emerald-700">PKR {total.toLocaleString("en-PK")}</span>} />
+            </>}
 
             {/* Booking time */}
             <InfoRow

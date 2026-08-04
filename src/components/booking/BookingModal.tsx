@@ -23,6 +23,10 @@ import MapAddressPickerModal from "../location/MapAddressPickerModal";
 import EasyPaisaPaymentSection from "./EasyPaisaPaymentSection";
 import { showSuccessToast } from "@/context/ToastContext";
 import { getProfile } from "@/services/authService";
+import { useRouter } from "next/navigation";
+import { useServiceCart } from "@/context/ServiceCartContext";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 
 // ── Service Area: Rawalpindi + Islamabad ────────────────────────────────
 const SERVICE_AREA = { south: 33.40, north: 33.80, west: 72.85, east: 73.30 };
@@ -64,6 +68,11 @@ function validateSpecificAddress(value: string, mapLocationSelected: boolean): s
 
 export default function BookingModal({ isOpen, onClose, service, services, onBookingComplete }: BookingModalProps) {
   const { user, setAuthModalMode } = useAuth();
+  const router = useRouter();
+  const { items: cartItems, addService } = useServiceCart();
+  const [step, setStep] = useState<"details" | "payment">("details");
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [livePrices, setLivePrices] = useState<Record<string, number>>({});
 
   // Basic Form State
   const [name, setName] = useState("");
@@ -74,7 +83,25 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const [requirements, setRequirements] = useState("");
 
   // Feature 1: Time Slot State
-  const [selectedTime, setSelectedTime] = useState("10:00");
+  const [selectedTime, setSelectedTime] = useState("");
+  const [minimumBookingLeadHours, setMinimumBookingLeadHours] = useState(0);
+  const [inspectionFee, setInspectionFee] = useState(0);
+  const [serviceTaxPercent, setServiceTaxPercent] = useState(0);
+  const [scheduleError, setScheduleError] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/settings`, { signal: controller.signal })
+      .then(async (response) => response.ok ? response.json() : Promise.reject(new Error("Settings unavailable")))
+      .then((settings: { minimumBookingLeadHours?: number; inspectionFee?: number; serviceTaxPercent?: number }) => {
+        setMinimumBookingLeadHours(Math.max(0, Number(settings.minimumBookingLeadHours || 0)));
+        setInspectionFee(Math.max(0, Number(settings.inspectionFee || 0)));
+        setServiceTaxPercent(Math.max(0, Number(settings.serviceTaxPercent || 0)));
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [isOpen]);
 
   // Feature 2: Recurring State
   const [isRecurring, setIsRecurring] = useState(false);
@@ -128,7 +155,11 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   }, [isOpen, user]);
 
   // Derived Calculations
-  const selectedServices = services?.length ? services : [service];
+  const baseSelectedServices = services?.length ? services : [service];
+  const selectedServices = baseSelectedServices.map((item) => ({
+    ...item,
+    price: livePrices[`${item.id}:${item.selectedWorkPriceId || "service"}`] ?? item.price,
+  }));
   const unitPrice = service.price;
   const quantity = Math.max(1, Math.min(10, Number(service.quantity || 1)));
   const daysCount = useMemo(
@@ -136,14 +167,14 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     [isRecurring, fromDate, toDate]
   );
   const listedServicesTotal = selectedServices.reduce((sum, item) => sum + Number(item.price) * Math.max(1, Math.min(10, Number(item.quantity || 1))), 0);
-  const calculatedTotal = listedServicesTotal * daysCount;
+  const serviceSubtotal = listedServicesTotal * daysCount;
+  const serviceTax = serviceSubtotal * serviceTaxPercent / 100;
+  const calculatedTotal = serviceSubtotal + inspectionFee + serviceTax;
   const rewardEligible = rewardPoints >= 200;
   const rewardDiscount = useRewardPoints && rewardEligible ? Math.min(200, calculatedTotal) : 0;
   const paymentNow = paymentMethod === "Rs 200 Advance"
     ? Math.max(0, Math.min(200, calculatedTotal) - rewardDiscount)
     : Math.max(0, calculatedTotal - rewardDiscount);
-  const amountCoveredNow = paymentMethod === "Rs 200 Advance" ? Math.min(200, calculatedTotal) : calculatedTotal;
-  const remainingAmount = Math.max(0, calculatedTotal - amountCoveredNow);
   const isInspectionService = selectedServices.some((item) => /visit|inspection/i.test(item.unitDescription || ""));
   const hasMapLocation = Boolean(selectedLocation.trim() && addressCoords);
   const addressFieldError = validateSpecificAddress(specificAddress, hasMapLocation);
@@ -195,21 +226,55 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     }
 
     if (!fromDate) {
-      setError("Please select a service date.");
+      setScheduleError("Please select a service date.");
       return;
     }
     if (!selectedTime) {
-      setError("Please select a 30-minute time slot from the grid.");
+      setScheduleError("Please select a 30-minute time slot from the grid.");
       return;
     }
-    if (paymentNow > 0 && !receiptDataUrl) {
-      setError("Please upload the receipt for your booking payment.");
+    const selectedDateTime = new Date(`${fromDate}T${selectedTime}:00+05:00`);
+    if (Number.isNaN(selectedDateTime.getTime()) || selectedDateTime.getTime() < Date.now() + minimumBookingLeadHours * 60 * 60 * 1000) {
+      setScheduleError(minimumBookingLeadHours > 0 ? `Please choose a time at least ${minimumBookingLeadHours} hour(s) from now.` : "Please choose a future date and time.");
       return;
     }
-
+    setScheduleError("");
     // Service area check: block if map coords are outside RWP+ISB
     if (addressCoords && !isWithinServiceArea(addressCoords.lat, addressCoords.lng)) {
       setError("📍 This location is outside our service area. We currently only serve Rawalpindi & Islamabad. Please pick a location within the service area.");
+      return;
+    }
+
+    if (step === "details") {
+      setQuoteLoading(true);
+      try {
+        const settingsResponse = await fetch(`${API_BASE}/api/settings`, { cache: "no-store" });
+        if (!settingsResponse.ok) throw new Error("Live billing settings could not be loaded.");
+        const settings = await settingsResponse.json() as { inspectionFee?: number; serviceTaxPercent?: number; minimumBookingLeadHours?: number };
+        setInspectionFee(Math.max(0, Number(settings.inspectionFee || 0)));
+        setServiceTaxPercent(Math.max(0, Number(settings.serviceTaxPercent || 0)));
+        setMinimumBookingLeadHours(Math.max(0, Number(settings.minimumBookingLeadHours || 0)));
+        const currentPrices = await Promise.all(selectedServices.map(async (item) => {
+          const response = await fetch(`${API_BASE}/api/services/${encodeURIComponent(String(item.id))}`, { cache: "no-store" });
+          if (!response.ok) throw new Error(`Current pricing for ${item.title} could not be loaded.`);
+          const current = await response.json() as { price?: number; workPrices?: Array<{ id: string | number; price: number }> };
+          const work = item.selectedWorkPriceId ? current.workPrices?.find((entry) => String(entry.id) === String(item.selectedWorkPriceId)) : undefined;
+          const price = Number(work?.price ?? current.price);
+          if (!Number.isFinite(price)) throw new Error(`Current pricing for ${item.title} is invalid.`);
+          return [`${item.id}:${item.selectedWorkPriceId || "service"}`, price] as const;
+        }));
+        setLivePrices(Object.fromEntries(currentPrices));
+        setStep("payment");
+      } catch (quoteError) {
+        setError(quoteError instanceof Error ? quoteError.message : "The live bill could not be prepared.");
+      } finally {
+        setQuoteLoading(false);
+      }
+      return;
+    }
+
+    if (paymentNow > 0 && !receiptDataUrl) {
+      setError("Please upload the receipt for your booking payment.");
       return;
     }
 
@@ -253,15 +318,22 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
         paymentMethod,
         recurringOccurrences: daysCount,
         useRewardPoints: useRewardPoints && rewardEligible,
+        inspectionFee,
+        tax: serviceTax,
       });
 
       if (response && response.order) {
         const orderId = response.order.id;
+        const confirmedTotal = Number(response.order.total || calculatedTotal);
+        const confirmedPaymentNow = paymentMethod === "Rs 200 Advance"
+          ? Math.max(0, Math.min(200, confirmedTotal) - rewardDiscount)
+          : Math.max(0, confirmedTotal - rewardDiscount);
+        const confirmedCoveredAmount = paymentMethod === "Rs 200 Advance" ? Math.min(200, confirmedTotal) : confirmedTotal;
         let receiptUploaded = false;
         let receiptError = "";
-        if (paymentNow > 0) {
+        if (confirmedPaymentNow > 0) {
           try {
-            await uploadPaymentReceipt(orderId, receiptDataUrl, paymentNow, receiptFileName);
+            await uploadPaymentReceipt(orderId, receiptDataUrl, confirmedPaymentNow, receiptFileName);
             receiptUploaded = true;
           } catch (uploadError) {
             receiptError = uploadError instanceof Error ? uploadError.message : "Receipt upload failed.";
@@ -272,11 +344,11 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
         setBookingSuccess({
           orderId,
-          total: calculatedTotal,
+          total: confirmedTotal,
           receiptUploaded,
           receiptError,
-          paidAmount: amountCoveredNow,
-          remainingAmount,
+          paidAmount: confirmedCoveredAmount,
+          remainingAmount: Math.max(0, confirmedTotal - confirmedCoveredAmount),
           rewardApplied: useRewardPoints && rewardEligible,
         });
         showSuccessToast(`${service.title} has been booked successfully.`);
@@ -330,6 +402,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
         }
         setError("Your login session has expired. Please sign in to complete your booking.");
         setAuthModalMode("login");
+      } else if (/choose.*time|hour\(s\).*from now|booking time/i.test(msg)) {
+        setScheduleError(msg);
       } else {
         setError(msg);
       }
@@ -342,17 +416,32 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     setBookingSuccess(null);
     setError("");
     setAddressTouched(false);
+    setStep("details");
     onClose();
+  };
+
+  const addMoreServices = () => {
+    selectedServices.filter((item) => !cartItems.some((cartItem) => cartItem.key === `${item.id}:${item.selectedWorkPriceId || "service"}`)).forEach((item) => addService({
+      id: item.id,
+      title: item.title,
+      price: item.price,
+      quantity: Math.max(1, Number(item.quantity || 1)),
+      selectedWorkPriceId: item.selectedWorkPriceId,
+      selectedWorkTitle: item.selectedWorkTitle,
+      unitDescription: item.unitDescription,
+    }));
+    onClose();
+    router.push("/services");
   };
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-        <div className="relative w-full max-w-5xl max-h-[94vh] mx-2 sm:mx-0 overflow-y-auto rounded-2xl sm:rounded-3xl bg-white shadow-2xl transition-all booking-modal-scrollbar">
-          <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-100 bg-white/95 px-4 sm:px-6 py-3 sm:py-4 backdrop-blur-md">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="relative mx-1 flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-[1.75rem] border border-white/70 bg-white shadow-2xl ring-1 ring-slate-900/5 transition-all sm:mx-0 sm:rounded-[2rem]">
+          <div className="z-20 flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-4 py-3 sm:px-6 sm:py-4">
             <div>
-              <h2 className="text-lg sm:text-xl font-black text-slate-900">Book Service</h2>
-              <p className="text-xs font-bold text-emerald-600 truncate max-w-xs">{selectedServices.length > 1 ? `${selectedServices.length} services selected` : service.title}</p>
+              <h2 className="text-lg sm:text-xl font-black text-slate-900">{step === "details" ? "Booking details" : "Review & payment"}</h2>
+              <p className="text-xs font-bold text-emerald-600 truncate max-w-xs">Step {step === "details" ? "1" : "2"} of 2 · {selectedServices.length > 1 ? `${selectedServices.length} services selected` : service.title}</p>
             </div>
             <button
               type="button"
@@ -364,6 +453,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
           </div>
 
           {/* Modal Body */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain booking-modal-scrollbar">
           {bookingSuccess ? (
             <div className="p-6 sm:p-8 text-center space-y-4">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-lg shadow-emerald-600/10">
@@ -451,10 +541,21 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                     </div>;
                   })}
                 </div>
+                <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                  <div className="flex justify-between"><span>Service subtotal</span><strong>Rs {serviceSubtotal.toLocaleString("en-PK")}</strong></div>
+                  <div className="flex justify-between"><span>Inspection/service charge</span><strong>Rs {inspectionFee.toLocaleString("en-PK")}</strong></div>
+                  <div className="flex justify-between"><span>Service tax ({serviceTaxPercent}%)</span><strong>Rs {serviceTax.toLocaleString("en-PK")}</strong></div>
+                  <div className="flex justify-between border-t border-slate-100 pt-2 text-sm text-slate-900"><span className="font-black">Final total</span><strong className="text-emerald-700">Rs {calculatedTotal.toLocaleString("en-PK")}</strong></div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" onClick={addMoreServices} className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">+ Add more services</button>
+                  {step === "payment" && <button type="button" onClick={() => { setStep("details"); setReceiptDataUrl(""); setReceiptFileName(""); }} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">Back to modify details</button>}
+                </div>
+                {step === "payment" && <p className="mt-2 text-[10px] text-slate-400">Live prices and fees were refreshed from the UstaadPro API. The backend confirms the authoritative total when the order is submitted.</p>}
               </div>
 
               {/* Contact Information */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className={`${step === "details" ? "" : "hidden"} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm`}>
                 <h3 className="mb-3 text-sm font-black text-slate-900">Your contact details</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                 <div>
@@ -490,7 +591,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>
 
               {/* FEATURE 3: Address & Map Picker */}
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className={`${step === "details" ? "" : "hidden"} space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm`}>
                 <h3 className="text-sm font-black text-slate-900">Where should we send the professional?</h3>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-600">
@@ -553,7 +654,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 </div>
               </div>
 
-              <div className="space-y-4">
+              <div className={`${step === "details" ? "" : "hidden"} space-y-4`}>
                 <h3 className="text-sm font-black text-slate-900">Choose booking date</h3>
                 {/* FEATURE 2: Recurring Booking Picker */}
                 <RecurringPicker
@@ -578,8 +679,11 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                       min={getTodayString()}
                       value={fromDate}
                       onChange={(e) => {
+                        if (e.target.value < getTodayString()) return;
                         setFromDate(e.target.value);
                         setToDate(e.target.value);
+                        setSelectedTime("");
+                        setScheduleError("");
                       }}
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     />
@@ -589,12 +693,12 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>
 
               {/* FEATURE 1: 30-Min Time Slot Picker Grid */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <TimeSlotPicker selectedDate={fromDate} selectedTime={selectedTime} onSelectTime={setSelectedTime} />
+              <div className={`${step === "details" ? "" : "hidden"} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm`}>
+                <TimeSlotPicker selectedDate={fromDate} selectedTime={selectedTime} minimumBookingLeadHours={minimumBookingLeadHours} error={scheduleError} onSelectTime={(time) => { setSelectedTime(time); setScheduleError(""); }} />
               </div>
 
               {/* FEATURE 4: Payment Option & EasyPaisa Receipt Upload */}
-              <div className="lg:col-span-2">
+              {step === "payment" && <div className="lg:col-span-2">
                 <EasyPaisaPaymentSection
                   paymentMethod={paymentMethod}
                   onPaymentMethodChange={(method) => { setPaymentMethod(method); setReceiptDataUrl(""); setReceiptFileName(""); }}
@@ -606,10 +710,10 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                   useRewardPoints={useRewardPoints && rewardEligible}
                   onUseRewardPointsChange={(value) => { setUseRewardPoints(value); setReceiptDataUrl(""); setReceiptFileName(""); }}
                 />
-              </div>
+              </div>}
 
               {/* Special Instructions */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
+              <div className={`${step === "details" ? "" : "hidden"} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2`}>
                 <label className="block text-xs font-bold text-slate-600 mb-1">
                   Requirements / Special Instructions
                 </label>
@@ -639,22 +743,23 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 ) : (
                   <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || quoteLoading}
                     className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-4 font-bold text-white shadow-lg shadow-emerald-600/25 hover:bg-emerald-700 transition disabled:opacity-50 text-sm sm:text-base"
                   >
-                    {loading ? (
+                    {loading || quoteLoading ? (
                       <>
                         <Loader2 className="h-5 w-5 animate-spin" />
-                        Submitting Booking...
+                        {quoteLoading ? "Preparing live bill..." : "Submitting Booking..."}
                       </>
                     ) : (
-                      paymentNow > 0 ? `Pay Rs ${paymentNow.toLocaleString()} & Confirm Booking` : "Redeem Reward & Confirm Booking"
+                      step === "details" ? "Proceed to payment" : paymentNow > 0 ? `Pay Rs ${paymentNow.toLocaleString()} & Confirm Booking` : "Redeem Reward & Confirm Booking"
                     )}
                   </button>
                 )}
               </div>
             </form>
           )}
+          </div>
         </div>
       </div>
 

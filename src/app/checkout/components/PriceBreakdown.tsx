@@ -3,22 +3,22 @@
 import { useMemo, type ReactNode } from "react";
 import { Separator } from "@/components/ui/separator";
 import { Info } from "lucide-react";
-import type { AdminSettings } from "../types";
+import type { AdminSettings, PaymentMethod } from "../types";
 
 interface PriceBreakdownProps {
   serviceTitle: string;
   workTitle: string;
   servicePrice: number;
   settings: AdminSettings;
-  paymentMethod: "cash" | "easypaisa" | "jazzcash";
+  paymentMethod: PaymentMethod;
   selectedAddress: string;
   isShop?: boolean;
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
-  cash: "Cash",
-  easypaisa: "EasyPaisa",
-  jazzcash: "JazzCash",
+  cod: "Cash on delivery",
+  "Rs 200 Advance": "Rs 200 Advance",
+  "Full Payment in Advance": "Full Payment in Advance",
 };
 
 export function PriceBreakdown({

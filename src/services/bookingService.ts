@@ -113,8 +113,8 @@ export async function createBooking(data: CreateBookingPayload): Promise<Booking
     specialInstructions: data.requirements || "",
     recurringOccurrences: Math.max(1, Number(data.recurringOccurrences || 1)),
     useRewardPoints: Boolean(data.useRewardPoints),
-    inspectionFee: 0,
-    tax: 0,
+    inspectionFee: Math.max(0, Number(data.inspectionFee || 0)),
+    tax: Math.max(0, Number(data.tax || 0)),
   };
 
   try {

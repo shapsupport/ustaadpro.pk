@@ -115,7 +115,7 @@
   }
 
   html {
-    @apply scroll-smooth font-sans;
+    @apply font-sans;
   }
 }
 
@@ -343,9 +343,9 @@ body:has([data-sticky-checkout-visible="true"]) [data-floating-book-now] {
 }
 
 .booking-modal-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+  background: #f8fafc;
   border-radius: 8px;
-  margin-block: 4px;
+  margin-block: 12px;
 }
 
 .booking-modal-scrollbar::-webkit-scrollbar-thumb {

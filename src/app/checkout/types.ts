@@ -1,4 +1,4 @@
-export type PaymentMethod = "cash" | "easypaisa" | "jazzcash";
+export type PaymentMethod = "cod" | "Rs 200 Advance" | "Full Payment in Advance";
 
 export type AdminSettings = {
   inspectionFee: number;
@@ -13,6 +13,7 @@ export type AdminSettings = {
   serviceRewardPointsOnCompletion: number;
   shopRewardEarnPercent: number;
   shopRewardMaxDiscountPercent: number;
+  minimumBookingLeadHours: number;
 };
 
 export type FormData = {
@@ -30,6 +31,9 @@ export type BookingRecord = {
   serviceTitle: string;
   workTitle: string;
   servicePrice: number;
+  total?: number;
+  inspectionFee?: number;
+  tax?: number;
   paymentMethod: PaymentMethod;
   status: string;
   createdAt: string;
@@ -39,7 +43,6 @@ export type BookingRecord = {
   address: string;
   preferredTime: string;
   notes: string;
-  screenshotName: string;
   kind?: "service" | "shop";
   serviceId?: string;
   items?: Array<{ productId: string; title: string; quantity: number; price: number; imageUrl?: string }>;
@@ -58,4 +61,5 @@ export const DEFAULT_SETTINGS: AdminSettings = {
   serviceRewardPointsOnCompletion: 1,
   shopRewardEarnPercent: 0.5,
   shopRewardMaxDiscountPercent: 5,
+  minimumBookingLeadHours: 0,
 };

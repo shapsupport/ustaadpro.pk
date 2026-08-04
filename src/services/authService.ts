@@ -49,7 +49,7 @@ export async function signupUser(data: SignupPayload): Promise<SignupOtpSentResp
 export interface VerifySignupOtpPayload {
   email?: string;
   phone?: string;
-  code: string;
+  otp: string;
   verificationChannel?: "email" | "phone";
 }
 
@@ -88,7 +88,7 @@ export async function requestLoginOtp(phone: string): Promise<RequestLoginOtpRes
 
 export interface VerifyLoginOtpPayload {
   phone: string;
-  code: string;
+  otp: string;
 }
 
 export async function verifyLoginOtp(data: VerifyLoginOtpPayload): Promise<AuthResponse> {
@@ -122,7 +122,7 @@ export async function requestPasswordResetOtp(
 export interface ResetPasswordPayload {
   email?: string;
   phone?: string;
-  code: string;
+  otp: string;
   newPassword: string;
   channel?: "email" | "phone";
 }
