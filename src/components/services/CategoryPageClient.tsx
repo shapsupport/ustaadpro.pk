@@ -16,9 +16,11 @@ import {
   Star,
   Minus,
   Plus,
+  ShoppingCart,
 } from "lucide-react";
 import type { ApiCatalogCategory, ApiService, ApiSubcategory } from "@/lib/api-types";
 import BookingModal from "@/components/booking/BookingModal";
+import { useServiceCart } from "@/context/ServiceCartContext";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 
@@ -326,12 +328,16 @@ function ServiceCard({
   service: ApiService;
   onBook: (quantity: number) => void;
 }) {
+  const { items, addService } = useServiceCart();
   const src = imgSrc(service.serviceImageUrl || service.imageUrl || service.image_url);
   const originalPrice = Number(service.original_price || service.originalPrice || 0);
   const discount = originalPrice > service.price ? Math.round(((originalPrice - service.price) / originalPrice) * 100) : 0;
   const unitText = service.unitDescription || service.serviceType || service.service_type || "";
   const allowsQuantity = /^per\b/i.test(unitText.trim()) || /^per\b/i.test((service.description || "").trim());
   const [quantity, setQuantity] = useState(1);
+  const cartKey = `${service.id}:service`;
+  const inCart = items.some((item) => item.key === cartKey);
+  const addToCart = () => addService({ id: service.id, title: service.title, price: Number(service.price), quantity, imageUrl: service.serviceImageUrl || service.imageUrl || service.image_url, unitDescription: unitText });
 
   return (
     <div className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
@@ -389,7 +395,8 @@ function ServiceCard({
         {allowsQuantity && <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-2.5"><div><p className="text-xs font-bold text-emerald-900">How many?</p><p className="text-[10px] text-emerald-700">{unitText || "Per item"}</p></div><div className="flex items-center overflow-hidden rounded-xl border border-emerald-200 bg-white"><button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))} disabled={quantity <= 1} aria-label="Decrease quantity" className="grid h-9 w-9 place-items-center disabled:opacity-30"><Minus className="h-4 w-4" /></button><span className="grid h-9 min-w-9 place-items-center border-x border-emerald-100 text-sm font-black">{quantity}</span><button type="button" onClick={() => setQuantity((value) => Math.min(10, value + 1))} disabled={quantity >= 10} aria-label="Increase quantity" className="grid h-9 w-9 place-items-center disabled:opacity-30"><Plus className="h-4 w-4" /></button></div></div>}
 
         {/* Price + Book */}
-        <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <div className="flex items-center justify-between gap-3">
           <div>
             {unitText && <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{unitText}</p>}
             <div className="flex items-baseline gap-1.5">
@@ -399,6 +406,9 @@ function ServiceCard({
               )}
             </div>
           </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+          <button type="button" onClick={addToCart} className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold transition ${inCart ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"}`}><ShoppingCart className="h-4 w-4" />{inCart ? "Add another" : "Add to cart"}</button>
           <button
             type="button"
             onClick={() => onBook(quantity)}
@@ -406,6 +416,7 @@ function ServiceCard({
           >
             Book <ArrowRight className="h-4 w-4" />
           </button>
+          </div>
         </div>
       </div>
     </div>

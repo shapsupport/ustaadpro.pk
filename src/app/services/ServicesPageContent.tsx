@@ -27,12 +27,14 @@ import {
   CheckCircle2,
   Minus,
   Plus,
+  ShoppingCart,
 } from "lucide-react";
 import type { ApiCategory, ApiCatalogCategory, ApiService, ApiSubcategory } from "@/lib/api-types";
 import { orderServices } from "@/lib/service-order";
 import { searchServicesFromApi } from "@/lib/search";
 import { useLocation } from "@/context/LocationContext";
 import BookingModal from "@/components/booking/BookingModal";
+import { useServiceCart } from "@/context/ServiceCartContext";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 
@@ -775,12 +777,23 @@ function EmptyState({ onReset }: { onReset: () => void }) {
 }
 
 function ServiceCard({ service, onBook }: { service: ApiService; onBook: (quantity: number) => void }) {
+  const { items, addService } = useServiceCart();
   const src = imgSrc(service.serviceImageUrl || service.imageUrl || service.image_url);
   const originalPrice = Number(service.original_price || service.originalPrice || 0);
   const discount = originalPrice > service.price ? Math.round(((originalPrice - service.price) / originalPrice) * 100) : 0;
   const unitText = service.unitDescription || service.serviceType || service.service_type || "";
   const allowsQuantity = /^per\b/i.test(unitText.trim()) || /^per\b/i.test((service.description || "").trim());
   const [quantity, setQuantity] = useState(1);
+  const cartKey = `${service.id}:service`;
+  const inCart = items.some((item) => item.key === cartKey);
+  const addToCart = () => addService({
+    id: service.id,
+    title: service.title,
+    price: Number(service.price),
+    quantity,
+    imageUrl: service.serviceImageUrl || service.imageUrl || service.image_url,
+    unitDescription: unitText,
+  });
 
   return (
     <div className="group flex flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
@@ -832,7 +845,8 @@ function ServiceCard({ service, onBook }: { service: ApiService; onBook: (quanti
 
         {allowsQuantity && <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-2.5"><div><p className="text-xs font-bold text-emerald-900">How many?</p><p className="text-[10px] text-emerald-700">{unitText || "Per item"}</p></div><div className="flex items-center overflow-hidden rounded-xl border border-emerald-200 bg-white"><button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))} disabled={quantity <= 1} aria-label="Decrease quantity" className="grid h-9 w-9 place-items-center text-slate-600 disabled:opacity-30"><Minus className="h-4 w-4" /></button><span className="grid h-9 min-w-9 place-items-center border-x border-emerald-100 text-sm font-black text-slate-900">{quantity}</span><button type="button" onClick={() => setQuantity((value) => Math.min(10, value + 1))} disabled={quantity >= 10} aria-label="Increase quantity" className="grid h-9 w-9 place-items-center text-slate-600 disabled:opacity-30"><Plus className="h-4 w-4" /></button></div></div>}
 
-        <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
               {unitText ? unitText : "Rate"}
@@ -842,13 +856,17 @@ function ServiceCard({ service, onBook }: { service: ApiService; onBook: (quanti
               {discount > 0 ? <span className="text-xs text-slate-400 line-through">Rs {originalPrice.toLocaleString()}</span> : null}
             </div>
           </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+          <button type="button" onClick={addToCart} className={`flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-bold transition ${inCart ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"}`}><ShoppingCart className="h-4 w-4" />{inCart ? "Add another" : "Add to cart"}</button>
           <button
             type="button"
             onClick={() => onBook(quantity)}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700"
           >
             Book Now <ArrowRight className="h-4 w-4" />
           </button>
+          </div>
         </div>
       </div>
     </div>

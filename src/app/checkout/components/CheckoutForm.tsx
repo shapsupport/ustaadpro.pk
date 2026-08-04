@@ -15,16 +15,7 @@ import { LocationSection } from "./LocationSection";
 import { PaymentSection } from "./PaymentSection";
 import { useLocation } from "@/context/LocationContext";
 import type { FormData, PaymentMethod } from "../types";
-
-function bookingTime(date: string, time: string) {
-  return new Date(`${date}T${time}:00+05:00`).getTime();
-}
-
-function pakistanDateAndTime(timestamp: number) {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Karachi", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(timestamp));
-  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return { date: `${value.year}-${value.month}-${value.day}`, time: `${value.hour}:${value.minute}` };
-}
+import { bookingTimestamp, clampBookingLeadHours, earliestBookingTimestamp, pakistanDateAndTime } from "@/lib/booking-time";
 
 interface CheckoutFormProps {
   initialName: string;
@@ -64,10 +55,11 @@ export function CheckoutForm({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(isShop ? "cod" : "Rs 200 Advance");
   const [error, setError] = useState("");
   const [scheduleError, setScheduleError] = useState("");
-  const earliestBookingTime = Date.now() + minimumBookingLeadHours * 60 * 60 * 1000;
+  const leadHours = clampBookingLeadHours(minimumBookingLeadHours);
+  const earliestBookingTime = earliestBookingTimestamp(leadHours);
   const earliestBooking = pakistanDateAndTime(earliestBookingTime);
-  const leadTimeError = minimumBookingLeadHours > 0 ? `Please choose a time at least ${minimumBookingLeadHours} hour(s) from now.` : "Please choose a future date and time.";
-  const isUnavailableTime = (time: string) => !formData.preferredDate || bookingTime(formData.preferredDate, time) < earliestBookingTime;
+  const leadTimeError = leadHours > 0 ? `Please choose a time at least ${leadHours} hour(s) from now.` : "Please choose a future date and time.";
+  const isUnavailableTime = (time: string) => !formData.preferredDate || bookingTimestamp(formData.preferredDate, time) < earliestBookingTime;
   const apiScheduleError = /choose.*time|future date and time|hour\(s\).*from now|booking time/i.test(submitError) ? submitError : "";
   const displayedScheduleError = scheduleError || apiScheduleError;
 
@@ -105,7 +97,7 @@ export function CheckoutForm({
         return;
       }
       const selected = new Date(`${formData.preferredDate}T${formData.preferredTime}:00+05:00`);
-      const earliest = Date.now() + minimumBookingLeadHours * 60 * 60 * 1000;
+      const earliest = earliestBookingTimestamp(leadHours);
       if (Number.isNaN(selected.getTime()) || selected.getTime() < earliest) {
         setScheduleError(leadTimeError);
         return;
@@ -186,7 +178,7 @@ export function CheckoutForm({
                   value={formData.preferredDate} onChange={(event) => {
                     const date = event.target.value;
                     if (date < earliestBooking.date) { setScheduleError(leadTimeError); return; }
-                    const keepTime = Boolean(formData.preferredTime) && bookingTime(date, formData.preferredTime) >= earliestBookingTime;
+                    const keepTime = Boolean(formData.preferredTime) && bookingTimestamp(date, formData.preferredTime) >= earliestBookingTime;
                     setScheduleError(formData.preferredTime && !keepTime ? leadTimeError : "");
                     setFormData((current) => ({ ...current, preferredDate: date, preferredTime: keepTime ? current.preferredTime : "" }));
                     onScheduleChange?.();

@@ -11,6 +11,7 @@ interface RecurringPickerProps {
   onFromDateChange: (date: string) => void;
   onToDateChange: (date: string) => void;
   unitPrice: number;
+  minimumDate: string;
 }
 
 export function calculateDaysCount(fromDateStr: string, toDateStr: string): number {
@@ -23,10 +24,6 @@ export function calculateDaysCount(fromDateStr: string, toDateStr: string): numb
   return Math.max(1, diffDays);
 }
 
-function getTodayString() {
-  return new Date().toISOString().split("T")[0];
-}
-
 export default function RecurringPicker({
   isRecurring,
   onToggleRecurring,
@@ -35,6 +32,7 @@ export default function RecurringPicker({
   onFromDateChange,
   onToDateChange,
   unitPrice,
+  minimumDate,
 }: RecurringPickerProps) {
   const daysCount = useMemo(
     () => (isRecurring ? calculateDaysCount(fromDate, toDate) : 1),
@@ -94,9 +92,10 @@ export default function RecurringPicker({
                 <input
                   type="date"
                   required
-                  min={getTodayString()}
+                  min={minimumDate}
                   value={fromDate}
                   onChange={(e) => {
+                    if (e.target.value < minimumDate) return;
                     onFromDateChange(e.target.value);
                     if (e.target.value > toDate) {
                       onToDateChange(e.target.value);
@@ -116,9 +115,9 @@ export default function RecurringPicker({
                 <input
                   type="date"
                   required
-                  min={fromDate || getTodayString()}
+                  min={fromDate || minimumDate}
                   value={toDate}
-                  onChange={(e) => onToDateChange(e.target.value)}
+                  onChange={(e) => { if (e.target.value >= (fromDate || minimumDate)) onToDateChange(e.target.value); }}
                   className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none"
                 />
               </div>

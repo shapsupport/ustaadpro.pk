@@ -19,6 +19,7 @@ import type {
   PaymentMethod,
 } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
+import { clampBookingLeadHours } from "@/lib/booking-time";
 
 export default function CheckoutPageClient() {
   const searchParams = useSearchParams();
@@ -48,15 +49,14 @@ export default function CheckoutPageClient() {
   const [submitError, setSubmitError] = useState("");
 
   // ── Fetch public settings ───────────────────────────────────────────────
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE;
+  const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk").replace(/\/$/, "");
   useEffect(() => {
-    if (!API_BASE_URL) return;
     let alive = true;
     fetch(`${API_BASE_URL}/api/settings`)
       .then(async (res) => {
         if (!res.ok) throw new Error();
         const data = (await res.json()) as Partial<AdminSettings>;
-        if (alive) setSettings({ ...DEFAULT_SETTINGS, ...data });
+        if (alive) setSettings({ ...DEFAULT_SETTINGS, ...data, minimumBookingLeadHours: clampBookingLeadHours(data.minimumBookingLeadHours) });
       })
       .catch(() => {
         if (alive) setSettings(DEFAULT_SETTINGS);

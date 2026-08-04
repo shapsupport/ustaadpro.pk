@@ -14,6 +14,9 @@ import {
   Map as MapIcon,
   Calendar,
   Info,
+  Minus,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { createBooking, uploadPaymentReceipt, ServiceItemInput } from "@/services/bookingService";
 import { useAuth } from "@/context/AuthContext";
@@ -25,8 +28,10 @@ import { showSuccessToast } from "@/context/ToastContext";
 import { getProfile } from "@/services/authService";
 import { useRouter } from "next/navigation";
 import { useServiceCart } from "@/context/ServiceCartContext";
+import { bookingTimestamp, clampBookingLeadHours, earliestBookingTimestamp, pakistanDateAndTime } from "@/lib/booking-time";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
+const BOOKING_DRAFT_KEY = "ustaadpro_booking_draft";
 
 // ── Service Area: Rawalpindi + Islamabad ────────────────────────────────
 const SERVICE_AREA = { south: 33.40, north: 33.80, west: 72.85, east: 73.30 };
@@ -53,7 +58,7 @@ interface BookingModalProps {
 }
 
 function getTodayString() {
-  return new Date().toISOString().split("T")[0];
+  return pakistanDateAndTime(Date.now()).date;
 }
 
 function validateSpecificAddress(value: string, mapLocationSelected: boolean): string {
@@ -69,7 +74,7 @@ function validateSpecificAddress(value: string, mapLocationSelected: boolean): s
 export default function BookingModal({ isOpen, onClose, service, services, onBookingComplete }: BookingModalProps) {
   const { user, setAuthModalMode } = useAuth();
   const router = useRouter();
-  const { items: cartItems, addService } = useServiceCart();
+  const { items: cartItems, addService, updateQuantity, removeService } = useServiceCart();
   const [step, setStep] = useState<"details" | "payment">("details");
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [livePrices, setLivePrices] = useState<Record<string, number>>({});
@@ -95,7 +100,14 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     fetch(`${API_BASE}/api/settings`, { signal: controller.signal })
       .then(async (response) => response.ok ? response.json() : Promise.reject(new Error("Settings unavailable")))
       .then((settings: { minimumBookingLeadHours?: number; inspectionFee?: number; serviceTaxPercent?: number }) => {
-        setMinimumBookingLeadHours(Math.max(0, Number(settings.minimumBookingLeadHours || 0)));
+        const leadHours = clampBookingLeadHours(settings.minimumBookingLeadHours);
+        const minimumDate = pakistanDateAndTime(earliestBookingTimestamp(leadHours)).date;
+        setMinimumBookingLeadHours(leadHours);
+        if (fromDate < minimumDate) {
+          setFromDate(minimumDate);
+          setToDate(minimumDate);
+          setSelectedTime("");
+        }
         setInspectionFee(Math.max(0, Number(settings.inspectionFee || 0)));
         setServiceTaxPercent(Math.max(0, Number(settings.serviceTaxPercent || 0)));
       })
@@ -141,6 +153,28 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       if (user.phone && !phone) setPhone(user.phone);
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const draft = JSON.parse(sessionStorage.getItem(BOOKING_DRAFT_KEY) || "null") as null | {
+        name?: string; phone?: string; selectedLocation?: string; specificAddress?: string;
+        requirements?: string; selectedTime?: string; fromDate?: string; toDate?: string;
+        isRecurring?: boolean; addressCoords?: { lat: number; lng: number } | null;
+      };
+      if (!draft) return;
+      if (draft.name) setName(draft.name);
+      if (draft.phone) setPhone(draft.phone);
+      setSelectedLocation(draft.selectedLocation || "");
+      setSpecificAddress(draft.specificAddress || "");
+      setRequirements(draft.requirements || "");
+      setSelectedTime(draft.selectedTime || "");
+      if (draft.fromDate) setFromDate(draft.fromDate);
+      if (draft.toDate) setToDate(draft.toDate);
+      setIsRecurring(Boolean(draft.isRecurring));
+      setAddressCoords(draft.addressCoords || null);
+    } catch { /* Ignore an invalid saved draft. */ }
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !user) {
@@ -233,8 +267,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       setScheduleError("Please select a 30-minute time slot from the grid.");
       return;
     }
-    const selectedDateTime = new Date(`${fromDate}T${selectedTime}:00+05:00`);
-    if (Number.isNaN(selectedDateTime.getTime()) || selectedDateTime.getTime() < Date.now() + minimumBookingLeadHours * 60 * 60 * 1000) {
+    const selectedDateTime = bookingTimestamp(fromDate, selectedTime);
+    if (!Number.isFinite(selectedDateTime) || selectedDateTime < earliestBookingTimestamp(minimumBookingLeadHours)) {
       setScheduleError(minimumBookingLeadHours > 0 ? `Please choose a time at least ${minimumBookingLeadHours} hour(s) from now.` : "Please choose a future date and time.");
       return;
     }
@@ -253,7 +287,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
         const settings = await settingsResponse.json() as { inspectionFee?: number; serviceTaxPercent?: number; minimumBookingLeadHours?: number };
         setInspectionFee(Math.max(0, Number(settings.inspectionFee || 0)));
         setServiceTaxPercent(Math.max(0, Number(settings.serviceTaxPercent || 0)));
-        setMinimumBookingLeadHours(Math.max(0, Number(settings.minimumBookingLeadHours || 0)));
+        setMinimumBookingLeadHours(clampBookingLeadHours(settings.minimumBookingLeadHours));
         const currentPrices = await Promise.all(selectedServices.map(async (item) => {
           const response = await fetch(`${API_BASE}/api/services/${encodeURIComponent(String(item.id))}`, { cache: "no-store" });
           if (!response.ok) throw new Error(`Current pricing for ${item.title} could not be loaded.`);
@@ -351,6 +385,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
           remainingAmount: Math.max(0, confirmedTotal - confirmedCoveredAmount),
           rewardApplied: useRewardPoints && rewardEligible,
         });
+        sessionStorage.removeItem(BOOKING_DRAFT_KEY);
         showSuccessToast(`${service.title} has been booked successfully.`);
         onBookingComplete?.();
 
@@ -420,7 +455,15 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     onClose();
   };
 
+  const saveBookingDraft = () => {
+    sessionStorage.setItem(BOOKING_DRAFT_KEY, JSON.stringify({
+      name, phone, selectedLocation, specificAddress, requirements, selectedTime,
+      fromDate, toDate, isRecurring, addressCoords,
+    }));
+  };
+
   const addMoreServices = () => {
+    saveBookingDraft();
     selectedServices.filter((item) => !cartItems.some((cartItem) => cartItem.key === `${item.id}:${item.selectedWorkPriceId || "service"}`)).forEach((item) => addService({
       id: item.id,
       title: item.title,
@@ -432,6 +475,12 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     }));
     onClose();
     router.push("/services");
+  };
+
+  const editService = (id: string | number) => {
+    saveBookingDraft();
+    onClose();
+    router.push(`/services/${encodeURIComponent(String(id))}`);
   };
 
   return (
@@ -532,13 +581,28 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                   <p className="text-[10px] uppercase font-bold text-slate-400">Selected service{selectedServices.length === 1 ? "" : "s"}</p>
                   <p className="text-sm font-black text-emerald-700">Rs {listedServicesTotal.toLocaleString()}</p>
                 </div>
-                <div className="space-y-1.5">
+                <div className="grid gap-3 sm:grid-cols-2">
                   {selectedServices.map((item) => {
                     const itemQuantity = Math.max(1, Number(item.quantity || 1));
-                    return <div key={`${item.id}:${item.selectedWorkPriceId || "service"}`} className="flex items-center justify-between gap-3 text-sm">
-                      <p className="min-w-0 truncate font-bold text-slate-800">{item.selectedWorkTitle || item.title} <span className="font-medium text-slate-400">× {itemQuantity}</span></p>
-                      <p className="shrink-0 font-bold text-slate-600">Rs {(item.price * itemQuantity).toLocaleString()}</p>
-                    </div>;
+                    const key = `${item.id}:${item.selectedWorkPriceId || "service"}`;
+                    const cartItem = cartItems.find((entry) => entry.key === key);
+                    return <article key={key} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 text-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0"><p className="truncate font-black text-slate-900">{item.selectedWorkTitle || item.title}</p><p className="mt-0.5 text-xs text-slate-500">Rs {Number(item.price).toLocaleString("en-PK")} each</p></div>
+                        <p className="shrink-0 font-black text-emerald-700">Rs {(item.price * itemQuantity).toLocaleString("en-PK")}</p>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-200 pt-3">
+                        {cartItem ? <div className="flex items-center rounded-xl border border-slate-200 bg-white">
+                          <button type="button" onClick={() => updateQuantity(key, itemQuantity - 1)} className="grid h-8 w-8 place-items-center" aria-label={`Decrease ${item.title} quantity`}><Minus className="h-3 w-3" /></button>
+                          <span className="w-8 text-center text-xs font-black">{itemQuantity}</span>
+                          <button type="button" onClick={() => updateQuantity(key, itemQuantity + 1)} className="grid h-8 w-8 place-items-center" aria-label={`Increase ${item.title} quantity`}><Plus className="h-3 w-3" /></button>
+                        </div> : <span className="text-xs font-bold text-slate-500">Quantity {itemQuantity}</span>}
+                        <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => editService(item.id)} className="rounded-lg px-2 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50">Edit</button>
+                          {cartItem && selectedServices.length > 1 && <button type="button" onClick={() => removeService(key)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${item.title}`}><Trash2 className="h-4 w-4" /></button>}
+                        </div>
+                      </div>
+                    </article>;
                   })}
                 </div>
                 <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600">
@@ -553,6 +617,16 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 </div>
                 {step === "payment" && <p className="mt-2 text-[10px] text-slate-400">Live prices and fees were refreshed from the UstaadPro API. The backend confirms the authoritative total when the order is submitted.</p>}
               </div>
+
+              {step === "payment" && <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
+                <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-black text-slate-900">Shared booking details</h3><button type="button" onClick={() => { setStep("details"); setReceiptDataUrl(""); setReceiptFileName(""); }} className="text-xs font-bold text-emerald-700 hover:underline">Modify details</button></div>
+                <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                  <div><p className="font-bold uppercase tracking-wide text-slate-400">Customer</p><p className="mt-1 font-semibold text-slate-800">{name} · {phone}</p></div>
+                  <div><p className="font-bold uppercase tracking-wide text-slate-400">Address</p><p className="mt-1 font-semibold text-slate-800">{[specificAddress, selectedLocation].filter(Boolean).join(" · ")}</p></div>
+                  <div><p className="font-bold uppercase tracking-wide text-slate-400">Schedule</p><p className="mt-1 font-semibold text-slate-800">{fromDate} at {selectedTime}</p></div>
+                  <div><p className="font-bold uppercase tracking-wide text-slate-400">Applies to</p><p className="mt-1 font-semibold text-slate-800">All {selectedServices.length} selected services</p></div>
+                </div>
+              </div>}
 
               {/* Contact Information */}
               <div className={`${step === "details" ? "" : "hidden"} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm`}>
@@ -665,6 +739,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                   onFromDateChange={setFromDate}
                   onToDateChange={setToDate}
                   unitPrice={unitPrice * quantity}
+                  minimumDate={pakistanDateAndTime(earliestBookingTimestamp(minimumBookingLeadHours)).date}
                 />
 
               {/* Date selection if One Time */}
@@ -676,10 +751,10 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                     <input
                       type="date"
                       required
-                      min={getTodayString()}
+                      min={pakistanDateAndTime(earliestBookingTimestamp(minimumBookingLeadHours)).date}
                       value={fromDate}
                       onChange={(e) => {
-                        if (e.target.value < getTodayString()) return;
+                        if (e.target.value < pakistanDateAndTime(earliestBookingTimestamp(minimumBookingLeadHours)).date) return;
                         setFromDate(e.target.value);
                         setToDate(e.target.value);
                         setSelectedTime("");

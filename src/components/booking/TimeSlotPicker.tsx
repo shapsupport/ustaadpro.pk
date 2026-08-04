@@ -2,6 +2,7 @@
 
 import React, { useMemo } from "react";
 import { Clock, AlertCircle } from "lucide-react";
+import { bookingTimestamp, clampBookingLeadHours, earliestBookingTimestamp } from "@/lib/booking-time";
 
 interface TimeSlotPickerProps {
   selectedDate: string;
@@ -35,8 +36,8 @@ function generateTimeSlots(): { value: string; label: string }[] {
 /** Check if slot is in the past for today's date in Pakistan Time */
 function isSlotUnavailable(slotValue: string, selectedDate: string, leadHours: number): boolean {
   if (!selectedDate) return true;
-  const slot = new Date(`${selectedDate}T${slotValue}:00+05:00`).getTime();
-  return !Number.isFinite(slot) || slot < Date.now() + leadHours * 60 * 60 * 1000;
+  const slot = bookingTimestamp(selectedDate, slotValue);
+  return !Number.isFinite(slot) || slot < earliestBookingTimestamp(clampBookingLeadHours(leadHours));
 }
 
 export default function TimeSlotPicker({
