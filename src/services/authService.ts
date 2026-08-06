@@ -99,6 +99,7 @@ export async function verifyLoginOtp(data: VerifyLoginOtpPayload): Promise<AuthR
 // ── Request password reset OTP ─────────────────────────────────────────────
 
 export interface RequestPasswordResetPayload {
+  identifier?: string;
   email?: string;
   phone?: string;
   channel?: "email" | "phone";
@@ -113,16 +114,23 @@ export interface RequestPasswordResetResponse {
 export async function requestPasswordResetOtp(
   data: RequestPasswordResetPayload,
 ): Promise<RequestPasswordResetResponse> {
-  const res = await api.post<RequestPasswordResetResponse>("/forgot-password/request-otp", data);
+  const identifier = data.identifier ?? data.email ?? data.phone ?? "";
+  const res = await api.post<RequestPasswordResetResponse>("/forgot-password/request-otp", {
+    ...data,
+    identifier,
+  });
   return res.data;
 }
 
 // ── Reset password with OTP ────────────────────────────────────────────────
 
 export interface ResetPasswordPayload {
+  identifier?: string;
   email?: string;
   phone?: string;
   otp: string;
+  code?: string;
+  verificationCode?: string;
   newPassword: string;
   channel?: "email" | "phone";
 }
@@ -134,7 +142,16 @@ export interface ResetPasswordResponse {
 export async function resetPasswordWithOtp(
   data: ResetPasswordPayload,
 ): Promise<ResetPasswordResponse> {
-  const res = await api.post<ResetPasswordResponse>("/forgot-password/reset", data);
+  const identifier = data.identifier ?? data.email ?? data.phone ?? "";
+  const verificationCode = data.verificationCode ?? data.otp;
+  const res = await api.post<ResetPasswordResponse>("/forgot-password/reset", {
+    ...data,
+    identifier,
+    // The current reset controller calls this field `code`; keep the other
+    // names as aliases for API deployments using the older contract.
+    code: data.code ?? verificationCode,
+    verificationCode,
+  });
   return res.data;
 }
 

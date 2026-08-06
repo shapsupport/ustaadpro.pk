@@ -65,6 +65,16 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
     setCheckoutOpen(true);
   };
 
+  const handleBack = () => {
+    // Prevent the browser from restoring the store's previous (often footer)
+    // scroll position when this in-page Back control is used.
+    try {
+      sessionStorage.setItem("ustaadpro_store_return_to_top", "true");
+      window.history.scrollRestoration = "manual";
+    } catch { /* Browser storage/history may be unavailable. */ }
+    router.back();
+  };
+
   useEffect(() => {
     const updateStickyCheckout = () => {
       const button = buyButtonRef.current;
@@ -86,7 +96,7 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
         <div className="mx-auto max-w-7xl">
           <button
             type="button"
-            onClick={() => router.back()}
+            onClick={handleBack}
             className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-base font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-100 hover:text-slate-950 sm:text-lg cursor-pointer"
             aria-label="Go back to the previous page"
           >

@@ -94,6 +94,31 @@ export default function StorePageClient() {
   const resultsRef = useRef<HTMLDivElement>(null);
   const catalogRequestRef = useRef(0);
 
+  useEffect(() => {
+    let shouldReturnToTop = false;
+    try {
+      shouldReturnToTop = sessionStorage.getItem("ustaadpro_store_return_to_top") === "true";
+      if (shouldReturnToTop) sessionStorage.removeItem("ustaadpro_store_return_to_top");
+    } catch { /* Browser storage may be unavailable. */ }
+    if (!shouldReturnToTop) return;
+
+    // Run after navigation and once more after the browser's restoration pass.
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+    const timer = window.setTimeout(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      window.history.scrollRestoration = "auto";
+    }, 100);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+      window.history.scrollRestoration = "auto";
+    };
+  }, []);
+
   const loadProducts = useCallback(async () => {
     const requestId = ++catalogRequestRef.current;
     const requestKey = `${selectedCategory}:${page}`;

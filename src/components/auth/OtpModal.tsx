@@ -17,6 +17,8 @@ import {
   EyeOff,
   RefreshCw,
   ChevronLeft,
+  Check,
+  Circle,
 } from "lucide-react";
 import { useAuth, extractApiError } from "@/context/AuthContext";
 import { requestPasswordResetOtp } from "@/services/authService";
@@ -27,8 +29,15 @@ const RESEND_SECONDS = 180; // 3 minutes
 // ── Validation ─────────────────────────────────────────────────────────────
 
 function isValidPassword(v: string): boolean {
-  return v.length >= 6 && /[A-Z]/.test(v);
+  return passwordRequirements.every((requirement) => requirement.test(v));
 }
+
+const passwordRequirements = [
+  { label: "At least 6 characters", test: (value: string) => value.length >= 6 },
+  { label: "One uppercase letter", test: (value: string) => /[A-Z]/.test(value) },
+  { label: "One lowercase letter", test: (value: string) => /[a-z]/.test(value) },
+  { label: "One number", test: (value: string) => /\d/.test(value) },
+];
 
 // ── Component ──────────────────────────────────────────────────────────────
 
@@ -111,7 +120,9 @@ export function OtpModal() {
         setResendSuccess(`A new verification code has been sent to your ${otpModal.verificationChannel === "phone" ? "phone" : "email"}.`);
       } else if (otpModal.mode === "forgot-password-verify") {
         await requestPasswordResetOtp({
+          identifier: otpModal.email ?? otpModal.phone,
           email: otpModal.email,
+          phone: otpModal.phone,
           channel: otpModal.verificationChannel,
         });
         setResendSuccess(`A new code has been sent to your ${otpModal.verificationChannel === "phone" ? "phone" : "email"}.`);
@@ -186,7 +197,7 @@ export function OtpModal() {
 
     if (currentModal.mode === "forgot-password-verify") {
       if (!isValidPassword(newPassword)) {
-        setPasswordError("Min 6 characters with at least 1 uppercase letter.");
+        setPasswordError("Complete all password requirements.");
         return;
       }
     }
@@ -362,9 +373,24 @@ export function OtpModal() {
                 {passwordError && (
                   <p className="mt-1 text-xs text-red-500 font-medium">{passwordError}</p>
                 )}
-                <p className="mt-1.5 text-xs text-slate-400">
-                  Min 6 characters, at least 1 uppercase letter.
-                </p>
+                <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1" aria-live="polite">
+                  {passwordRequirements.map((requirement) => {
+                    const met = requirement.test(newPassword);
+                    return (
+                      <div
+                        key={requirement.label}
+                        className={`flex items-center gap-1.5 text-[11px] font-medium ${met ? "text-emerald-600" : "text-slate-400"}`}
+                      >
+                        {met ? (
+                          <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        ) : (
+                          <Circle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                        )}
+                        <span>{requirement.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 

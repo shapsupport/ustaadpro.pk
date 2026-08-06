@@ -225,8 +225,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const payload =
         channel === "phone"
-          ? { phone: identifier, channel }
-          : { email: identifier, channel };
+          ? { identifier, phone: identifier, channel }
+          : { identifier, email: identifier, channel };
       const res = await requestPasswordResetOtp(payload);
       setOtpModal({
         mode: "forgot-password-verify",
@@ -245,10 +245,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!otpModal) throw new Error("No pending OTP session.");
     setIsLoading(true);
     try {
+      const identifier = otpModal.email ?? otpModal.phone ?? "";
       await resetPasswordWithOtp({
+        identifier,
         email: otpModal.email,
         phone: otpModal.phone,
         otp: code,
+        code,
+        verificationCode: code,
         newPassword,
         channel: otpModal.verificationChannel,
       });

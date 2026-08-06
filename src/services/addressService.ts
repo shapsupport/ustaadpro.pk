@@ -29,18 +29,25 @@ export interface CreateAddressPayload {
 
 function unwrapAddress(data: unknown): AddressRecord {
   const payload = data as { address?: AddressRecord; data?: AddressRecord };
-  const address = payload?.address ?? payload?.data ?? (data as AddressRecord);
+  const raw = payload?.address ?? payload?.data ?? (data as AddressRecord);
+  const address = raw as AddressRecord & { label?: string; detail?: string };
   if (!address || !Number.isFinite(Number(address.id))) {
     throw new Error("The address was saved, but the server did not return its ID.");
   }
-  return { ...address, id: Number(address.id) };
+  return {
+    ...address,
+    id: Number(address.id),
+    title: address.title ?? address.label ?? "Checkout address",
+    address: address.address ?? address.detail ?? "",
+  };
 }
 
 export async function createAddress(payload: CreateAddressPayload): Promise<AddressRecord> {
   try {
     const res = await addressClient.post("/addresses", {
-      title: payload.title ?? "Checkout address",
-      address: payload.address,
+      // The current API calls these fields `label` and `detail`.
+      label: payload.title ?? "Checkout address",
+      detail: payload.address,
       ...(Number.isFinite(payload.lat) ? { lat: payload.lat } : {}),
       ...(Number.isFinite(payload.lng) ? { lng: payload.lng } : {}),
     });
@@ -57,7 +64,8 @@ export async function createAddress(payload: CreateAddressPayload): Promise<Addr
 export async function getMyAddresses(): Promise<AddressRecord[]> {
   const res = await addressClient.get("/addresses");
   const data = res.data as AddressRecord[] | { addresses?: AddressRecord[]; data?: AddressRecord[] };
-  return Array.isArray(data) ? data : data.addresses ?? data.data ?? [];
+  const addresses = Array.isArray(data) ? data : data.addresses ?? data.data ?? [];
+  return addresses.map((item) => unwrapAddress(item));
 }
 
 export async function ensureAddress(payload: CreateAddressPayload): Promise<AddressRecord> {

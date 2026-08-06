@@ -75,6 +75,10 @@ export async function checkoutShopOrder(
     const res = await shopClient.post<CheckoutShopResponse>("/shop/checkout", {
       items: payload.items,
       addressId,
+      // Some deployed API versions still validate the delivery address on the
+      // checkout request even when a saved address ID is supplied.
+      address: payload.address,
+      deliveryAddress: payload.address,
       paymentMethod: (payload.paymentMethod ?? "cod").toLowerCase().includes("cash")
         ? "cod"
         : payload.paymentMethod,
