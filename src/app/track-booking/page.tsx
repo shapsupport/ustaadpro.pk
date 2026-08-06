@@ -27,6 +27,7 @@ type Booking = {
 
 type OrderItem = {
   productId?: string;
+  serviceId?: string;
   title: string;
   quantity: number;
   price: number;
@@ -42,16 +43,52 @@ function absoluteImage(url?: string) {
   if (!url) return "";
   return url.startsWith("http") ? url : `${API_BASE}${url.startsWith("/") ? url : `/${url}`}`;
 }
+
+function parsedObject(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  try { return JSON.parse(trimmed); } catch { return value; }
+}
+
+function findServiceId(value: unknown, seen = new Set<object>()): string {
+  const parsed = parsedObject(value);
+  if (!parsed || typeof parsed !== "object") return "";
+  if (seen.has(parsed)) return "";
+  seen.add(parsed);
+  const record = parsed as Record<string, unknown>;
+
+  for (const key of ["serviceId", "service_id"]) {
+    const candidate = record[key];
+    if (candidate !== undefined && candidate !== null && String(candidate).trim()) return String(candidate);
+  }
+  const service = parsedObject(record.service);
+  if (service && typeof service === "object") {
+    const serviceRecord = service as Record<string, unknown>;
+    const candidate = serviceRecord.id ?? serviceRecord.serviceId ?? serviceRecord.service_id;
+    if (candidate !== undefined && candidate !== null && String(candidate).trim()) return String(candidate);
+  } else if ((typeof service === "string" || typeof service === "number") && String(service).trim()) {
+    return String(service);
+  }
+  for (const child of Object.values(record)) {
+    const found = findServiceId(child, seen);
+    if (found) return found;
+  }
+  return "";
+}
+
 function listFrom(payload: unknown, kind: "service" | "shop"): Booking[] {
   const object = payload as { orders?: Record<string, unknown>[]; data?: Record<string, unknown>[] };
   const rows = Array.isArray(payload) ? payload : object?.orders || object?.data || [];
   return (rows as Record<string, unknown>[]).map((row) => {
-    const rawItems = Array.isArray(row.items) ? row.items as Record<string, unknown>[] : Array.isArray(row.cart) ? row.cart as Record<string, unknown>[] : [];
+    const possibleItems = parsedObject(row.items ?? row.orderItems ?? row.order_items ?? row.cart);
+    const rawItems = Array.isArray(possibleItems) ? possibleItems as Record<string, unknown>[] : [];
     const items = rawItems.map((item) => {
       const product = (item.product || {}) as Record<string, unknown>;
       const serviceItem = (item.service || {}) as Record<string, unknown>;
       return {
         productId: String(item.productId || product.id || ""),
+        serviceId: findServiceId(item),
         title: String(item.title || product.title || serviceItem.title || "Service"),
         quantity: Number(item.quantity || 1),
         price: Number(item.unitPrice || item.unit_price || item.price || product.price || serviceItem.price || 0),
@@ -70,9 +107,9 @@ function listFrom(payload: unknown, kind: "service" | "shop"): Booking[] {
       ...row,
       id: String(row.id || row.orderId || ""),
       kind,
-      serviceId: String(row.serviceId || service.id || ""),
-      serviceTitle: String(row.serviceTitle || service.title || (kind === "shop" ? (items.length > 1 ? `${items.length} products` : firstItem?.title || "Shop order") : "Service booking")),
-      workTitle: String(row.workTitle || ""),
+      serviceId: findServiceId(row) || String(service.id || firstItem?.serviceId || ""),
+      serviceTitle: String(row.serviceTitle || row.service_title || service.title || (kind === "shop" ? (items.length > 1 ? `${items.length} products` : firstItem?.title || "Shop order") : firstItem?.title || "Service booking")),
+      workTitle: String(row.workTitle || row.work_title || rawItems[0]?.selectedWorkTitle || rawItems[0]?.selected_work_title || ""),
       servicePrice: Number(row.servicePrice || (kind === "service" && listedItemsTotal > 0 ? listedItemsTotal : 0) || row.totalAmount || row.total || row.grandTotal || listedItemsTotal),
       paymentMethod: String(row.paymentMethod || row.payment_method || "Not specified"),
       status: String(row.status || (kind === "shop" ? "placed" : "confirmed")),
@@ -357,8 +394,49 @@ function UploadReceiptForm({ booking }: { booking: Booking }) {
 function ReviewForm({ booking }: { booking: Booking }) {
   const [rating, setRating] = useState(5), [comment, setComment] = useState(""), [images, setImages] = useState<string[]>([]), [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
   const [productId, setProductId] = useState(booking.items?.[0]?.productId || "");
-  async function submit() { if (booking.kind === "service" && !booking.serviceId) { setMessage("This booking has no service reference."); return; } if (booking.kind === "shop" && !productId) { setMessage("Select a product to review."); return; } if (!comment.trim()) { setMessage("Please write a short review."); return; } setBusy(true); setMessage(""); try { const res = await fetch(`${API_BASE}/api/reviews`, { method: "POST", headers: authHeaders(), body: JSON.stringify({ ...(booking.kind === "shop" ? { productId } : { serviceId: booking.serviceId }), orderId: booking.id, rating, comment: comment.trim(), ...(images.length ? { images } : {}) }) }); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.message || "Review could not be submitted."); setMessage(data.message || "Review submitted successfully."); } catch (e) { setMessage(e instanceof Error ? e.message : "Review could not be submitted."); } finally { setBusy(false); } }
-  return <div className="mt-4 space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4"><p className="font-bold text-slate-900">{booking.kind === "shop" ? "Review a delivered product" : "Review this service"}</p>{booking.kind === "shop" && (booking.items?.length || 0) > 1 && <select value={productId} onChange={(e) => setProductId(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800">{booking.items?.map((item) => <option key={item.productId} value={item.productId}>{item.title}</option>)}</select>}<div className="flex gap-1">{[1, 2, 3, 4, 5].map(n => <button type="button" key={n} onClick={() => setRating(n)} aria-label={`${n} stars`}><Star className={`h-7 w-7 ${n <= rating ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /></button>)}</div><Textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="What went well? Help other customers know what to expect." /><ImagePicker onChange={setImages} /><p className="text-xs text-slate-500">You can attach up to three JPG, PNG, or WebP images.</p>{message && <p className="text-sm font-medium text-slate-700">{message}</p>}<Button onClick={() => void submit()} disabled={busy}>{busy ? "Submitting…" : "Submit review"}</Button></div>;
+  const [serviceId, setServiceId] = useState(booking.serviceId || booking.items?.find((item) => item.serviceId)?.serviceId || "");
+  const serviceItems = booking.items?.filter((item) => item.serviceId) || [];
+  async function submit() {
+    if (booking.kind === "shop" && !productId) { setMessage("Select a product to review."); return; }
+    if (!comment.trim()) { setMessage("Please write a short review."); return; }
+    setBusy(true); setMessage("");
+    try {
+      let resolvedServiceId = serviceId;
+      if (booking.kind === "service" && !resolvedServiceId) {
+        // Older order-list responses omit serviceId. A detail response may
+        // still contain it in a nested or serialized order item.
+        try {
+          const detailResponse = await fetch(`${API_BASE}/api/orders/${booking.id}`, { headers: authHeaders(), cache: "no-store" });
+          if (detailResponse.ok) {
+            resolvedServiceId = findServiceId(await detailResponse.json());
+            if (resolvedServiceId) setServiceId(resolvedServiceId);
+          }
+        } catch { /* The review API can still resolve the service from orderId. */ }
+      }
+      const res = await fetch(`${API_BASE}/api/reviews`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          ...(booking.kind === "shop"
+            ? { product: productId, productId }
+            : resolvedServiceId
+              ? { service: resolvedServiceId, serviceId: resolvedServiceId }
+              : {}),
+          order: booking.id,
+          orderId: booking.id,
+          rating,
+          comment: comment.trim(),
+          ...(images.length ? { images } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Review could not be submitted.");
+      setMessage(data.message || "Review submitted successfully.");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Review could not be submitted.");
+    } finally { setBusy(false); }
+  }
+  return <div className="mt-4 space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4"><p className="font-bold text-slate-900">{booking.kind === "shop" ? "Review a delivered product" : "Review this service"}</p>{booking.kind === "shop" && (booking.items?.length || 0) > 1 && <select value={productId} onChange={(e) => setProductId(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800">{booking.items?.map((item) => <option key={item.productId} value={item.productId}>{item.title}</option>)}</select>}{booking.kind === "service" && serviceItems.length > 1 && <select value={serviceId} onChange={(e) => setServiceId(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800">{serviceItems.map((item, index) => <option key={`${item.serviceId}-${index}`} value={item.serviceId}>{item.title}</option>)}</select>}<div className="flex gap-1">{[1, 2, 3, 4, 5].map(n => <button type="button" key={n} onClick={() => setRating(n)} aria-label={`${n} stars`}><Star className={`h-7 w-7 ${n <= rating ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /></button>)}</div><Textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="What went well? Help other customers know what to expect." /><ImagePicker onChange={setImages} /><p className="text-xs text-slate-500">You can attach up to three JPG, PNG, or WebP images.</p>{message && <p className="text-sm font-medium text-slate-700">{message}</p>}<Button onClick={() => void submit()} disabled={busy}>{busy ? "Submitting…" : "Submit review"}</Button></div>;
 }
 
 function CancelForm({ booking, onCancelled }: { booking: Booking; onCancelled: () => void }) {
