@@ -28,7 +28,7 @@ function SuggestionItem({ result }: { result: SearchResult }) {
     >
       <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100">
         {image ? (
-          <Image src={image} alt="" fill unoptimized sizes="64px" className="object-cover" />
+          <Image src={image} alt="" fill sizes="64px" className="object-cover" />
         ) : (
           <Search className="absolute inset-0 m-auto h-5 w-5 text-slate-400" />
         )}

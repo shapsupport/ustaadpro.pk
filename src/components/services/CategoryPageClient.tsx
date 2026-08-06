@@ -175,7 +175,7 @@ export function CategoryPageClient({ catalogCategory }: CategoryPageClientProps)
             src={imgSrc(catalogCategory.mainCategory.webImageUrl) ?? ""}
             alt={catalogCategory.title}
             fill
-            unoptimized
+
             className="object-cover opacity-20"
           />
         )}
@@ -284,7 +284,7 @@ function SubcategoryCard({
             src={src}
             alt={subcat.title}
             fill
-            unoptimized
+
             className="object-cover transition-transform duration-500 group-hover:scale-105"
             sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
           />
@@ -348,7 +348,7 @@ function ServiceCard({
             src={src}
             alt={service.title}
             fill
-            unoptimized
+
             className="object-cover transition-transform duration-500 group-hover:scale-105"
             sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
           />

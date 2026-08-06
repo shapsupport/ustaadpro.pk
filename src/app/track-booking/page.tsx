@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { type ChangeEvent, useCallback, useEffect, useState } from "react";
-import { AlertCircle, ArrowRight, CalendarDays, Camera, ChevronDown, Clock3, CreditCard, MapPin, MessageSquareWarning, Package, ReceiptText, RefreshCw, ShoppingBag, Star, UserRound, WalletCards, Wrench, XCircle } from "lucide-react";
+import { AlertCircle, ArrowRight, CalendarDays, Camera, ChevronDown, Clock3, CreditCard, MapPin, MessageSquareWarning, Package, ReceiptText, RefreshCw, ShoppingBag, Star, UserRound, WalletCards, Wrench, XCircle, ClipboardList } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -164,7 +164,10 @@ export default function TrackBookingPage() {
     } finally { setLoading(false); }
   }, [user]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   useEffect(() => {
     if (!user?.email) return;
@@ -175,22 +178,53 @@ export default function TrackBookingPage() {
   if (!user) return <SignIn onLogin={() => setAuthModalMode("login")} />;
 
   const visibleBookings = view === "all" ? bookings : bookings.filter((booking) => booking.kind === view);
+  const serviceCount = bookings.filter((booking) => booking.kind === "service").length;
+  const shopCount = bookings.filter((booking) => booking.kind === "shop").length;
+  const completedCount = bookings.filter((booking) => ["completed", "delivered"].includes(booking.status.toLowerCase().replace(/\s+/g, "_"))).length;
   const updateBooking = (id: string, kind: Booking["kind"], updates: Partial<Booking>) => {
     setBookings((current) => current.map((booking) => booking.id === id && booking.kind === kind ? { ...booking, ...updates } : booking));
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-3 sm:px-6 lg:px-8 py-6 sm:py-10">
-      <div className="mb-6 sm:mb-8 flex flex-col gap-3 sm:gap-4 rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm sm:flex-row sm:items-end sm:justify-between">        <div><p className="text-sm font-semibold uppercase tracking-[.25em] text-emerald-600">My bookings</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Track every order in one place</h1><p className="mt-2 text-sm text-slate-600">Open a booking for its schedule, progress, review, payment, or support options.</p></div>
-        <div className="flex flex-wrap gap-2"><Link href="/wallet" className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800"><WalletCards className="h-4 w-4" />PKR {Number(user.walletBalance || 0).toLocaleString("en-PK")}</Link><Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh</Button><Link href="/services" className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white">Book service <ArrowRight className="h-4 w-4" /></Link></div>
+    <main className="min-h-[calc(100dvh-5rem)] bg-gradient-to-b from-slate-100 via-slate-50 to-white pb-16">
+      <div className="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-8 lg:px-8">
+        <section className="relative overflow-hidden rounded-[1.75rem] bg-slate-950 px-5 py-6 text-white shadow-xl shadow-slate-900/10 sm:px-8 sm:py-8">
+          <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full bg-emerald-500/15 blur-3xl" />
+          <div className="absolute -bottom-24 left-1/3 h-56 w-56 rounded-full bg-lime-400/10 blur-3xl" />
+          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-lime-300"><ClipboardList className="h-4 w-4" />My activity</p>
+              <h1 className="mt-3 text-2xl font-black tracking-tight sm:text-4xl">Track bookings and orders</h1>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">Follow progress, manage payments, raise an issue, or leave a review—all from one clear timeline.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/wallet" className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-4 text-sm font-bold text-white backdrop-blur transition hover:bg-white/15"><WalletCards className="h-4 w-4 text-lime-300" />PKR {Number(user.walletBalance || 0).toLocaleString("en-PK")}</Link>
+              <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-bold text-slate-200 transition hover:bg-white/10 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh</button>
+              <Link href="/services" className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-bold text-white shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-400">Book a service <ArrowRight className="h-4 w-4" /></Link>
+            </div>
+          </div>
+          {bookings.length > 0 && <div className="relative mt-6 grid grid-cols-3 gap-2 border-t border-white/10 pt-5 sm:max-w-lg sm:gap-3"><HeroStat label="All activity" value={bookings.length} /><HeroStat label="Services" value={serviceCount} /><HeroStat label="Completed" value={completedCount} /></div>}
+        </section>
+
+        {loadError && <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm"><AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" /><p>{loadError}</p></div>}
+
+        {bookings.length > 0 && <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div><h2 className="text-lg font-black text-slate-900">Your activity</h2><p className="text-xs text-slate-500">Select a card to see its timeline and available actions.</p></div>
+          <div className="flex w-full gap-1.5 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm sm:w-auto">
+            {(["all", "service", "shop"] as const).map((item) => { const count = item === "all" ? bookings.length : item === "service" ? serviceCount : shopCount; const label = item === "all" ? "All" : item === "service" ? "Services" : "Shop orders"; return <button key={item} type="button" onClick={() => setView(item)} className={`shrink-0 rounded-xl px-3.5 py-2 text-xs font-bold transition sm:text-sm ${view === item ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"}`}>{label}<span className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] ${view === item ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>{count}</span></button>; })}
+          </div>
+        </div>}
+
+        <div className="mt-4">
+          {loading && !bookings.length ? <div className="grid gap-4 md:grid-cols-2" role="status" aria-label="Loading bookings"><span className="sr-only">Loading bookings…</span>{Array.from({ length: 4 }).map((_, index) => <div key={index} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-4"><Skeleton className="h-14 w-14 rounded-2xl" /><div className="flex-1 space-y-2"><Skeleton className="h-3 w-28" /><Skeleton className="h-6 w-2/3" /><Skeleton className="h-4 w-40" /></div><Skeleton className="h-8 w-24 rounded-full" /></div></div>)}</div> : bookings.length === 0 ? <Empty /> : visibleBookings.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm"><Package className="mx-auto h-10 w-10 text-slate-300" /><p className="mt-3 font-bold text-slate-700">No activity in this section</p><p className="mt-1 text-sm text-slate-500">Try another filter to see your bookings and orders.</p></div> : <div className="grid items-start gap-4 lg:grid-cols-2">{visibleBookings.map((booking) => <BookingCard key={`${booking.kind}-${booking.id}`} booking={booking} onUpdate={(updates) => updateBooking(booking.id, booking.kind, updates)} />)}</div>}
+        </div>
       </div>
-      {loadError && <div className="mb-5 flex gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"><AlertCircle className="h-5 w-5 shrink-0" />{loadError}</div>}
-      {bookings.length > 0 && <div className="mb-5 flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        {(["all", "service", "shop"] as const).map((item) => <button key={item} type="button" onClick={() => setView(item)} className={`shrink-0 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-bold transition ${view === item ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{item === "all" ? `All (${bookings.length})` : item === "service" ? `Services (${bookings.filter((b) => b.kind === "service").length})` : `Shop (${bookings.filter((b) => b.kind === "shop").length})`}</button>)}
-      </div>}
-      {loading && !bookings.length ? <div className="grid gap-4 md:grid-cols-2" role="status" aria-label="Loading bookings"><span className="sr-only">Loading bookings…</span>{Array.from({ length: 4 }).map((_, index) => <div key={index} className="rounded-3xl border border-slate-200 bg-white p-5"><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-2xl" /><div className="flex-1 space-y-2"><Skeleton className="h-3 w-28" /><Skeleton className="h-6 w-2/3" /><Skeleton className="h-4 w-40" /></div><Skeleton className="h-8 w-24 rounded-full" /></div></div>)}</div> : bookings.length === 0 ? <Empty /> : visibleBookings.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-600">No orders in this section.</div> : <div className="grid items-start gap-4 md:grid-cols-2">{visibleBookings.map((booking) => <BookingCard key={`${booking.kind}-${booking.id}`} booking={booking} onUpdate={(updates) => updateBooking(booking.id, booking.kind, updates)} />)}</div>}
-    </div>
+    </main>
   );
+}
+
+function HeroStat({ label, value }: { label: string; value: number }) {
+  return <div className="rounded-xl bg-white/[0.06] px-3 py-2.5 ring-1 ring-white/10"><p className="text-lg font-black text-white sm:text-xl">{value}</p><p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 sm:text-[10px]">{label}</p></div>;
 }
 
 function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate: (updates: Partial<Booking>) => void }) {
@@ -223,21 +257,21 @@ function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate: (updat
   const created = new Date(booking.createdAt).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" });
   const statusClass = isCancelled ? "bg-red-50 text-red-700 ring-red-200" : isCompleted ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-amber-200";
 
-  return <article className={`overflow-hidden rounded-3xl border bg-white shadow-sm transition hover:shadow-md ${open ? "border-emerald-200 ring-2 ring-emerald-50 md:col-span-2" : "border-slate-200"}`}>
+  return <article className={`group overflow-hidden rounded-[1.5rem] border bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-200/70 ${open ? "border-emerald-300 ring-4 ring-emerald-50 lg:col-span-2" : "border-slate-200"}`}>
     <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="w-full p-4 text-left sm:p-5">
       <div className="flex items-start gap-3 sm:gap-4">
-        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl sm:h-14 sm:w-14 ${isShop ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"}`}>{isShop ? <ShoppingBag className="h-6 w-6" /> : <Wrench className="h-6 w-6" />}</div>
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-inner sm:h-14 sm:w-14 ${isShop ? "bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600" : "bg-gradient-to-br from-emerald-50 to-emerald-100 text-emerald-600"}`}>{isShop ? <ShoppingBag className="h-6 w-6" /> : <Wrench className="h-6 w-6" />}</div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${isShop ? "text-blue-600" : "text-emerald-600"}`}>{isShop ? "Product order" : "Home service"}</span>
             <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold capitalize ring-1 ${statusClass}`}>{normalized.replaceAll("_", " ")}</span>
           </div>
-          <h2 className="mt-1 truncate text-base font-black text-slate-900 sm:text-lg">{title}</h2>
-          <p className="mt-1 text-xs text-slate-500">#{booking.id} <span className="mx-1 text-slate-300">•</span> Placed {created}</p>
+          <h2 className="mt-1.5 truncate text-base font-black text-slate-900 sm:text-lg">{title}</h2>
+          <p className="mt-1 text-xs font-medium text-slate-500"><span className="font-mono text-[11px] text-slate-400">#{booking.id}</span> <span className="mx-1 text-slate-300">•</span> Placed {created}</p>
         </div>
-        <div className="flex shrink-0 items-center gap-1 text-xs font-bold text-slate-500"><span className="hidden sm:inline">{open ? "Hide details" : "View details"}</span><ChevronDown className={`h-5 w-5 transition ${open ? "rotate-180 text-emerald-600" : ""}`} /></div>
+        <div className={`flex shrink-0 items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-bold transition ${open ? "bg-emerald-50 text-emerald-700" : "text-slate-500 group-hover:bg-slate-50"}`}><span className="hidden sm:inline">{open ? "Hide" : "Details"}</span><ChevronDown className={`h-5 w-5 transition ${open ? "rotate-180" : ""}`} /></div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-4 sm:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <SummaryValue label="Total" value={`PKR ${total.toLocaleString("en-PK")}`} />
         <SummaryValue label={isShop ? "Payment" : "Paid online"} value={isShop ? booking.paymentMethod : `PKR ${paid.toLocaleString("en-PK")}`} />
         <SummaryValue label={isShop ? "Items" : "Remaining"} value={isShop ? String(booking.items?.length || 0) : `PKR ${remaining.toLocaleString("en-PK")}`} />
@@ -245,14 +279,14 @@ function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate: (updat
       </div>
     </button>
 
-    {open && <div className="border-t border-slate-200 bg-slate-50/50 p-4 sm:p-6">
-      {!isCancelled ? <section className="rounded-2xl border border-slate-200 bg-white p-4">
+    {open && <div className="border-t border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 sm:p-6">
+      {!isCancelled ? <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-slate-500">Order progress</h3>
         <div className={`mt-4 grid gap-1 ${isShop ? "grid-cols-5" : "grid-cols-4"}`}>{steps.map((step, i) => <div key={step} className="text-center"><div className={`mx-auto h-2 rounded-full ${i <= active ? (isShop ? "bg-blue-500" : "bg-emerald-500") : "bg-slate-200"}`} /><p className={`mt-2 text-[9px] font-bold capitalize sm:text-[10px] ${i <= active ? "text-slate-700" : "text-slate-400"}`}>{step.replace("_", " ")}</p></div>)}</div>
       </section> : <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">This order has been cancelled.</div>}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h3 className="flex items-center gap-2 font-bold text-slate-900"><ReceiptText className="h-4 w-4 text-emerald-600" /> Booking information</h3>
           <div className="mt-4 space-y-3 text-sm">
             <DetailRow icon={<CalendarDays className="h-4 w-4" />} label="Created" value={created} />
@@ -261,7 +295,7 @@ function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate: (updat
             {booking.notes && <DetailRow icon={<MessageSquareWarning className="h-4 w-4" />} label="Special instructions" value={booking.notes} />}
           </div>
         </section>
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h3 className="flex items-center gap-2 font-bold text-slate-900"><CreditCard className="h-4 w-4 text-emerald-600" /> Payment summary</h3>
           <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-slate-900 p-3 text-center text-white">
             <SummaryValue label="Total" value={`PKR ${total.toLocaleString("en-PK")}`} dark />
@@ -273,15 +307,15 @@ function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate: (updat
         </section>
       </div>
 
-      {isShop && booking.items && booking.items.length > 0 && <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4"><h3 className="font-bold text-slate-900">Products ordered</h3><div className="mt-3 grid gap-2 sm:grid-cols-2">{booking.items.map((item, index) => <div key={`${item.productId}-${index}`} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">{item.imageUrl ? <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-slate-100"><Image src={absoluteImage(item.imageUrl)} alt={item.title} fill unoptimized className="object-cover" sizes="56px" /></div> : <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-slate-100"><Package className="h-5 w-5 text-slate-400" /></div>}<div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-900">{item.title}</p><p className="text-xs text-slate-500">Qty {item.quantity}</p></div><p className="text-xs font-black text-slate-900">PKR {(item.price * item.quantity).toLocaleString("en-PK")}</p></div>)}</div></section>}
+      {isShop && booking.items && booking.items.length > 0 && <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4"><h3 className="font-bold text-slate-900">Products ordered</h3><div className="mt-3 grid gap-2 sm:grid-cols-2">{booking.items.map((item, index) => <div key={`${item.productId}-${index}`} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">{item.imageUrl ? <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-slate-100"><Image src={absoluteImage(item.imageUrl)} alt={item.title} fill className="object-cover" sizes="56px" /></div> : <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-slate-100"><Package className="h-5 w-5 text-slate-400" /></div>}<div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-900">{item.title}</p><p className="text-xs text-slate-500">Qty {item.quantity}</p></div><p className="text-xs font-black text-slate-900">PKR {(item.price * item.quantity).toLocaleString("en-PK")}</p></div>)}</div></section>}
 
-      <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4"><h3 className="mb-3 text-xs font-extrabold uppercase tracking-[0.16em] text-slate-500">Available actions</h3><BookingActions booking={booking} completed={isCompleted} isCancelled={isCancelled} acceptsReceipt={acceptsReceipt} onUpdate={onUpdate} /></section>
+      <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-slate-500">Available actions</h3><BookingActions booking={booking} completed={isCompleted} isCancelled={isCancelled} acceptsReceipt={acceptsReceipt} onUpdate={onUpdate} /></section>
     </div>}
   </article>;
 }
 
 function SummaryValue({ label, value, truncate = false, dark = false, accent = false }: { label: string; value: string; truncate?: boolean; dark?: boolean; accent?: boolean }) {
-  return <div className="min-w-0"><p className={`text-[9px] font-bold uppercase tracking-wide ${dark ? "text-slate-400" : "text-slate-400"}`}>{label}</p><p className={`mt-1 text-xs font-black sm:text-sm ${accent ? "text-lime-300" : dark ? "text-white" : "text-slate-800"} ${truncate ? "truncate" : ""}`}>{value}</p></div>;
+  return <div className={`min-w-0 ${dark ? "" : "rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100"}`}><p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">{label}</p><p className={`mt-1 text-xs font-black sm:text-sm ${accent ? "text-lime-300" : dark ? "text-white" : "text-slate-800"} ${truncate ? "truncate" : ""}`}>{value}</p></div>;
 }
 
 function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {

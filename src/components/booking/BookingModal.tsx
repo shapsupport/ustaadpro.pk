@@ -419,7 +419,6 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
         throw new Error("Failed to retrieve booking confirmation.");
       }
     } catch (err: any) {
-      console.error("Booking submission error:", err);
       const msg =
         err.response?.data?.message ||
         err.message ||

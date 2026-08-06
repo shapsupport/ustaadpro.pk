@@ -209,7 +209,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                     src={displayImage}
                     alt={service.title}
                     fill
-                    unoptimized
+
                     className="object-cover"
                     sizes="(max-width:1024px) 100vw, 60vw"
                     priority
@@ -265,7 +265,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                                   src={wpImg}
                                   alt={wp.title}
                                   fill
-                                  unoptimized
+
                                   className="object-cover"
                                   sizes="(max-width: 639px) 64px, 56px"
                                 />
@@ -485,7 +485,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                 <div className="bg-white rounded-3xl border border-slate-100 shadow-lg p-6">
                   <div className="relative mb-5 aspect-[16/9] overflow-hidden rounded-2xl bg-slate-100 lg:hidden">
                     {displayImage ? (
-                      <Image src={displayImage} alt={service.title} fill unoptimized className="object-cover" sizes="100vw" priority />
+                      <Image src={displayImage} alt={service.title} fill className="object-cover" sizes="100vw" priority />
                     ) : (
                       <div className="absolute inset-0 grid place-items-center bg-gradient-to-br from-slate-100 to-slate-200"><Layers className="h-12 w-12 text-slate-300" /></div>
                     )}

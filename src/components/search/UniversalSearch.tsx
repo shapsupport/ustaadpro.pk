@@ -260,7 +260,7 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
                 const href = isService ? `/services/${result.id}` : `/store/${result.id}`;
                 const image = imageUrl(result);
                 return <Link key={result.suggestionId || `${scope}-${result.id}`} href={href} onClick={() => { remember(query); setOpen(false); onNavigate?.(); }} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg">
-                  <div className="relative aspect-[4/3] bg-slate-100">{image ? <Image src={image} alt={result.title || "Search result"} fill unoptimized sizes="220px" className="object-cover transition group-hover:scale-105" /> : <Search className="absolute inset-0 m-auto h-7 w-7 text-slate-300" />}</div>
+                  <div className="relative aspect-[4/3] bg-slate-100">{image ? <Image src={image} alt={result.title || "Search result"} fill sizes="220px" className="object-cover transition group-hover:scale-105" /> : <Search className="absolute inset-0 m-auto h-7 w-7 text-slate-300" />}</div>
                   <div className="p-3"><p className="line-clamp-2 text-sm font-black text-slate-900">{result.title || "Untitled result"}</p><p className="mt-2 text-sm font-black text-emerald-700">Rs {Number(result.price || 0).toLocaleString("en-PK")}</p></div>
                 </Link>;
               })}

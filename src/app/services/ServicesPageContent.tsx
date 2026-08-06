@@ -53,7 +53,7 @@ function SafeImage({ src, alt, fallback, className }: { src: string; alt: string
       fill
       className={className ?? "object-cover"}
       onError={() => setError(true)}
-      unoptimized
+
     />
   );
 }
@@ -236,9 +236,6 @@ export function ServicesPageContent({
 
     // Log what we found for debugging
     if (typeof window !== "undefined") {
-      console.log("[Services] Category selected:", activeCategory, "| aliases:", activeAliases);
-      console.log("[Services] Catalog IDs:", initialCatalog.map((c) => c.id));
-      console.log("[Services] Matching catalog entries:", matchingCatalogEntries.map((c) => ({ id: c.id, title: c.title, subcats: c.subcategories?.length ?? 0 })));
     }
 
     matchingCatalogEntries.forEach((catalogCat) => {
@@ -381,7 +378,6 @@ export function ServicesPageContent({
         }
       });
     return () => controller.abort();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearch]);
 
   const searching = Boolean(initialSearch.trim() && completedSearch !== initialSearch.trim());
@@ -803,7 +799,7 @@ function ServiceCard({ service, onBook }: { service: ApiService; onBook: (quanti
             src={src}
             alt={service.title}
             fill
-            unoptimized
+
             className="object-cover transition-transform duration-500 group-hover:scale-105"
             sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
           />

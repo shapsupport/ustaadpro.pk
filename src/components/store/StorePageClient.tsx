@@ -21,6 +21,19 @@ import {
 import { useCart } from "@/context/CartContext";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "";
+const CATALOG_CACHE_MS = 60_000;
+type ShopCatalogResponse = ApiShopResponse & { products?: ApiProduct[]; data?: ApiProduct[] };
+const catalogCache = new Map<string, { expiresAt: number; data: ShopCatalogResponse }>();
+
+async function fetchCatalog(url: string): Promise<ShopCatalogResponse> {
+  const cached = catalogCache.get(url);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Unable to load products");
+  const data = await response.json() as ShopCatalogResponse;
+  catalogCache.set(url, { expiresAt: Date.now() + CATALOG_CACHE_MS, data });
+  return data;
+}
 
 function buildImageUrl(url?: string) {
   if (!url) return null;
@@ -48,34 +61,6 @@ function uniqueProducts(items: ApiProduct[]) {
     seenNames.add(name);
     return true;
   });
-}
-
-const PREFERRED_CATEGORY_ORDER = ["Paints", "Tools", "Hardware"];
-const CATEGORY_BATCH_SIZE = 3;
-
-function mixedSlots(categories: ApiShopResponse["categories"], start: number, size: number) {
-  const ordered = [...categories].sort((a, b) => {
-    const aIndex = PREFERRED_CATEGORY_ORDER.indexOf(a.name);
-    const bIndex = PREFERRED_CATEGORY_ORDER.indexOf(b.name);
-    return (aIndex === -1 ? PREFERRED_CATEGORY_ORDER.length : aIndex) - (bIndex === -1 ? PREFERRED_CATEGORY_ORDER.length : bIndex);
-  });
-  const used = new Map(ordered.map((category) => [category.name, 0]));
-  const slots: Array<{ category: string; ordinal: number }> = [];
-  let globalIndex = 0;
-
-  while (slots.length < size && ordered.some((category) => (used.get(category.name) || 0) < category.total)) {
-    for (const category of ordered) {
-      for (let entry = 0; entry < CATEGORY_BATCH_SIZE; entry += 1) {
-        const ordinal = used.get(category.name) || 0;
-        if (ordinal >= category.total) break;
-        if (globalIndex >= start && slots.length < size) slots.push({ category: category.name, ordinal });
-        used.set(category.name, ordinal + 1);
-        globalIndex += 1;
-      }
-      if (slots.length >= size) break;
-    }
-  }
-  return slots;
 }
 
 export default function StorePageClient() {
@@ -124,44 +109,9 @@ export default function StorePageClient() {
     const requestKey = `${selectedCategory}:${page}`;
     setLoading(true);
     try {
-      if (selectedCategory === "all") {
-        const metadataResponse = await fetch(`${API_BASE_URL}/api/shop/products?limit=1&offset=0`, { cache: "no-store" });
-        if (!metadataResponse.ok) throw new Error("Unable to load product categories");
-        const metadata = await metadataResponse.json();
-        const catalogCategories: ApiShopResponse["categories"] = Array.isArray(metadata?.categories) ? metadata.categories : [];
-        const slots = mixedSlots(catalogCategories, (page - 1) * pageSize, pageSize);
-        const requests = [...new Set(slots.map((slot) => slot.category))].map(async (category) => {
-          const categorySlots = slots.filter((slot) => slot.category === category);
-          const offset = categorySlots[0]?.ordinal || 0;
-          const response = await fetch(`${API_BASE_URL}/api/shop/products?limit=${categorySlots.length}&offset=${offset}&category=${encodeURIComponent(category)}`, { cache: "no-store" });
-          if (!response.ok) throw new Error(`Unable to load ${category}`);
-          const data = await response.json();
-          return [category, Array.isArray(data?.products) ? data.products : []] as const;
-        });
-        const batches = new Map(await Promise.all(requests));
-        const cursors = new Map<string, number>();
-        const mixedProducts = slots.flatMap((slot) => {
-          const cursor = cursors.get(slot.category) || 0;
-          const product = batches.get(slot.category)?.[cursor];
-          cursors.set(slot.category, cursor + 1);
-          return product ? [product as ApiProduct] : [];
-        });
-        if (requestId !== catalogRequestRef.current) return;
-        setProducts(uniqueProducts(mixedProducts));
-        setCategories(catalogCategories);
-        setTotal(catalogCategories.reduce((sum, category) => sum + Number(category.total || 0), 0));
-        return;
-      }
-
       const params = new URLSearchParams({ limit: String(pageSize), offset: String((page - 1) * pageSize) });
-      params.set("category", selectedCategory);
-      const res = await fetch(`${API_BASE_URL}/api/shop/products?${params}`, {
-        cache: "no-store",
-      });
-
-      if (!res.ok) throw new Error("Unable to load products");
-
-      const data = await res.json();
+      if (selectedCategory !== "all") params.set("category", selectedCategory);
+      const data = await fetchCatalog(`${API_BASE_URL}/api/shop/products?${params}`);
       const allProducts = Array.isArray(data?.products)
         ? data.products
         : Array.isArray(data?.data)
@@ -173,8 +123,7 @@ export default function StorePageClient() {
       setProducts(normalizedProducts);
       setCategories(Array.isArray(data?.categories) ? data.categories : []);
       setTotal(Number(data?.total || normalizedProducts.length));
-    } catch (error) {
-      console.error("Failed to load store products:", error);
+    } catch {
       if (requestId === catalogRequestRef.current) {
         setProducts([]);
         setCategories([]);
@@ -445,7 +394,7 @@ function ProductCard({ product }: { product: ApiProduct }) {
               src={imageSrc}
               alt={product.title}
               fill
-              unoptimized
+
               className="object-cover transition-transform duration-500 group-hover:scale-105"
               sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 25vw"
             />

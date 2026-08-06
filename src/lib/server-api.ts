@@ -16,7 +16,7 @@ function wait(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function fetchCollection<T>(path: string, label: string): Promise<T[]> {
+async function fetchCollection<T>(path: string): Promise<T[]> {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     try {
       const response = await fetch(apiUrl(path), {
@@ -38,15 +38,13 @@ async function fetchCollection<T>(path: string, label: string): Promise<T[]> {
 
       lastSuccessfulResponse.set(path, data);
       return data as T[];
-    } catch (error) {
+    } catch {
       if (attempt < MAX_ATTEMPTS) {
         await wait(250);
         continue;
       }
 
       const stale = lastSuccessfulResponse.get(path) as T[] | undefined;
-      const reason = error instanceof Error ? `${error.name}: ${error.message}` : "Unknown network error";
-      console.warn(`[API] ${label} unavailable after ${MAX_ATTEMPTS} attempts (${reason}).${stale ? " Serving the last successful response." : ""}`);
       return stale ?? [];
     }
   }
@@ -60,19 +58,19 @@ export const getServices = cache((categoryId?: string, subcategoryId?: string) =
   if (subcategoryId) params.append("subcategoryId", subcategoryId);
   const queryStr = params.toString();
   const path = `/api/services${queryStr ? `?${queryStr}` : ""}`;
-  return fetchCollection<ApiService>(path, "services");
+  return fetchCollection<ApiService>(path);
 });
 
 export const getCategories = cache(() =>
-  fetchCollection<ApiCategory>("/api/categories", "categories"),
+  fetchCollection<ApiCategory>("/api/categories"),
 );
 
 export const getSubcategories = cache((categoryId: string) =>
-  fetchCollection<ApiSubcategory>(`/api/categories/${encodeURIComponent(categoryId)}/subcategories`, `subcategories-${categoryId}`),
+  fetchCollection<ApiSubcategory>(`/api/categories/${encodeURIComponent(categoryId)}/subcategories`),
 );
 
 export const getCatalog = cache(() =>
-  fetchCollection<ApiCatalogCategory>("/api/catalog", "catalog"),
+  fetchCollection<ApiCatalogCategory>("/api/catalog"),
 );
 
 // Find a single catalog entry by checking the category ID and common aliases

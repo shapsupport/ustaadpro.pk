@@ -148,7 +148,7 @@ export default function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
                               alt={item.product.title}
                               width={48}
                               height={48}
-                              unoptimized
+
                               className="h-12 w-12 object-cover"
                             />
                           ) : (
