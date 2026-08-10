@@ -826,7 +826,7 @@ function ServiceCard({ service, onBook }: { service: ApiService; onBook: (quanti
       </div>
 
       <div className="flex flex-1 flex-col p-5">
-        <Link href={`/services/${service.id}`} className="group-hover:text-emerald-600">
+        <Link href={`/services/${service.id}`} prefetch={false} className="group-hover:text-emerald-600">
           <h3 className="text-xl font-bold leading-snug text-slate-900 transition-colors">{service.title}</h3>
         </Link>
         <p className="mt-2 line-clamp-2 flex-1 text-sm leading-6 text-slate-500">

@@ -152,9 +152,12 @@ export async function uploadPaymentReceipt(
   return res.data;
 }
 
-export async function getUserOrders(): Promise<BookingResponseOrder[]> {
-  const res = await bookingClient.get<BookingResponseOrder[]>("/orders");
-  return res.data;
+export async function getUserOrders(limit = 50, offset = 0): Promise<BookingResponseOrder[]> {
+  const res = await bookingClient.get<BookingResponseOrder[] | { orders?: BookingResponseOrder[]; data?: BookingResponseOrder[] }>("/orders", {
+    params: { limit, offset },
+  });
+  if (Array.isArray(res.data)) return res.data;
+  return res.data.orders || res.data.data || [];
 }
 
 export async function getAdminOrders(): Promise<any[]> {

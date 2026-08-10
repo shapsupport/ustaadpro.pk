@@ -6,8 +6,7 @@ import { PackageSearch } from "lucide-react";
 import type { ApiProduct } from "@/lib/api-types";
 import ProductDetailClient from "./ProductDetailClient";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
+import { searchApi } from "@/lib/search";
 
 export default function ProductDetailLoader({ productId }: { productId: string }) {
   const [product, setProduct] = useState<ApiProduct | null>(null);
@@ -24,25 +23,9 @@ export default function ProductDetailLoader({ productId }: { productId: string }
           return;
         }
 
-        const direct = await fetch(`${API_BASE}/api/shop/products/${encodeURIComponent(productId)}`, { cache: "no-store" });
-        if (direct.ok) {
-          const data = await direct.json();
-          const found = data?.product || data?.data;
-          if (found && active) { setProduct(found); setLoading(false); return; }
-        }
-
-        let offset = 0;
-        let hasMore = true;
-        while (hasMore && active) {
-          const response = await fetch(`${API_BASE}/api/shop/products?limit=30&offset=${offset}`, { cache: "no-store" });
-          if (!response.ok) break;
-          const data = await response.json();
-          const products: ApiProduct[] = Array.isArray(data?.products) ? data.products : [];
-          const found = products.find((item) => item.id === productId);
-          if (found) { setProduct(found); break; }
-          hasMore = Boolean(data?.hasMore);
-          offset += 30;
-        }
+        const results = await searchApi(productId, "shop_product");
+        const found = results.find((item) => String(item.id) === productId);
+        if (found && active) setProduct(found);
       } catch {
         // The friendly unavailable state below handles network failures.
       } finally { if (active) setLoading(false); }

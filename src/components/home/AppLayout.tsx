@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight, BadgeCheck, CalendarCheck, Camera, CheckCircle2, ChevronDown,
-  ChevronLeft, ChevronRight, Clock3, Flame, Hammer, Layers3, MapPin,
+  Clock3, Flame, Hammer, Layers3, MapPin,
   Paintbrush, ShieldCheck, Shirt, Snowflake, Sparkles, Star,
   Timer, UserCheck, WalletCards, Wrench, Zap, type LucideIcon,
 } from "lucide-react";
@@ -105,6 +105,7 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
   const servicesRef = useRef<HTMLElement>(null);
 
   const orderedServices = useMemo(() => orderServices(initialServices), [initialServices]);
+  const featuredServices = useMemo(() => orderedServices.slice(0, 3), [orderedServices]);
   const categoryList = useMemo(() => {
     const ids = [...new Set(orderedServices.map((service) => service.category_id || service.categoryId).filter(Boolean) as string[])];
     return orderCategories(ids.map((id) => findCategory(categories, id) ?? {
@@ -113,16 +114,16 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
   }, [categories, orderedServices]);
 
   useEffect(() => {
-    if (orderedServices.length < 2) return;
-    const timer = window.setInterval(() => setFeaturedIndex((index) => (index + 1) % orderedServices.length), 6000);
+    if (featuredServices.length < 2) return;
+    const timer = window.setInterval(() => setFeaturedIndex((index) => (index + 1) % featuredServices.length), 6000);
     return () => window.clearInterval(timer);
-  }, [orderedServices.length]);
+  }, [featuredServices.length]);
 
   const filtered = useMemo(() => {
     return orderedServices.filter((service) => activeCategory === "all" || service.category_id === activeCategory);
   }, [activeCategory, orderedServices]);
 
-  const featured = orderedServices[featuredIndex];
+  const featured = featuredServices[featuredIndex];
   const popular = filtered.slice(0, 8);
 
   function showCategory(id: string) {
@@ -166,7 +167,7 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
             <Image src="/home/technician-hero-branded-v3.png" alt="Ustaad Pro home-service technician" fill priority sizes="50vw" className="z-10 -translate-x-36 object-contain object-bottom xl:-translate-x-44" />
             {featured && <FeaturedCard service={featured} />}
             <div className="absolute bottom-5 right-24 z-30 flex gap-1.5">
-              {orderedServices.slice(0, 3).map((service, index) => (
+              {featuredServices.map((service, index) => (
                 <button key={service.id} onClick={() => setFeaturedIndex(index)} aria-label={`Show ${service.title}`} className={`h-2 rounded-full transition-all ${index === featuredIndex ? "w-6 bg-white" : "w-2 bg-white/45"}`} />
               ))}
             </div>
@@ -350,7 +351,7 @@ function FeaturedCard({ service }: { service: ApiService }) {
   return (
     <div className="absolute right-0 top-24 z-20 w-72 overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-2xl backdrop-blur xl:w-80">
       {imgSrc(service.image_url || service.imageUrl) && <div className="relative h-28"><Image src={imgSrc(service.image_url || service.imageUrl)!} alt="" fill className="object-cover" sizes="320px" /></div>}
-      <div className="p-5"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">Featured service</span><h2 className="mt-3 line-clamp-1 text-lg font-black">{service.title}</h2><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-4 flex items-end justify-between"><div><span className="block text-[10px] text-slate-400">Starting from</span><strong className="text-xl">Rs {service.price.toLocaleString()}</strong></div><Link href={`/services/${service.id}`} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div><div className="mt-4 flex items-center gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span className="flex items-center gap-1"><Star className={`h-3.5 w-3.5 ${Number(service.reviews || 0) > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {Number(service.reviews || 0) > 0 ? `${Number(service.rating || 0).toFixed(1)} (${service.reviews})` : "0.0 · No reviews"}</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div></div>
+      <div className="p-5"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">Featured service</span><h2 className="mt-3 line-clamp-1 text-lg font-black">{service.title}</h2><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-4 flex items-end justify-between"><div><span className="block text-[10px] text-slate-400">Starting from</span><strong className="text-xl">Rs {service.price.toLocaleString()}</strong></div><Link href={`/services/${service.id}`} prefetch={false} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div><div className="mt-4 flex items-center gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span className="flex items-center gap-1"><Star className={`h-3.5 w-3.5 ${Number(service.reviews || 0) > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {Number(service.reviews || 0) > 0 ? `${Number(service.rating || 0).toFixed(1)} (${service.reviews})` : "0.0 · No reviews"}</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div></div>
     </div>
   );
 }
@@ -361,12 +362,12 @@ function ServiceCard({ service }: { service: ApiService }) {
   const discount = original > service.price ? Math.round(((original - service.price) / original) * 100) : 0;
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
-      <Link href={`/services/${service.id}`} className="relative block h-44 overflow-hidden bg-slate-100">
+      <Link href={`/services/${service.id}`} prefetch={false} className="relative block h-44 overflow-hidden bg-slate-100">
         {source ? <Image src={source} alt={service.title} fill className="object-cover transition duration-500 group-hover:scale-105" sizes="(max-width:640px) 100vw,(max-width:1024px) 50vw,25vw" /> : <div className="flex h-full items-center justify-center"><Wrench className="h-10 w-10 text-slate-300" /></div>}
         <div className="absolute left-3 top-3 flex gap-2">{service.badge && <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white">{service.badge}</span>}{discount > 0 && <span className="rounded-full bg-rose-500 px-2.5 py-1 text-[10px] font-bold text-white">{discount}% OFF</span>}</div>
         <span className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold"><Star className={`h-3 w-3 ${Number(service.reviews || 0) > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {Number(service.reviews || 0) > 0 ? `${Number(service.rating || 0).toFixed(1)} (${service.reviews})` : "0.0 · No reviews"}</span>
       </Link>
-      <div className="flex flex-1 flex-col p-4"><Link href={`/services/${service.id}`}><h3 className="line-clamp-1 font-extrabold group-hover:text-emerald-700">{service.title}</h3></Link><p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-3 flex items-center gap-3 text-[10px] font-medium text-slate-500"><span className="flex items-center gap-1 text-emerald-700"><BadgeCheck className="h-3.5 w-3.5" /> Professional</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div><div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-3"><div><span className="block text-[9px] text-slate-400">Starting from</span><strong>Rs {service.price.toLocaleString()}</strong>{discount > 0 && <span className="ml-1 text-[10px] text-slate-400 line-through">Rs {original.toLocaleString()}</span>}</div><Link href={`/services/${service.id}`} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-emerald-700">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div></div>
+      <div className="flex flex-1 flex-col p-4"><Link href={`/services/${service.id}`} prefetch={false}><h3 className="line-clamp-1 font-extrabold group-hover:text-emerald-700">{service.title}</h3></Link><p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-3 flex items-center gap-3 text-[10px] font-medium text-slate-500"><span className="flex items-center gap-1 text-emerald-700"><BadgeCheck className="h-3.5 w-3.5" /> Professional</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div><div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-3"><div><span className="block text-[9px] text-slate-400">Starting from</span><strong>Rs {service.price.toLocaleString()}</strong>{discount > 0 && <span className="ml-1 text-[10px] text-slate-400 line-through">Rs {original.toLocaleString()}</span>}</div><Link href={`/services/${service.id}`} prefetch={false} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-emerald-700">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div></div>
     </article>
   );
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { type ChangeEvent, useCallback, useEffect, useState } from "react";
+import { type ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, ArrowRight, CalendarDays, Camera, ChevronDown, Clock3, CreditCard, MapPin, MessageSquareWarning, Package, ReceiptText, RefreshCw, ShoppingBag, Star, UserRound, WalletCards, Wrench, XCircle, ClipboardList } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -139,15 +139,18 @@ export default function TrackBookingPage() {
   const [loadError, setLoadError] = useState("");
   const [view, setView] = useState<"all" | "service" | "shop">("all");
 
+  const loadInFlight = useRef(false);
   const load = useCallback(async () => {
     if (!user?.email) return;
+    if (loadInFlight.current) return;
+    loadInFlight.current = true;
     await Promise.resolve();
     setLoading(true); setLoadError("");
     try {
       const headers = authHeaders();
       if (!token()) throw new Error("No authentication token");
       const [services, shop] = await Promise.all([
-        fetch(`${API_BASE}/api/orders`, { headers, cache: "no-store" }),
+        fetch(`${API_BASE}/api/orders?limit=50&offset=0`, { headers, cache: "no-store" }),
         fetch(`${API_BASE}/api/shop/orders`, { headers, cache: "no-store" }),
       ]);
       if (!services.ok && !shop.ok) throw new Error("Unable to load orders");
@@ -161,19 +164,13 @@ export default function TrackBookingPage() {
         setBookings(stored.filter((item) => item.userEmail === user.email).map((item) => ({ ...item, kind: item.kind || (item.items?.length ? "shop" : "service") })));
         setLoadError("Showing bookings saved on this device. Sign in again to refresh live status.");
       } catch { setBookings([]); setLoadError("Bookings could not be loaded."); }
-    } finally { setLoading(false); }
+    } finally { setLoading(false); loadInFlight.current = false; }
   }, [user]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
-
-  useEffect(() => {
-    if (!user?.email) return;
-    const interval = setInterval(() => { load(); }, 30000);
-    return () => clearInterval(interval);
-  }, [user, load]);
 
   if (!user) return <SignIn onLogin={() => setAuthModalMode("login")} />;
 

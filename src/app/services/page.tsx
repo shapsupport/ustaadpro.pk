@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ServicesPageContent } from "./ServicesPageContent";
-import { getCategories, getCatalog, getServices, getServicesWithReviewStats } from "@/lib/server-api";
+import { getCategories, getCatalog, getServices } from "@/lib/server-api";
 
 export const metadata: Metadata = {
   title: "Services | Ustaad Pro",
@@ -19,10 +19,9 @@ export default async function ServicesPage({
     getCategories(),
     getCatalog(),
   ]);
-  const reviewedServices = await getServicesWithReviewStats(services);
   return (
     <ServicesPageContent
-      initialServices={reviewedServices}
+      initialServices={services}
       initialCategories={categories}
       initialCatalog={catalog}
       initialSearch={search}

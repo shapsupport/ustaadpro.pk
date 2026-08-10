@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   X,
   MapPin,
@@ -17,6 +17,7 @@ import {
   Minus,
   Plus,
   Trash2,
+  ArrowLeft,
 } from "lucide-react";
 import { createBooking, uploadPaymentReceipt, ServiceItemInput } from "@/services/bookingService";
 import { useAuth } from "@/context/AuthContext";
@@ -28,7 +29,7 @@ import { showSuccessToast } from "@/context/ToastContext";
 import { getProfile } from "@/services/authService";
 import { useRouter } from "next/navigation";
 import { useServiceCart } from "@/context/ServiceCartContext";
-import { bookingTimestamp, clampBookingLeadHours, earliestBookingTimestamp, pakistanDateAndTime } from "@/lib/booking-time";
+import { bookingTimestamp, clampBookingLeadHours, earliestBookingTimestamp, nextAvailableBookingDate, pakistanDateAndTime } from "@/lib/booking-time";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 const BOOKING_DRAFT_KEY = "ustaadpro_booking_draft";
@@ -58,7 +59,20 @@ interface BookingModalProps {
 }
 
 function getTodayString() {
-  return pakistanDateAndTime(Date.now()).date;
+  return nextAvailableBookingDate(0);
+}
+
+function addDays(date: string, days: number) {
+  const timestamp = new Date(`${date}T12:00:00+05:00`).getTime() + days * 24 * 60 * 60 * 1000;
+  return pakistanDateAndTime(timestamp).date;
+}
+
+function dateCardLabel(date: string, index: number) {
+  const value = new Date(`${date}T12:00:00+05:00`);
+  return {
+    eyebrow: index === 0 ? "Next available" : new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Karachi", weekday: "short" }).format(value),
+    date: new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Karachi", month: "short", day: "numeric" }).format(value),
+  };
 }
 
 function validateSpecificAddress(value: string, mapLocationSelected: boolean): string {
@@ -78,6 +92,12 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const [step, setStep] = useState<"details" | "payment">("details");
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [livePrices, setLivePrices] = useState<Record<string, number>>({});
+  const modalBodyRef = useRef<HTMLDivElement>(null);
+  const contactCardRef = useRef<HTMLDivElement>(null);
+  const addressCardRef = useRef<HTMLDivElement>(null);
+  const scheduleCardRef = useRef<HTMLDivElement>(null);
+  const receiptAreaRef = useRef<HTMLDivElement>(null);
+  const [validationFocus, setValidationFocus] = useState<{ target: "contact" | "address" | "schedule" | "receipt"; attempt: number } | null>(null);
 
   // Basic Form State
   const [name, setName] = useState("");
@@ -86,6 +106,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const [specificAddress, setSpecificAddress] = useState("");
   const [addressTouched, setAddressTouched] = useState(false);
   const [requirements, setRequirements] = useState("");
+  const [invalidContact, setInvalidContact] = useState<{ name?: boolean; phone?: boolean }>({});
 
   // Feature 1: Time Slot State
   const [selectedTime, setSelectedTime] = useState("");
@@ -101,7 +122,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       .then(async (response) => response.ok ? response.json() : Promise.reject(new Error("Settings unavailable")))
       .then((settings: { minimumBookingLeadHours?: number; inspectionFee?: number; serviceTaxPercent?: number }) => {
         const leadHours = clampBookingLeadHours(settings.minimumBookingLeadHours);
-        const minimumDate = pakistanDateAndTime(earliestBookingTimestamp(leadHours)).date;
+        const minimumDate = nextAvailableBookingDate(leadHours);
         setMinimumBookingLeadHours(leadHours);
         if (fromDate < minimumDate) {
           setFromDate(minimumDate);
@@ -119,6 +140,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const [isRecurring, setIsRecurring] = useState(false);
   const [fromDate, setFromDate] = useState(getTodayString());
   const [toDate, setToDate] = useState(getTodayString());
+  const [showCustomDate, setShowCustomDate] = useState(false);
 
   // Feature 3: Map Picker State
   const [isMapOpen, setIsMapOpen] = useState(false);
@@ -129,6 +151,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const [paymentMethod, setPaymentMethod] = useState<"Rs 200 Advance" | "Full Payment in Advance">("Rs 200 Advance");
   const [receiptDataUrl, setReceiptDataUrl] = useState("");
   const [receiptFileName, setReceiptFileName] = useState("");
+  const [receiptValidationError, setReceiptValidationError] = useState(false);
   const [useRewardPoints, setUseRewardPoints] = useState(false);
   const [rewardPoints, setRewardPoints] = useState(0);
   const [rewardLoading, setRewardLoading] = useState(false);
@@ -212,11 +235,57 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const isInspectionService = selectedServices.some((item) => /visit|inspection/i.test(item.unitDescription || ""));
   const hasMapLocation = Boolean(selectedLocation.trim() && addressCoords);
   const addressFieldError = validateSpecificAddress(specificAddress, hasMapLocation);
+  const minimumBookingDate = nextAvailableBookingDate(minimumBookingLeadHours);
+  const quickBookingDates = useMemo(
+    () => Array.from({ length: 5 }, (_, index) => addDays(minimumBookingDate, index)),
+    [minimumBookingDate],
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const frame = window.requestAnimationFrame(() => modalBodyRef.current?.scrollTo({ top: 0 }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [isOpen, step]);
+
+  useEffect(() => {
+    if (!validationFocus) return;
+    const targets = { contact: contactCardRef, address: addressCardRef, schedule: scheduleCardRef, receipt: receiptAreaRef };
+    const frame = window.requestAnimationFrame(() => {
+      const container = modalBodyRef.current;
+      const target = targets[validationFocus.target].current;
+      if (!container || !target) return;
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const top = container.scrollTop + targetRect.top - containerRect.top - 12;
+      container.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [validationFocus]);
+
+  const focusValidationCard = (target: "contact" | "address" | "schedule" | "receipt") => {
+    setValidationFocus((current) => ({ target, attempt: (current?.attempt || 0) + 1 }));
+  };
 
   const handleReceiptSelect = (file: File | null) => {
     setReceiptDataUrl("");
     setReceiptFileName(file?.name || "");
     if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setReceiptFileName("");
+      setReceiptValidationError(true);
+      setError("Please upload a JPG, PNG, or WebP receipt image.");
+      focusValidationCard("receipt");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setReceiptFileName("");
+      setReceiptValidationError(true);
+      setError("The receipt image must be 5 MB or smaller.");
+      focusValidationCard("receipt");
+      return;
+    }
+    setReceiptValidationError(false);
+    setError("");
     const reader = new FileReader();
     reader.onload = () => setReceiptDataUrl(String(reader.result || ""));
     reader.onerror = () => setError("The selected receipt image could not be read.");
@@ -228,6 +297,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setInvalidContact({});
 
     // Auth Check
     const token = typeof window !== "undefined" ? localStorage.getItem("ustaadpro_token") : null;
@@ -239,11 +309,15 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
     // Validations
     if (!name.trim()) {
+      setInvalidContact({ name: true });
       setError("Please enter your full name.");
+      focusValidationCard("contact");
       return;
     }
     if (!phone.trim()) {
+      setInvalidContact({ phone: true });
       setError("Please enter your phone number.");
+      focusValidationCard("contact");
       return;
     }
 
@@ -251,31 +325,41 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
     if (!hasMapLocation && !hasSpecificAddress) {
       setAddressTouched(true);
+      focusValidationCard("address");
       return;
     }
 
     if (hasSpecificAddress && addressFieldError) {
       setAddressTouched(true);
+      focusValidationCard("address");
       return;
     }
 
     if (!fromDate) {
       setScheduleError("Please select a service date.");
+      if (step === "payment") setStep("details");
+      focusValidationCard("schedule");
       return;
     }
     if (!selectedTime) {
       setScheduleError("Please select a 30-minute time slot from the grid.");
+      if (step === "payment") setStep("details");
+      focusValidationCard("schedule");
       return;
     }
     const selectedDateTime = bookingTimestamp(fromDate, selectedTime);
     if (!Number.isFinite(selectedDateTime) || selectedDateTime < earliestBookingTimestamp(minimumBookingLeadHours)) {
       setScheduleError(minimumBookingLeadHours > 0 ? `Please choose a time at least ${minimumBookingLeadHours} hour(s) from now.` : "Please choose a future date and time.");
+      if (step === "payment") setStep("details");
+      focusValidationCard("schedule");
       return;
     }
     setScheduleError("");
     // Service area check: block if map coords are outside RWP+ISB
     if (addressCoords && !isWithinServiceArea(addressCoords.lat, addressCoords.lng)) {
+      setAddressTouched(true);
       setError("📍 This location is outside our service area. We currently only serve Rawalpindi & Islamabad. Please pick a location within the service area.");
+      focusValidationCard("address");
       return;
     }
 
@@ -308,7 +392,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     }
 
     if (paymentNow > 0 && !receiptDataUrl) {
-      setError("Please upload the receipt for your booking payment.");
+      setReceiptValidationError(true);
+      focusValidationCard("receipt");
       return;
     }
 
@@ -450,6 +535,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     setBookingSuccess(null);
     setError("");
     setAddressTouched(false);
+    setInvalidContact({});
+    setReceiptValidationError(false);
     setStep("details");
     onClose();
   };
@@ -482,14 +569,29 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     router.push(`/services/${encodeURIComponent(String(id))}`);
   };
 
+  const returnToDetails = () => {
+    setStep("details");
+    setError("");
+    setReceiptValidationError(false);
+    setReceiptDataUrl("");
+    setReceiptFileName("");
+  };
+
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200">
-        <div className="relative mx-1 flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-[1.75rem] border border-white/70 bg-white shadow-2xl ring-1 ring-slate-900/5 transition-all sm:mx-0 sm:rounded-[2rem]">
+      <div className="fixed inset-0 z-50 flex touch-pan-y items-end justify-center overscroll-contain bg-slate-900/60 p-0 backdrop-blur-sm animate-in fade-in duration-200 sm:items-center sm:p-4">
+        <div className="relative flex max-h-[90dvh] min-w-0 w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl">
           <div className="z-20 flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-4 py-3 sm:px-6 sm:py-4">
-            <div>
-              <h2 className="text-lg sm:text-xl font-black text-slate-900">{step === "details" ? "Booking details" : "Review & payment"}</h2>
-              <p className="text-xs font-bold text-emerald-600 truncate max-w-xs">Step {step === "details" ? "1" : "2"} of 2 · {selectedServices.length > 1 ? `${selectedServices.length} services selected` : service.title}</p>
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              {step === "payment" && (
+                <button type="button" onClick={returnToDetails} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-200 text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" aria-label="Back to booking details">
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+              )}
+              <div className="min-w-0">
+                <h2 className="text-lg font-black text-slate-900 sm:text-xl">{step === "details" ? "Booking details" : "Review & payment"}</h2>
+                <p className="max-w-[12rem] truncate text-xs font-bold text-emerald-600 sm:max-w-md">Step {step === "details" ? "1" : "2"} of 2 · {selectedServices.length > 1 ? `${selectedServices.length} services selected` : service.title}</p>
+              </div>
             </div>
             <button
               type="button"
@@ -501,7 +603,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
           </div>
 
           {/* Modal Body */}
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain booking-modal-scrollbar">
+          <div ref={modalBodyRef} className="min-w-0 max-h-[calc(100dvh-4.25rem)] overflow-x-hidden overflow-y-auto overscroll-contain touch-pan-y [overflow-anchor:none] booking-modal-scrollbar sm:max-h-[calc(94dvh-4.5rem)]">
           {bookingSuccess ? (
             <div className="p-6 sm:p-8 text-center space-y-4">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-lg shadow-emerald-600/10">
@@ -548,7 +650,14 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 items-start gap-4 bg-slate-50/40 p-3 sm:p-5 lg:grid-cols-2 lg:gap-5 lg:p-6">
+            <form
+              noValidate
+              onSubmit={handleSubmit}
+              className={step === "details"
+                ? "grid min-w-0 grid-cols-1 content-start gap-3 overflow-x-hidden bg-slate-50/40 p-3 sm:p-4 lg:grid-cols-2 lg:gap-4"
+                : "flex min-w-0 flex-col gap-3 overflow-x-hidden bg-slate-50/40 p-3 sm:p-4"}
+            >
+              <p className="text-right text-[11px] font-semibold text-slate-500 lg:col-span-2"><span className="font-black text-red-500">*</span> Required fields</p>
               {/* Auth Notice if guest */}
               {!user && (
                 <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900 lg:col-span-2">
@@ -570,25 +679,26 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               {error && (
                 <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 lg:col-span-2">
                   <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
-                  <span>{error}</span>
+                  <span className="min-w-0 break-words leading-5">{error}</span>
                 </div>
               )}
 
               {/* Service Summary Card */}
-              <div className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm lg:col-span-2">
+              <div className={`rounded-2xl border border-emerald-200 bg-white p-3 shadow-sm sm:p-4 ${step === "payment" ? "lg:col-span-2" : "lg:row-span-2 lg:h-full lg:self-stretch"}`}>
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-[10px] uppercase font-bold text-slate-400">Selected service{selectedServices.length === 1 ? "" : "s"}</p>
                   <p className="text-sm font-black text-emerald-700">Rs {listedServicesTotal.toLocaleString()}</p>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3">
                   {selectedServices.map((item) => {
                     const itemQuantity = Math.max(1, Number(item.quantity || 1));
                     const key = `${item.id}:${item.selectedWorkPriceId || "service"}`;
                     const cartItem = cartItems.find((entry) => entry.key === key);
                     return <article key={key} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 text-sm">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0"><p className="truncate font-black text-slate-900">{item.selectedWorkTitle || item.title}</p><p className="mt-0.5 text-xs text-slate-500">Rs {Number(item.price).toLocaleString("en-PK")} each</p></div>
-                        <p className="shrink-0 font-black text-emerald-700">Rs {(item.price * itemQuantity).toLocaleString("en-PK")}</p>
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 sm:gap-4">
+                        <p className="min-w-0 break-words text-xs font-black leading-4 text-slate-900 sm:text-sm">{item.selectedWorkTitle || item.title}</p>
+                        <div className="min-w-16 text-right sm:min-w-24"><p className="text-[8px] font-bold uppercase tracking-wide text-slate-400 sm:text-[9px]">Unit price</p><p className="whitespace-nowrap text-[11px] font-semibold text-slate-600 sm:text-xs">Rs {Number(item.price).toLocaleString("en-PK")} each</p></div>
+                        <div className="min-w-14 text-right sm:min-w-20"><p className="text-[8px] font-bold uppercase tracking-wide text-slate-400 sm:text-[9px]">Total</p><p className="whitespace-nowrap text-xs font-black text-emerald-700 sm:text-sm">Rs {(item.price * itemQuantity).toLocaleString("en-PK")}</p></div>
                       </div>
                       <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-200 pt-3">
                         {cartItem ? <div className="flex items-center rounded-xl border border-slate-200 bg-white">
@@ -612,13 +722,13 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" onClick={addMoreServices} className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">+ Add more services</button>
-                  {step === "payment" && <button type="button" onClick={() => { setStep("details"); setReceiptDataUrl(""); setReceiptFileName(""); }} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">Back to modify details</button>}
+                  {step === "payment" && <button type="button" onClick={returnToDetails} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">Back to modify details</button>}
                 </div>
                 {step === "payment" && <p className="mt-2 text-[10px] text-slate-400">Live prices and fees were refreshed from the UstaadPro API. The backend confirms the authoritative total when the order is submitted.</p>}
               </div>
 
               {step === "payment" && <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
-                <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-black text-slate-900">Shared booking details</h3><button type="button" onClick={() => { setStep("details"); setReceiptDataUrl(""); setReceiptFileName(""); }} className="text-xs font-bold text-emerald-700 hover:underline">Modify details</button></div>
+                <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-black text-slate-900">Shared booking details</h3><button type="button" onClick={returnToDetails} className="text-xs font-bold text-emerald-700 hover:underline">Modify details</button></div>
                 <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
                   <div><p className="font-bold uppercase tracking-wide text-slate-400">Customer</p><p className="mt-1 font-semibold text-slate-800">{name} · {phone}</p></div>
                   <div><p className="font-bold uppercase tracking-wide text-slate-400">Address</p><p className="mt-1 font-semibold text-slate-800">{[specificAddress, selectedLocation].filter(Boolean).join(" · ")}</p></div>
@@ -628,35 +738,35 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>}
 
               {/* Contact Information */}
-              <div className={`${step === "details" ? "" : "hidden"} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm`}>
+              <div ref={contactCardRef} className={`${step === "details" ? "lg:col-start-2" : "hidden"} rounded-2xl border bg-white p-4 shadow-sm transition ${invalidContact.name || invalidContact.phone ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
                 <h3 className="mb-3 text-sm font-black text-slate-900">Your contact details</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Full Name *</label>
+                  <label className="mb-1 block text-xs font-bold text-slate-600">Full Name <span className="text-red-500">*</span></label>
                   <div className="relative">
                     <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                     <input
                       type="text"
                       required
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(e) => { setName(e.target.value); if (e.target.value.trim()) setInvalidContact((current) => ({ ...current, name: false })); }}
                       placeholder="e.g. Raja Sajawal"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className={`w-full rounded-xl border bg-slate-50 py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-1 ${invalidContact.name ? "border-red-500 ring-2 ring-red-100 focus:border-red-500 focus:ring-red-200" : "border-slate-200 focus:border-emerald-500 focus:ring-emerald-500"}`}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Phone Number *</label>
+                  <label className="mb-1 block text-xs font-bold text-slate-600">Phone Number <span className="text-red-500">*</span></label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                     <input
                       type="tel"
                       required
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => { setPhone(e.target.value); if (e.target.value.trim()) setInvalidContact((current) => ({ ...current, phone: false })); }}
                       placeholder="0300-1234567"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className={`w-full rounded-xl border bg-slate-50 py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-1 ${invalidContact.phone ? "border-red-500 ring-2 ring-red-100 focus:border-red-500 focus:ring-red-200" : "border-slate-200 focus:border-emerald-500 focus:ring-emerald-500"}`}
                     />
                   </div>
                 </div>
@@ -664,11 +774,11 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>
 
               {/* FEATURE 3: Address & Map Picker */}
-              <div className={`${step === "details" ? "" : "hidden"} space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm`}>
+              <div ref={addressCardRef} className={`${step === "details" ? "lg:col-start-2" : "hidden"} space-y-3 rounded-2xl border bg-white p-4 shadow-sm transition ${addressTouched && (addressFieldError || error.includes("outside our service area")) ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
                 <h3 className="text-sm font-black text-slate-900">Where should we send the professional?</h3>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-600">
-                    Service Location{!specificAddress.trim() && " *"}
+                    Service Location (map){!specificAddress.trim() && <span className="text-red-500"> *</span>}
                   </label>
                   <button
                     type="button"
@@ -699,7 +809,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
                 <div>
                   <label className="mb-1 block text-xs font-bold text-slate-600">
-                    House / Street Address{!(selectedLocation.trim() && addressCoords) && " *"}
+                    House / Street Address{!hasMapLocation && <span className="text-red-500"> *</span>}
                   </label>
                   <input
                     type="text"
@@ -727,8 +837,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 </div>
               </div>
 
-              <div className={`${step === "details" ? "" : "hidden"} space-y-4`}>
-                <h3 className="text-sm font-black text-slate-900">Choose booking date</h3>
+              <div ref={scheduleCardRef} className={`${step === "details" ? "" : "hidden"} space-y-4 rounded-2xl border bg-white p-4 shadow-sm transition lg:col-span-2 ${scheduleError ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
+                <div><h3 className="text-sm font-black text-slate-900">Choose booking date & time</h3><p className="mt-1 text-xs text-slate-500">Select a date, recurrence preference, and an available arrival slot.</p></div>
                 {/* FEATURE 2: Recurring Booking Picker */}
                 <RecurringPicker
                   isRecurring={isRecurring}
@@ -738,51 +848,62 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                   onFromDateChange={setFromDate}
                   onToDateChange={setToDate}
                   unitPrice={unitPrice * quantity}
-                  minimumDate={pakistanDateAndTime(earliestBookingTimestamp(minimumBookingLeadHours)).date}
+                  minimumDate={nextAvailableBookingDate(minimumBookingLeadHours)}
                 />
 
               {/* Date selection if One Time */}
               {!isRecurring && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Service Date *</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                <div className="space-y-3">
+                  <label className="mb-1 block text-xs font-bold text-slate-600">Service Date <span className="text-red-500">*</span></label>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                    {quickBookingDates.map((date, index) => {
+                      const label = dateCardLabel(date, index);
+                      const selected = fromDate === date && !showCustomDate;
+                      return <button key={date} type="button" onClick={() => { setShowCustomDate(false); setFromDate(date); setToDate(date); setSelectedTime(""); setScheduleError(""); }} className={`rounded-xl border px-2 py-2.5 text-center transition ${selected ? "border-emerald-600 bg-emerald-600 text-white shadow-md shadow-emerald-600/20" : "border-slate-200 bg-slate-50 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"}`}>
+                        <span className={`block text-[9px] font-bold uppercase tracking-wide ${selected ? "text-emerald-100" : "text-slate-400"}`}>{label.eyebrow}</span>
+                        <span className="mt-0.5 block text-sm font-black">{label.date}</span>
+                      </button>;
+                    })}
+                    <button type="button" onClick={() => setShowCustomDate(true)} className={`flex min-h-[3.75rem] items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-black transition ${showCustomDate || !quickBookingDates.includes(fromDate) ? "border-emerald-600 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-300" : "border-dashed border-slate-300 bg-white text-slate-600 hover:border-emerald-400"}`}><Calendar className="h-4 w-4" />Custom date</button>
+                  </div>
+                  {(showCustomDate || !quickBookingDates.includes(fromDate)) && <div className="relative animate-in fade-in duration-150">
+                    <Calendar className="absolute left-3 top-3 h-4 w-4 text-emerald-600" />
                     <input
                       type="date"
                       required
-                      min={pakistanDateAndTime(earliestBookingTimestamp(minimumBookingLeadHours)).date}
+                      min={minimumBookingDate}
                       value={fromDate}
                       onChange={(e) => {
-                        if (e.target.value < pakistanDateAndTime(earliestBookingTimestamp(minimumBookingLeadHours)).date) return;
+                        if (e.target.value < minimumBookingDate) return;
                         setFromDate(e.target.value);
                         setToDate(e.target.value);
                         setSelectedTime("");
                         setScheduleError("");
                       }}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full rounded-xl border border-emerald-300 bg-emerald-50/50 py-2.5 pl-9 pr-3 text-sm font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     />
-                  </div>
+                  </div>}
                 </div>
               )}
-              </div>
-
-              {/* FEATURE 1: 30-Min Time Slot Picker Grid */}
-              <div className={`${step === "details" ? "" : "hidden"} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm`}>
+                <div className="border-t border-slate-100 pt-4">
                 <TimeSlotPicker selectedDate={fromDate} selectedTime={selectedTime} minimumBookingLeadHours={minimumBookingLeadHours} error={scheduleError} onSelectTime={(time) => { setSelectedTime(time); setScheduleError(""); }} />
+                </div>
               </div>
 
               {/* FEATURE 4: Payment Option & EasyPaisa Receipt Upload */}
-              {step === "payment" && <div className="lg:col-span-2">
+              {step === "payment" && <div className="min-w-0 lg:col-span-2">
                 <EasyPaisaPaymentSection
                   paymentMethod={paymentMethod}
-                  onPaymentMethodChange={(method) => { setPaymentMethod(method); setReceiptDataUrl(""); setReceiptFileName(""); }}
+                  onPaymentMethodChange={(method) => { setPaymentMethod(method); setReceiptDataUrl(""); setReceiptFileName(""); setReceiptValidationError(false); }}
                   total={calculatedTotal}
                   receiptFileName={receiptFileName}
                   onReceiptSelect={handleReceiptSelect}
+                  receiptError={receiptValidationError}
+                  receiptAreaRef={receiptAreaRef}
                   rewardEligible={rewardEligible}
                   rewardLoading={rewardLoading}
                   useRewardPoints={useRewardPoints && rewardEligible}
-                  onUseRewardPointsChange={(value) => { setUseRewardPoints(value); setReceiptDataUrl(""); setReceiptFileName(""); }}
+                  onUseRewardPointsChange={(value) => { setUseRewardPoints(value); setReceiptDataUrl(""); setReceiptFileName(""); setReceiptValidationError(false); }}
                 />
               </div>}
 

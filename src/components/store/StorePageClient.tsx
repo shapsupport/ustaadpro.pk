@@ -75,7 +75,7 @@ export default function StorePageClient() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const pageSize = 40;
+  const pageSize = 15;
   const resultsRef = useRef<HTMLDivElement>(null);
   const catalogRequestRef = useRef(0);
 

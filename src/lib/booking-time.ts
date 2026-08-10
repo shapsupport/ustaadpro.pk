@@ -14,6 +14,14 @@ export function earliestBookingTimestamp(leadHours: number): number {
   return Date.now() + clampBookingLeadHours(leadHours) * 60 * 60 * 1000;
 }
 
+/** Earliest Pakistan calendar date that still has a selectable slot by 11:00 PM. */
+export function nextAvailableBookingDate(leadHours: number): string {
+  const earliest = earliestBookingTimestamp(leadHours);
+  const candidate = pakistanDateAndTime(earliest).date;
+  if (bookingTimestamp(candidate, "23:00") >= earliest) return candidate;
+  return pakistanDateAndTime(earliest + 24 * 60 * 60 * 1000).date;
+}
+
 export function pakistanDateAndTime(timestamp: number) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Karachi",

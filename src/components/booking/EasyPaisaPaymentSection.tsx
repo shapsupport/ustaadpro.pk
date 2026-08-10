@@ -1,7 +1,9 @@
 "use client";
 
-import React from "react";
-import { CreditCard, Gift, ShieldCheck, Info, Upload } from "lucide-react";
+import React, { useState, type RefObject } from "react";
+import { Check, Copy, CreditCard, Gift, ShieldCheck, Upload } from "lucide-react";
+
+const EASYPAISA_NUMBER = "03485838593";
 
 interface EasyPaisaPaymentSectionProps {
   paymentMethod: "Rs 200 Advance" | "Full Payment in Advance";
@@ -9,6 +11,8 @@ interface EasyPaisaPaymentSectionProps {
   total: number;
   receiptFileName: string;
   onReceiptSelect: (file: File | null) => void;
+  receiptError?: boolean;
+  receiptAreaRef?: RefObject<HTMLDivElement | null>;
   rewardEligible?: boolean;
   rewardLoading?: boolean;
   useRewardPoints?: boolean;
@@ -21,22 +25,35 @@ export default function EasyPaisaPaymentSection({
   total,
   receiptFileName,
   onReceiptSelect,
+  receiptError = false,
+  receiptAreaRef,
   rewardEligible = false,
   rewardLoading = false,
   useRewardPoints = false,
   onUseRewardPointsChange,
 }: EasyPaisaPaymentSectionProps) {
+  const [copied, setCopied] = useState(false);
   const rewardDiscount = useRewardPoints ? Math.min(200, total) : 0;
   const cashDue = paymentMethod === "Rs 200 Advance"
     ? Math.max(0, Math.min(200, total) - rewardDiscount)
     : Math.max(0, total - rewardDiscount);
   const remaining = paymentMethod === "Rs 200 Advance" ? Math.max(0, total - 200) : 0;
+
+  const copyEasyPaisaNumber = async () => {
+    try {
+      await navigator.clipboard.writeText(EASYPAISA_NUMBER);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
   return (
-    <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+    <div className="min-w-0 space-y-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
       <div className="flex items-center justify-between">
         <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
           <CreditCard className="h-4 w-4 text-emerald-600" />
-          Booking confirmation payment
+          Booking confirmation payment <span className="text-red-500">*</span>
         </label>
         <span className="text-[11px] text-slate-500 flex items-center gap-1">
           <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
@@ -79,23 +96,28 @@ export default function EasyPaisaPaymentSection({
       {useRewardPoints && <p className="rounded-xl bg-violet-100 px-3 py-2 text-xs font-bold text-violet-800">PKR {rewardDiscount.toLocaleString("en-PK")} loyalty reward applied to this booking.</p>}
 
       {/* Notice when EasyPaisa selected */}
-      {cashDue > 0 && <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 animate-in fade-in duration-200">
-          <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-xs font-bold text-amber-800">
-              Send Rs {cashDue.toLocaleString("en-PK")} to EasyPaisa 03485838593
-            </p>
-            <p className="text-[11px] text-amber-700 mt-0.5">
-              Upload the screenshot below. Admin will verify it and process your booking. You will be notified shortly.
-            </p>
+      {cashDue > 0 && <div className="overflow-hidden rounded-2xl border-2 border-emerald-400 bg-gradient-to-br from-emerald-600 to-emerald-800 text-white shadow-lg shadow-emerald-700/15 animate-in fade-in duration-200">
+          <div className="px-4 py-4 text-center sm:px-6">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-100">Send with EasyPaisa</p>
+            <p className="mt-1 text-sm text-emerald-50">Transfer <strong className="text-lg text-white">Rs {cashDue.toLocaleString("en-PK")}</strong> to:</p>
+            <div className="mt-3 flex flex-col items-stretch justify-center gap-2 sm:flex-row sm:items-center">
+              <span className="rounded-xl bg-white px-4 py-3 text-center text-2xl font-black tracking-[0.08em] text-emerald-800 shadow-sm sm:text-3xl">{EASYPAISA_NUMBER}</span>
+              <button type="button" onClick={() => void copyEasyPaisaNumber()} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-lime-300 px-5 py-3 text-sm font-black text-emerald-950 transition hover:bg-lime-200" aria-label="Copy EasyPaisa number">
+                {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+                {copied ? "Copied" : "Copy number"}
+              </button>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-emerald-100">After transferring the amount, upload the payment screenshot below for verification.</p>
           </div>
         </div>}
 
-      {cashDue > 0 ? <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-emerald-300 bg-white px-4 py-3 text-xs font-bold text-emerald-700 hover:bg-emerald-50">
-        <Upload className="h-4 w-4" />
-        {receiptFileName || "Upload booking payment receipt *"}
-        <input type="file" accept="image/*" required={!receiptFileName} className="sr-only" onChange={(event) => onReceiptSelect(event.target.files?.[0] ?? null)} />
-      </label> : <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center text-xs font-bold text-emerald-800">Your PKR 200 reward covers the booking confirmation. No receipt is required.</div>}
+      <div ref={receiptAreaRef} className="min-w-0 space-y-2">
+      {cashDue > 0 && <label className={`flex min-h-14 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed px-3 py-3 text-center text-sm font-bold transition-colors sm:px-4 ${receiptError ? "border-red-400 bg-white text-red-700 hover:bg-red-50" : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50"}`}>
+          <Upload className="h-5 w-5 shrink-0" />
+          <span className="min-w-0 truncate">{receiptFileName || <>Upload booking payment receipt <span className="text-red-500">*</span></>}</span>
+          <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => onReceiptSelect(event.target.files?.[0] ?? null)} />
+        </label>}
+      </div>
     </div>
   );
 }

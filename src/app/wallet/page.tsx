@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, CheckCircle2, Coins, CreditCard, Gift, History, LockKeyhole, RefreshCw, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { getProfile, type AuthUser } from "@/services/authService";
@@ -77,9 +77,12 @@ export default function WalletPage() {
   const [activity, setActivity] = useState<PaymentActivity[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const loadInFlight = useRef(false);
 
   async function loadWallet() {
     if (!user) return;
+    if (loadInFlight.current) return;
+    loadInFlight.current = true;
     setLoading(true); setError("");
     try {
       const token = getToken();
@@ -87,7 +90,7 @@ export default function WalletPage() {
       const headers = { Authorization: `Bearer ${token}` };
       const [freshProfile, serviceResponse, shopResponse] = await Promise.all([
         getProfile(),
-        fetch(`${API_BASE}/api/orders`, { headers, cache: "no-store" }),
+        fetch(`${API_BASE}/api/orders?limit=50&offset=0`, { headers, cache: "no-store" }),
         fetch(`${API_BASE}/api/shop/orders`, { headers, cache: "no-store" }),
       ]);
       setProfile(freshProfile);
@@ -97,10 +100,14 @@ export default function WalletPage() {
       if (!serviceResponse.ok || !shopResponse.ok) setError("Some payment activity could not be loaded.");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Wallet details could not be loaded.");
-    } finally { setLoading(false); }
+    } finally { setLoading(false); loadInFlight.current = false; }
   }
 
-  useEffect(() => { if (user) void loadWallet(); }, [user]);
+  useEffect(() => {
+    if (!user) return;
+    const timer = window.setTimeout(() => { void loadWallet(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [user]);
 
   const eligibleOrders = useMemo(() => activity.filter((item) => {
     const confirmedOrFinal = /^(confirmed|assigned|in[_ ]?progress|completed|delivered)$/i.test(item.status);

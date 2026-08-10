@@ -96,16 +96,18 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
   }, [mobile, open]);
 
   useEffect(() => {
+    if (!open) return;
     let active = true;
     getSearchVocabulary(scope)
       .then((terms) => { if (active) setApiVocabulary(terms); })
       .catch(() => { if (active) setApiVocabulary([]); });
     return () => { active = false; };
-  }, [scope]);
+  }, [open, scope]);
 
   useEffect(() => {
     const value = query.trim();
     if (!value) return;
+    if (pathname.startsWith("/store") && scope === "shop_product") return;
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setLoading(true);
@@ -123,7 +125,7 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
       }
     }, 300);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [category, query, scope]);
+  }, [category, pathname, query, scope]);
 
   useEffect(() => {
     if (!pathname.startsWith("/store")) return;
@@ -259,7 +261,7 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
                 const isService = result.resultType === "service";
                 const href = isService ? `/services/${result.id}` : `/store/${result.id}`;
                 const image = imageUrl(result);
-                return <Link key={result.suggestionId || `${scope}-${result.id}`} href={href} onClick={() => { remember(query); setOpen(false); onNavigate?.(); }} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg">
+                return <Link key={result.suggestionId || `${scope}-${result.id}`} href={href} prefetch={false} onClick={() => { remember(query); setOpen(false); onNavigate?.(); }} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg">
                   <div className="relative aspect-[4/3] bg-slate-100">{image ? <Image src={image} alt={result.title || "Search result"} fill sizes="220px" className="object-cover transition group-hover:scale-105" /> : <Search className="absolute inset-0 m-auto h-7 w-7 text-slate-300" />}</div>
                   <div className="p-3"><p className="line-clamp-2 text-sm font-black text-slate-900">{result.title || "Untitled result"}</p><p className="mt-2 text-sm font-black text-emerald-700">Rs {Number(result.price || 0).toLocaleString("en-PK")}</p></div>
                 </Link>;
