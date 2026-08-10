@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, CheckCircle2, Coins, CreditCard, Gift, History, LockKeyhole, RefreshCw, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
+import { ArrowRight, CheckCircle2, Coins, CreditCard, Gift, History, RefreshCw, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { getProfile, type AuthUser } from "@/services/authService";
 import { Button } from "@/components/ui/button";
+import { LoyaltyProgressTracker } from "@/components/shared/LoyaltyProgressTracker";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
-const ORDERS_PER_REWARD = 8;
+// Loyalty cycle: every 9th order (after 8 completed) = PKR 200 OFF
+const ORDERS_PER_CYCLE = 9;
 const VALUE_PER_ORDER = 25;
 const REWARD_VALUE = 200;
 
@@ -103,12 +105,13 @@ export default function WalletPage() {
   useEffect(() => { if (user) void loadWallet(); }, [user]);
 
   const eligibleOrders = useMemo(() => activity.filter((item) => {
-    const confirmedOrFinal = /^(confirmed|assigned|in[_ ]?progress|completed|delivered)$/i.test(item.status);
-    const receiptCleared = item.kind === "shop" || item.receiptStatus === "verified";
-    return confirmedOrFinal && item.payable === 0 && receiptCleared;
+    if (item.kind !== "service") return false; // Loyalty only applies to service bookings
+    const status = (item.status || "").toLowerCase().replace(/\s+/g, "_");
+    return /^(confirmed|assigned|in[_ ]?progress|completed|delivered)$/.test(status);
   }).length, [activity]);
-  const progressOrders = eligibleOrders % ORDERS_PER_REWARD;
-  const completedCycles = Math.floor(eligibleOrders / ORDERS_PER_REWARD);
+  // Loyalty cycle: mod 9 (every 9th order = PKR 200 OFF after 8 are done)
+  const loyaltyCycleProgress = eligibleOrders % ORDERS_PER_CYCLE; // 0-8
+  const completedCycles = Math.floor(eligibleOrders / ORDERS_PER_CYCLE);
   const loyaltyEarned = eligibleOrders * VALUE_PER_ORDER;
   const paidTotal = activity.reduce((sum, item) => sum + item.paid, 0);
   const payableTotal = activity.reduce((sum, item) => sum + item.payable, 0);
@@ -131,11 +134,36 @@ export default function WalletPage() {
       </div>
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1fr_320px] lg:items-center">
-          <div><div className="flex items-center gap-2"><Gift className="h-5 w-5 text-emerald-600" /><h2 className="text-xl font-black text-slate-900">Eight-order loyalty reward</h2></div><p className="mt-2 text-sm leading-6 text-slate-600">Each admin-confirmed order with zero payment remaining adds PKR 25 in loyalty value. Orders with pending or unverified payments do not count. The value remains locked until a complete set of eight eligible orders is reached; a PKR 200 refund-wallet balance by itself does not unlock this discount.</p>
-            <div className="mt-5"><div className="flex justify-between text-xs font-bold"><span className="text-slate-600">{progressOrders} of {ORDERS_PER_REWARD} orders toward the next reward</span><span className="text-emerald-700">PKR {progressOrders * VALUE_PER_ORDER} / PKR {REWARD_VALUE}</span></div><div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-lime-400 transition-all" style={{ width: `${(progressOrders / ORDERS_PER_REWARD) * 100}%` }} /></div><div className="mt-3 grid grid-cols-8 gap-1">{Array.from({ length: 8 }).map((_, index) => <div key={index} className={`grid h-8 place-items-center rounded-lg text-xs font-black ${index < progressOrders ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{index + 1}</div>)}</div></div>
+        <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1fr_320px] lg:items-start">
+          <LoyaltyProgressTracker
+            completedOrders={eligibleOrders}
+            showSummaryCard={false}
+          />
+          <div className={`rounded-2xl p-5 text-center ${loyaltyCycleProgress === 8 ? "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200" : completedCycles > 0 ? "bg-slate-50 text-slate-800 ring-1 ring-slate-200" : "bg-slate-100 text-slate-700"}`}>
+            {loyaltyCycleProgress === 8 ? (
+              <CheckCircle2 className="mx-auto h-9 w-9 text-emerald-600" />
+            ) : completedCycles > 0 ? (
+              <Gift className="mx-auto h-9 w-9 text-slate-400" />
+            ) : (
+              <Gift className="mx-auto h-9 w-9 text-slate-300" />
+            )}
+            <p className="mt-3 text-sm font-bold">
+              {loyaltyCycleProgress === 8
+                ? "PKR 200 OFF Ready!"
+                : completedCycles > 0
+                ? `${completedCycles} reward${completedCycles > 1 ? "s" : ""} unlocked`
+                : `${8 - loyaltyCycleProgress} more order${8 - loyaltyCycleProgress === 1 ? "" : "s"} to unlock`}
+            </p>
+            <p className="mt-1 text-2xl font-black">
+              PKR {(completedCycles * REWARD_VALUE).toLocaleString("en-PK")}
+            </p>
+            <p className="mt-1 text-xs opacity-70">Cumulative discount value</p>
+            {loyaltyCycleProgress === 8 && (
+              <p className="mt-3 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-bold text-emerald-800">
+                Your next booking gets <strong>PKR 200 OFF</strong> automatically!
+              </p>
+            )}
           </div>
-          <div className={`rounded-2xl p-5 text-center ${completedCycles > 0 ? "bg-emerald-50 text-emerald-900" : "bg-slate-100 text-slate-700"}`}>{completedCycles > 0 ? <CheckCircle2 className="mx-auto h-9 w-9 text-emerald-600" /> : <LockKeyhole className="mx-auto h-9 w-9 text-slate-400" />}<p className="mt-3 text-sm font-bold">{completedCycles > 0 ? `${completedCycles} reward${completedCycles > 1 ? "s" : ""} unlocked` : `${ORDERS_PER_REWARD - progressOrders} more order${ORDERS_PER_REWARD - progressOrders === 1 ? "" : "s"} to unlock`}</p><p className="mt-1 text-2xl font-black">PKR {(completedCycles * REWARD_VALUE).toLocaleString("en-PK")}</p><p className="mt-1 text-xs opacity-70">Eligible discount value</p></div>
         </div>
       </section>
 
@@ -148,7 +176,56 @@ export default function WalletPage() {
 }
 
 function GuestWallet({ onLogin }: { onLogin: () => void }) {
-  return <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8"><div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]"><section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"><Sparkles className="h-9 w-9 text-emerald-600" /><h2 className="mt-4 text-2xl font-black text-slate-900">Earn PKR 25 with every eligible order</h2><p className="mt-3 leading-7 text-slate-600">Complete eight eligible orders to unlock a PKR 200 loyalty discount. Loyalty value cannot be redeemed early—even when your separate refund wallet balance is PKR 200 or more.</p><div className="mt-6 grid grid-cols-8 gap-1">{Array.from({ length: 8 }).map((_, index) => <div key={index} className="grid h-10 place-items-center rounded-xl bg-emerald-50 text-sm font-black text-emerald-700">{index + 1}</div>)}</div><div className="mt-3 flex justify-between text-xs font-bold text-slate-500"><span>PKR 25 per order</span><span>8 orders = PKR 200</span></div><Button className="mt-7 w-full sm:w-auto" onClick={onLogin}>Sign in to see my wallet</Button></section><section className="rounded-3xl bg-slate-900 p-6 text-white sm:p-8"><h2 className="text-xl font-black">What signed-in users can see</h2><ul className="mt-5 space-y-4">{["Live wallet refund balance", "Payments submitted for bookings", "Remaining listed amounts payable", "Receipt verification status", "Eight-order loyalty progress", "A simple payment history for every order"].map((benefit) => <li key={benefit} className="flex gap-3 text-sm text-slate-200"><CheckCircle2 className="h-5 w-5 shrink-0 text-lime-300" />{benefit}</li>)}</ul><div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs leading-5 text-slate-300"><ShieldCheck className="mb-2 h-5 w-5 text-lime-300" />Wallet refunds are credited only after eligible cancellation and admin verification. Customers cannot manually credit a wallet.</div></section></div></main>;
+  return (
+    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <Sparkles className="h-9 w-9 text-emerald-600" />
+          <h2 className="mt-4 text-2xl font-black text-slate-900">PKR 200 OFF on your 9th booking</h2>
+          <p className="mt-3 leading-7 text-slate-600">
+            Complete 8 eligible orders to unlock a <strong>PKR 200 discount</strong> on
+            your 9th booking. After the discount is applied, your counter resets and
+            the next cycle begins.
+          </p>
+          <div className="mt-6 grid grid-cols-8 gap-1.5">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={index} className="grid h-10 place-items-center rounded-xl bg-emerald-50 text-sm font-black text-emerald-700 ring-1 ring-emerald-200">
+                {index + 1}
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex justify-between text-xs font-bold text-slate-500">
+            <span>Complete 8 orders</span>
+            <span>9th order = PKR 200 OFF</span>
+          </div>
+          <Button className="mt-7 w-full sm:w-auto" onClick={onLogin}>Sign in to see my wallet</Button>
+        </section>
+        <section className="rounded-3xl bg-slate-900 p-6 text-white sm:p-8">
+          <h2 className="text-xl font-black">What signed-in users can see</h2>
+          <ul className="mt-5 space-y-4">
+            {[
+              "Live wallet refund balance",
+              "Payments submitted for bookings",
+              "Remaining listed amounts payable",
+              "Receipt verification status",
+              "Eight-order loyalty progress tracker",
+              "A simple payment history for every order",
+            ].map((benefit) => (
+              <li key={benefit} className="flex gap-3 text-sm text-slate-200">
+                <CheckCircle2 className="h-5 w-5 shrink-0 text-lime-300" />
+                {benefit}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs leading-5 text-slate-300">
+            <ShieldCheck className="mb-2 h-5 w-5 text-lime-300" />
+            Wallet refunds are credited only after eligible cancellation and admin
+            verification. Customers cannot manually credit a wallet.
+          </div>
+        </section>
+      </div>
+    </main>
+  );
 }
 
 function MetricCard({ icon, label, value, help, color }: { icon: React.ReactNode; label: string; value: string; help: string; color: "emerald" | "blue" | "amber" | "violet" }) {

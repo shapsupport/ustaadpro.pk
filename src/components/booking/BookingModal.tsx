@@ -17,6 +17,7 @@ import {
   Minus,
   Plus,
   Trash2,
+  Gift,
 } from "lucide-react";
 import { createBooking, uploadPaymentReceipt, ServiceItemInput } from "@/services/bookingService";
 import { useAuth } from "@/context/AuthContext";
@@ -32,6 +33,13 @@ import { bookingTimestamp, clampBookingLeadHours, earliestBookingTimestamp, paki
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 const BOOKING_DRAFT_KEY = "ustaadpro_booking_draft";
+// Loyalty: every 9th booking (after 8 completed) gets PKR 200 OFF
+const LOYALTY_CYCLE = 9;
+const LOYALTY_DISCOUNT_VALUE = 200;
+
+// Module-level cache so the loyalty order count is available instantly on re-open
+let _cachedLoyaltyCount: number | null = null;
+let _cachedLoyaltyUserId: string | null = null;
 
 // ── Service Area: Rawalpindi + Islamabad ────────────────────────────────
 const SERVICE_AREA = { south: 33.40, north: 33.80, west: 72.85, east: 73.30 };
@@ -133,6 +141,9 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const [rewardPoints, setRewardPoints] = useState(0);
   const [rewardLoading, setRewardLoading] = useState(false);
 
+  // Loyalty discount: count completed service orders to detect 9th-order eligibility
+  const [loyaltyOrderCount, setLoyaltyOrderCount] = useState<number | null>(null);
+
   // Submission State
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -143,7 +154,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     receiptError?: string;
     paidAmount: number;
     remainingAmount: number;
-    rewardApplied?: boolean;
+    rewardPointsApplied?: boolean;
+    loyaltyDiscountApplied?: boolean;
   } | null>(null);
 
   // Auto-fill user details if logged in
@@ -188,6 +200,43 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       .finally(() => setRewardLoading(false));
   }, [isOpen, user]);
 
+  // Fetch order count to determine 9th-order loyalty discount eligibility
+  // Module-level cache means re-opens are instant; cache is invalidated after a booking is placed
+  useEffect(() => {
+    if (!isOpen || !user) return;
+    const userId = user.email || String(user.id || "");
+    // Use cached value immediately (instant display, no flicker)
+    if (_cachedLoyaltyUserId === userId && _cachedLoyaltyCount !== null) {
+      setLoyaltyOrderCount(_cachedLoyaltyCount);
+      return;
+    }
+    const tokenVal = typeof window !== "undefined" ? localStorage.getItem("ustaadpro_token") : null;
+    if (!tokenVal) return;
+    fetch(`${API_BASE}/api/orders`, {
+      headers: { Authorization: `Bearer ${tokenVal}` },
+      cache: "no-store",
+    })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json() as unknown;
+        const list = Array.isArray(data)
+          ? data
+          : (data as { orders?: unknown[]; data?: unknown[] })?.orders
+          ?? (data as { orders?: unknown[]; data?: unknown[] })?.data
+          ?? [];
+        // Count only admin-confirmed service orders
+        const confirmed = (list as Record<string, unknown>[]).filter((row) => {
+          const status = String(row.status || "").toLowerCase().replace(/\s+/g, "_");
+          return /^(confirmed|assigned|in[_ ]?progress|completed|delivered)$/.test(status);
+        }).length;
+        _cachedLoyaltyCount = confirmed;
+        _cachedLoyaltyUserId = userId;
+        setLoyaltyOrderCount(confirmed);
+      })
+      .catch(() => {});
+  }, [isOpen, user]);
+
+
   // Derived Calculations
   const baseSelectedServices = services?.length ? services : [service];
   const selectedServices = baseSelectedServices.map((item) => ({
@@ -202,13 +251,23 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   );
   const listedServicesTotal = selectedServices.reduce((sum, item) => sum + Number(item.price) * Math.max(1, Math.min(10, Number(item.quantity || 1))), 0);
   const serviceSubtotal = listedServicesTotal * daysCount;
-  const serviceTax = serviceSubtotal * serviceTaxPercent / 100;
-  const calculatedTotal = serviceSubtotal + inspectionFee + serviceTax;
-  const rewardEligible = rewardPoints >= 200;
-  const rewardDiscount = useRewardPoints && rewardEligible ? Math.min(200, calculatedTotal) : 0;
+  // Loyalty discount: this booking is the 9th in the cycle (after 8 confirmed orders)
+  const loyaltyDiscountEligible =
+    loyaltyOrderCount !== null &&
+    loyaltyOrderCount > 0 &&
+    loyaltyOrderCount % LOYALTY_CYCLE === LOYALTY_CYCLE - 1; // 8, 17, 26...
+  const loyaltyDiscount = loyaltyDiscountEligible ? Math.min(LOYALTY_DISCOUNT_VALUE, serviceSubtotal) : 0;
+  const rewardEligible = rewardPoints >= 4; // 4 points = Rs 100 minimum server redeemable
+  const isRewardPoints = useRewardPoints && rewardEligible && !loyaltyDiscountEligible;
+  const rewardDiscount = isRewardPoints ? Math.min(LOYALTY_DISCOUNT_VALUE, serviceSubtotal) : 0;
+  const totalAppliedDiscount = loyaltyDiscountEligible ? loyaltyDiscount : rewardDiscount;
+  const taxableSubtotal = Math.max(0, serviceSubtotal - totalAppliedDiscount);
+  const serviceTax = Math.round((taxableSubtotal * serviceTaxPercent) / 100);
+  const baseTotal = serviceSubtotal + inspectionFee + serviceTax;
+  const calculatedTotal = taxableSubtotal + inspectionFee + serviceTax;
   const paymentNow = paymentMethod === "Rs 200 Advance"
-    ? Math.max(0, Math.min(200, calculatedTotal) - rewardDiscount)
-    : Math.max(0, calculatedTotal - rewardDiscount);
+    ? Math.max(0, Math.min(200, calculatedTotal))
+    : Math.max(0, calculatedTotal);
   const isInspectionService = selectedServices.some((item) => /visit|inspection/i.test(item.unitDescription || ""));
   const hasMapLocation = Boolean(selectedLocation.trim() && addressCoords);
   const addressFieldError = validateSpecificAddress(specificAddress, hasMapLocation);
@@ -335,8 +394,19 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       //   ? `${requirements.trim()}\n[EasyPaisa Payment Screenshot Attached: ${receiptFileName || "receipt.png"}]`.trim()
       //   : requirements.trim();
 
-      const noteWithReceipt = requirements.trim();
+      let noteWithReceipt = requirements.trim();
+      if (loyaltyDiscountEligible) {
+        const remainingToPay = Math.max(0, calculatedTotal - paymentNow);
+        const loyaltyTag = `[8-Order Loyalty Reward: PKR 200 Discount Applied | Final Total: Rs ${calculatedTotal.toLocaleString("en-PK")} | Advance Paid: Rs ${paymentNow.toLocaleString("en-PK")} | Remaining Payable: Rs ${remainingToPay.toLocaleString("en-PK")}]`;
+        noteWithReceipt = noteWithReceipt
+          ? `${noteWithReceipt}\n${loyaltyTag}`.trim()
+          : loyaltyTag;
+      }
 
+      const isRewardPoints = useRewardPoints && rewardEligible && !loyaltyDiscountEligible;
+      const serverRewardPointsEligible = rewardPoints >= 4; // server requires at least 4 points (Rs 100 value) to process useRewardPoints
+      const shouldSendUseRewardPoints = (loyaltyDiscountEligible && serverRewardPointsEligible) || (isRewardPoints && serverRewardPointsEligible);
+      const appliedDiscount = loyaltyDiscountEligible ? loyaltyDiscount : (isRewardPoints ? rewardDiscount : 0);
 
       // 1. Submit Booking
       const response = await createBooking({
@@ -351,18 +421,23 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
         items,
         paymentMethod,
         recurringOccurrences: daysCount,
-        useRewardPoints: useRewardPoints && rewardEligible,
+        useRewardPoints: shouldSendUseRewardPoints,
+        loyaltyDiscount: loyaltyDiscountEligible ? 200 : 0,
+        discount: appliedDiscount,
         inspectionFee,
         tax: serviceTax,
       });
 
       if (response && response.order) {
         const orderId = response.order.id;
-        const confirmedTotal = Number(response.order.total || calculatedTotal);
+        // calculatedTotal already has loyalty discount applied; also subtract reward points discount
+        const confirmedTotal = calculatedTotal - (isRewardPoints ? rewardDiscount : 0);
         const confirmedPaymentNow = paymentMethod === "Rs 200 Advance"
-          ? Math.max(0, Math.min(200, confirmedTotal) - rewardDiscount)
-          : Math.max(0, confirmedTotal - rewardDiscount);
-        const confirmedCoveredAmount = paymentMethod === "Rs 200 Advance" ? Math.min(200, confirmedTotal) : confirmedTotal;
+          ? Math.max(0, Math.min(200, confirmedTotal))
+          : Math.max(0, confirmedTotal);
+        const confirmedCoveredAmount = paymentMethod === "Rs 200 Advance"
+          ? Math.min(200, confirmedTotal)
+          : confirmedTotal;
         let receiptUploaded = false;
         let receiptError = "";
         if (confirmedPaymentNow > 0) {
@@ -383,9 +458,13 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
           receiptError,
           paidAmount: confirmedCoveredAmount,
           remainingAmount: Math.max(0, confirmedTotal - confirmedCoveredAmount),
-          rewardApplied: useRewardPoints && rewardEligible,
+          rewardPointsApplied: isRewardPoints,
+          loyaltyDiscountApplied: loyaltyDiscountEligible,
         });
         sessionStorage.removeItem(BOOKING_DRAFT_KEY);
+        // Invalidate the module-level loyalty cache: order count just incremented
+        _cachedLoyaltyCount = null;
+        _cachedLoyaltyUserId = null;
         showSuccessToast(`${service.title} has been booked successfully.`);
         onBookingComplete?.();
 
@@ -399,6 +478,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 id: orderId,
                 serviceTitle: selectedServices.map((item) => item.selectedWorkTitle || item.title).join(", "),
                 servicePrice: calculatedTotal,
+                loyaltyDiscount: loyaltyDiscountEligible ? loyaltyDiscount : 0,
+                loyaltyApplied: loyaltyDiscountEligible,
                 status: response.order.status || "confirmed",
                 createdAt: new Date().toISOString(),
                 customerName: name,
@@ -522,12 +603,17 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                   <div><p className="text-slate-400">Pay professional</p><p className="font-black text-slate-800">Rs {bookingSuccess.remainingAmount.toLocaleString("en-PK")}</p></div>
                 </div>
                 {isInspectionService && <p className="mt-2 text-[11px] text-slate-600">This covers the listed visit/inspection charge. Any labour, repair, parts, or materials quoted after inspection are separate and can be paid to the provided EasyPaisa account after you approve the work.</p>}
-                {bookingSuccess.rewardApplied && (
-                  <p className="text-[11px] font-bold text-violet-700 flex items-center justify-center gap-1 pt-1">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> PKR 200 loyalty reward redeemed successfully.
+                {bookingSuccess.loyaltyDiscountApplied && (
+                  <p className="text-[11px] font-bold text-emerald-700 flex items-center justify-center gap-1 pt-1">
+                    <Gift className="h-3.5 w-3.5" /> PKR 200 eight-order loyalty discount applied!
                   </p>
                 )}
-                {bookingSuccess.receiptUploaded && (!bookingSuccess.rewardApplied || bookingSuccess.paidAmount > 200) && (
+                {bookingSuccess.rewardPointsApplied && (
+                  <p className="text-[11px] font-bold text-violet-700 flex items-center justify-center gap-1 pt-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> PKR 200 reward points redeemed successfully.
+                  </p>
+                )}
+                {bookingSuccess.receiptUploaded && !(bookingSuccess.loyaltyDiscountApplied && bookingSuccess.paidAmount === 0) && (
                   <p className="text-[11px] font-bold text-emerald-600 flex items-center justify-center gap-1 pt-1">
                     <CheckCircle2 className="h-3.5 w-3.5" /> Payment receipt submitted for verification.
                   </p>
@@ -605,9 +691,26 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                   })}
                 </div>
                 <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                  {/* Loyalty discount banner – shown before price table so user sees it prominently */}
+                  {loyaltyDiscountEligible && (
+                    <div className="mb-2 flex items-center gap-2 rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-lime-50 px-3 py-2.5 text-emerald-800 animate-in fade-in duration-300">
+                      <Gift className="h-4 w-4 shrink-0 text-emerald-600" />
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black uppercase tracking-wide text-emerald-700">🎉 8-Order Loyalty Reward Unlocked!</p>
+                        <p className="text-[10px] text-emerald-600">This is your 9th booking — PKR 200 discount applied automatically.</p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex justify-between"><span>Service subtotal</span><strong>Rs {serviceSubtotal.toLocaleString("en-PK")}</strong></div>
                   <div className="flex justify-between"><span>Inspection/service charge</span><strong>Rs {inspectionFee.toLocaleString("en-PK")}</strong></div>
                   <div className="flex justify-between"><span>Service tax ({serviceTaxPercent}%)</span><strong>Rs {serviceTax.toLocaleString("en-PK")}</strong></div>
+                  {loyaltyDiscountEligible && (
+                    <div className="flex justify-between font-bold text-emerald-700">
+                      <span className="flex items-center gap-1"><Gift className="h-3 w-3" /> Loyalty Discount (8-order reward)</span>
+                      <strong>- Rs {loyaltyDiscount.toLocaleString("en-PK")}</strong>
+                    </div>
+                  )}
                   <div className="flex justify-between border-t border-slate-100 pt-2 text-sm text-slate-900"><span className="font-black">Final total</span><strong className="text-emerald-700">Rs {calculatedTotal.toLocaleString("en-PK")}</strong></div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">

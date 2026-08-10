@@ -3,14 +3,17 @@
 import Link from "next/link";
 import Image from "next/image";
 import { type ChangeEvent, useCallback, useEffect, useState } from "react";
-import { AlertCircle, ArrowRight, CalendarDays, Camera, ChevronDown, Clock3, CreditCard, MapPin, MessageSquareWarning, Package, ReceiptText, RefreshCw, ShoppingBag, Star, UserRound, WalletCards, Wrench, XCircle, ClipboardList } from "lucide-react";
+import { AlertCircle, ArrowRight, CalendarDays, Camera, ChevronDown, Clock3, CreditCard, Gift, MapPin, MessageSquareWarning, Package, ReceiptText, RefreshCw, ShoppingBag, Star, UserRound, WalletCards, Wrench, XCircle, ClipboardList } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 const STORAGE_KEY = "ustaadpro_bookings";
+// Loyalty: every 9th booking (after 8 confirmed orders) = PKR 200 OFF
+const LOYALTY_CYCLE = 9;
 
 type Booking = {
   id: string; serviceId?: string; serviceTitle: string; workTitle?: string; servicePrice: number;
@@ -181,6 +184,14 @@ export default function TrackBookingPage() {
   const serviceCount = bookings.filter((booking) => booking.kind === "service").length;
   const shopCount = bookings.filter((booking) => booking.kind === "shop").length;
   const completedCount = bookings.filter((booking) => ["completed", "delivered"].includes(booking.status.toLowerCase().replace(/\s+/g, "_"))).length;
+  // Loyalty progress: count only admin-confirmed service orders for the cycle
+  const confirmedServiceOrders = bookings.filter((booking) => {
+    if (booking.kind === "shop") return false;
+    const status = booking.status.toLowerCase().replace(/\s+/g, "_");
+    return /^(confirmed|assigned|in[_ ]?progress|completed|delivered)$/.test(status);
+  }).length;
+  const loyaltyCycleProgress = confirmedServiceOrders % LOYALTY_CYCLE; // 0-8
+  const loyaltyRewardReady = loyaltyCycleProgress === 8;
   const updateBooking = (id: string, kind: Booking["kind"], updates: Partial<Booking>) => {
     setBookings((current) => current.map((booking) => booking.id === id && booking.kind === kind ? { ...booking, ...updates } : booking));
   };
@@ -204,6 +215,37 @@ export default function TrackBookingPage() {
             </div>
           </div>
           {bookings.length > 0 && <div className="relative mt-6 grid grid-cols-3 gap-2 border-t border-white/10 pt-5 sm:max-w-lg sm:gap-3"><HeroStat label="All activity" value={bookings.length} /><HeroStat label="Services" value={serviceCount} /><HeroStat label="Completed" value={completedCount} /></div>}
+          {/* Loyalty progress mini-tracker in hero */}
+          {bookings.length > 0 && (
+            <div className="relative mt-4 inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur">
+              <Gift className="h-4 w-4 text-lime-300 shrink-0" />
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Loyalty Progress</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="flex gap-0.5">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-2.5 w-2.5 rounded-sm transition-colors ${(loyaltyCycleProgress === 8 || i < loyaltyCycleProgress)
+                            ? "bg-emerald-400"
+                            : "bg-white/20"
+                          }`}
+                      />
+                    ))}
+                  </div>
+                  {loyaltyRewardReady ? (
+                    <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-black text-white animate-pulse">
+                      PKR 200 OFF Ready!
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold text-slate-300">
+                      {loyaltyCycleProgress}/8
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         {loadError && <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm"><AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" /><p>{loadError}</p></div>}
@@ -304,6 +346,19 @@ function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate: (updat
           </div>
           <div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="text-slate-500">Method</span><span className="text-right font-bold text-slate-800">{booking.paymentMethod}</span></div>
           {latestReceipt && <div className="mt-2 flex items-center justify-between gap-3 text-xs"><span className="text-slate-500">Latest receipt</span><span className={`rounded-full px-2 py-1 font-bold capitalize ${receiptStatus === "verified" ? "bg-emerald-50 text-emerald-700" : receiptStatus === "rejected" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{latestReceipt.status || "submitted"}</span></div>}
+          {/* Loyalty discount badge: show if order total looks discounted or if API signals it */}
+          {(() => {
+            const raw = booking as unknown as Record<string, unknown>;
+            const hasLoyaltyFlag =
+              Number(raw.loyaltyDiscount || raw.loyalty_discount || 0) > 0 ||
+              Boolean(raw.loyaltyApplied || raw.loyalty_applied);
+            return hasLoyaltyFlag ? (
+              <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                <Gift className="h-4 w-4 shrink-0 text-emerald-600" />
+                <span className="text-xs font-black text-emerald-700">PKR 200 Loyalty Discount Applied</span>
+              </div>
+            ) : null;
+          })()}
         </section>
       </div>
 
@@ -501,7 +556,7 @@ function IssueForm({ booking }: { booking: Booking }) {
       setDetails(""); setImages([]);
     } catch (e) { setMessage(e instanceof Error ? e.message : "Issue could not be sent."); } finally { setBusy(false); }
   }
-  return <div className="mt-4 space-y-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4"><p className="font-bold text-slate-900">Tell support what happened</p><Textarea value={details} onChange={e => setDetails(e.target.value)} placeholder="Describe the problem, what you expected, and how we can help." /><ImagePicker onChange={() => {}} onFiles={setImages} maxFiles={5} />{message && <p className="text-sm font-medium text-slate-700">{message}</p>}<Button onClick={() => void submit()} disabled={busy}>{busy ? "Sending…" : "Send to support"}</Button></div>;
+  return <div className="mt-4 space-y-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4"><p className="font-bold text-slate-900">Tell support what happened</p><Textarea value={details} onChange={e => setDetails(e.target.value)} placeholder="Describe the problem, what you expected, and how we can help." /><ImagePicker onChange={() => { }} onFiles={setImages} maxFiles={5} />{message && <p className="text-sm font-medium text-slate-700">{message}</p>}<Button onClick={() => void submit()} disabled={busy}>{busy ? "Sending…" : "Send to support"}</Button></div>;
 }
 
 function ImagePicker({ onChange, onFiles, maxFiles = 3 }: { onChange: (images: string[]) => void; onFiles?: (files: File[]) => void; maxFiles?: number }) { const [names, setNames] = useState<string[]>([]); async function choose(e: ChangeEvent<HTMLInputElement>) { const files = Array.from(e.target.files || []).slice(0, maxFiles); setNames(files.map(f => f.name)); onFiles?.(files); if (!onFiles) onChange(await filesToDataUrls(e.target.files)); } return <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-white p-3 text-sm text-slate-600"><Camera className="h-5 w-5 text-primary" /><input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e => void choose(e)} /><span>{names.length ? `${names.length} photo${names.length > 1 ? "s" : ""} attached` : `Attach up to ${maxFiles} website photos`}</span></label>; }

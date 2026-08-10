@@ -45,6 +45,8 @@ export interface CreateBookingPayload {
   addressLat?: number;
   addressLng?: number;
   useRewardPoints?: boolean;
+  loyaltyDiscount?: number;
+  discount?: number;
 }
 
 export interface BookingResponseOrder {
@@ -113,6 +115,8 @@ export async function createBooking(data: CreateBookingPayload): Promise<Booking
     specialInstructions: data.requirements || "",
     recurringOccurrences: Math.max(1, Number(data.recurringOccurrences || 1)),
     useRewardPoints: Boolean(data.useRewardPoints),
+    loyaltyDiscount: Math.max(0, Number(data.loyaltyDiscount || 0)),
+    discount: Math.max(0, Number(data.discount || 0)),
     inspectionFee: Math.max(0, Number(data.inspectionFee || 0)),
     tax: Math.max(0, Number(data.tax || 0)),
   };
