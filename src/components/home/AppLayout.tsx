@@ -4,12 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight, BadgeCheck, CalendarCheck, Camera, CheckCircle2, ChevronDown,
+  ArrowLeft, ArrowRight, BadgeCheck, CalendarCheck, Camera, CheckCircle2, ChevronDown,
   Clock3, Flame, Hammer, Layers3, MapPin,
   Paintbrush, ShieldCheck, Shirt, Snowflake, Sparkles, Star,
   Timer, UserCheck, WalletCards, Wrench, Zap, type LucideIcon,
 } from "lucide-react";
-import type { ApiCategory, ApiReview, ApiService } from "@/lib/api-types";
+import type { ApiCatalogCategory, ApiCategory, ApiReview, ApiService, ApiSubcategory } from "@/lib/api-types";
 import { useLocation } from "@/context/LocationContext";
 import { orderCategories, orderServices } from "@/lib/service-order";
 import { AppStoreButtons } from "@/components/shared/AppStoreButtons";
@@ -95,16 +95,19 @@ function findCategory(categories: ApiCategory[], id: string) {
 interface AppLayoutProps {
   initialServices: ApiService[];
   categories: ApiCategory[];
+  catalog: ApiCatalogCategory[];
   reviews: ApiReview[];
 }
 
-export function AppLayout({ initialServices, categories, reviews }: AppLayoutProps) {
+export function AppLayout({ initialServices, categories, catalog, reviews }: AppLayoutProps) {
   const { location, setShowPicker } = useLocation();
   const [activeCategory, setActiveCategory] = useState("all");
+  const [activeSubcategory, setActiveSubcategory] = useState<ApiSubcategory | null>(null);
   const [featuredIndex, setFeaturedIndex] = useState(0);
   const servicesRef = useRef<HTMLElement>(null);
 
   const orderedServices = useMemo(() => orderServices(initialServices), [initialServices]);
+  const servicesById = useMemo(() => new Map(orderedServices.map((service) => [service.id, service])), [orderedServices]);
   const featuredServices = useMemo(() => orderedServices.slice(0, 3), [orderedServices]);
   const categoryList = useMemo(() => {
     const ids = [...new Set(orderedServices.map((service) => service.category_id || service.categoryId).filter(Boolean) as string[])];
@@ -119,16 +122,75 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
     return () => window.clearInterval(timer);
   }, [featuredServices.length]);
 
-  const filtered = useMemo(() => {
-    return orderedServices.filter((service) => activeCategory === "all" || service.category_id === activeCategory);
-  }, [activeCategory, orderedServices]);
+  const activeAliases = useMemo(
+    () => CAT_ALIASES.find((aliases) => aliases.includes(activeCategory)) ?? [activeCategory],
+    [activeCategory],
+  );
+  const activeCatalog = useMemo(
+    () => catalog.find((item) => activeAliases.includes(item.id)),
+    [activeAliases, catalog],
+  );
+  const activeSubcategories = useMemo(() => {
+    const merged = new Map<string, ApiSubcategory>();
+    (activeCatalog?.subcategories ?? [])
+      .filter((subcategory) => !subcategory.id.endsWith("-main"))
+      .forEach((subcategory) => {
+        const key = subcategory.title.trim().toLowerCase().replace(/\s+/g, " ");
+        const existing = merged.get(key);
+        const services = [...(existing?.services ?? [])];
+        (subcategory.services ?? []).forEach((service) => {
+          if (!services.some((item) => item.id === service.id)) services.push(service);
+        });
+        const preferIncoming = (subcategory.services?.length ?? 0) > (existing?.services?.length ?? 0);
+        merged.set(key, { ...(preferIncoming || !existing ? subcategory : existing), services });
+      });
+    return [...merged.values()].map((subcategory) => {
+      const services = [...(subcategory.services ?? [])];
+      orderedServices.forEach((service) => {
+        const subcategoryId = service.subcategory_id || service.subcategoryId;
+        if (subcategoryId === subcategory.id && !services.some((item) => item.id === service.id)) services.push(service);
+      });
+      return { ...subcategory, services };
+    });
+  }, [activeCatalog, orderedServices]);
+  const activeCategoryServices = useMemo(() => {
+    const matched = orderedServices.filter((service) =>
+      activeAliases.includes(service.category_id || service.categoryId || "")
+    );
+    const byId = new Map(matched.map((service) => [service.id, service]));
+    (activeCatalog?.directServices ?? activeCatalog?.services ?? []).forEach((service) => {
+      if (!byId.has(service.id)) byId.set(service.id, servicesById.get(service.id) ?? service);
+    });
+    return orderServices([...byId.values()]);
+  }, [activeAliases, activeCatalog, orderedServices, servicesById]);
+  const selectedServices = useMemo(() => {
+    if (!activeSubcategory) return [];
+    const nested = (activeSubcategory.services ?? []).map((service) => servicesById.get(service.id) ?? service);
+    if (nested.length) return orderServices(nested);
+    return orderServices(orderedServices.filter((service) =>
+      (service.subcategory_id || service.subcategoryId) === activeSubcategory.id
+    ));
+  }, [activeSubcategory, orderedServices, servicesById]);
 
   const featured = featuredServices[featuredIndex];
-  const popular = filtered.slice(0, 8);
+  const popular = useMemo(() => [...orderedServices]
+    .sort((left, right) => {
+      const reviewDifference = Number(right.reviews || 0) - Number(left.reviews || 0);
+      if (reviewDifference !== 0) return reviewDifference;
+      const ratingDifference = Number(right.rating || 0) - Number(left.rating || 0);
+      if (ratingDifference !== 0) return ratingDifference;
+      return left.title.localeCompare(right.title);
+    })
+    .slice(0, 8), [orderedServices]);
 
   function showCategory(id: string) {
     setActiveCategory(id);
+    setActiveSubcategory(null);
     window.requestAnimationFrame(() => servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
+  function showSubcategory(subcategory: ApiSubcategory) {
+    setActiveSubcategory(subcategory);
   }
 
   return (
@@ -175,22 +237,49 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
         </div>
       </section>
 
-      <section className="border-b border-slate-100 bg-slate-50/60 py-10 sm:py-14">
+      <section ref={servicesRef} className="scroll-mt-28 border-b border-slate-100 bg-white py-12 sm:py-16">
         <div className="container-wide px-4 sm:px-6 lg:px-8">
 
           {/* Section header */}
           <div className="mb-6 flex items-end justify-between gap-4 sm:mb-8">
             <div>
-              <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Browse by category</h2>
-              <p className="mt-1 text-sm text-slate-500">Choose a service to get started</p>
+              {activeCategory !== "all" && (
+                <button
+                  type="button"
+                  onClick={() => activeSubcategory ? setActiveSubcategory(null) : showCategory("all")}
+                  className="mb-4 inline-flex min-h-12 items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-base font-black text-emerald-800 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-100 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-emerald-700 shadow-sm">
+                    <ArrowLeft className="h-4 w-4" />
+                  </span>
+                  {activeSubcategory ? "Back to sub-services" : "Back to categories"}
+                </button>
+              )}
+              <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{activeSubcategory?.title || (activeCategory === "all" ? "Browse by category" : findCategory(categories, activeCategory)?.title || "Choose a sub-service")}</h2>
+              <p className="mt-1 text-sm text-slate-500">{activeCategory === "all" ? "Choose a service to get started" : activeSubcategory ? `${selectedServices.length} services available` : activeSubcategories.length > 0 ? "Choose the exact type of work you need" : `${activeCategoryServices.length} service${activeCategoryServices.length === 1 ? "" : "s"} available`}</p>
             </div>
-            <button type="button" onClick={() => showCategory("all")} className="flex shrink-0 items-center gap-1 text-sm font-bold text-emerald-700 hover:text-emerald-800">
+            <button type="button" onClick={() => showCategory("all")} className={`${activeCategory === "all" ? "flex" : "hidden"} shrink-0 items-center gap-1 text-sm font-bold text-emerald-700 hover:text-emerald-800`}>
               View all <ArrowRight className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Category grid — 2 cols mobile, 3 cols tablet+ */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 md:gap-5 lg:gap-6">
+          {activeCategory !== "all" && !activeSubcategory && activeSubcategories.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+              {activeSubcategories.map((subcategory) => {
+                const subcategoryImage = imgSrc(subcategory.imageUrl || subcategory.image_url || subcategory.imageurl);
+                const subcategoryServices = (subcategory.services ?? []).map((service) => servicesById.get(service.id) ?? service);
+                const prices = subcategoryServices.map((service) => Number(service.price)).filter((price) => price > 0);
+                const startingFrom = prices.length ? Math.min(...prices) : 0;
+                return <button key={subcategory.id} type="button" onClick={() => showSubcategory(subcategory)} className="group min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-md transition hover:-translate-y-1 hover:border-emerald-400 hover:shadow-xl sm:rounded-3xl"><div className="relative h-36 overflow-hidden border-b border-slate-100 bg-white sm:h-52">{subcategoryImage ? <Image src={subcategoryImage} alt={subcategory.title} fill className="object-contain p-3 transition duration-500 group-hover:scale-[1.03] sm:p-4" sizes="(max-width:640px) 50vw, 25vw" /> : <div className="flex h-full items-center justify-center"><Wrench className="h-9 w-9 text-emerald-300 sm:h-12 sm:w-12" /></div>}{subcategoryServices.length > 0 ? <span className="absolute left-2 top-2 rounded-full bg-white px-2 py-1 text-[9px] font-black text-emerald-700 shadow sm:left-3 sm:top-3 sm:px-3 sm:py-1.5 sm:text-xs">{subcategoryServices.length} service{subcategoryServices.length === 1 ? "" : "s"}</span> : null}</div><div className="p-3 sm:p-5"><h3 className="line-clamp-2 text-sm font-black leading-snug group-hover:text-emerald-700 sm:text-lg">{subcategory.title}</h3>{subcategory.description ? <p className="mt-2 hidden line-clamp-2 min-h-10 text-xs leading-5 text-slate-500 sm:block">{subcategory.description}</p> : <p className="mt-2 hidden min-h-10 text-xs leading-5 text-slate-500 sm:block">View available options, pricing, and service details.</p>}<div className="mt-3 flex items-end justify-between gap-2 border-t border-slate-100 pt-3 sm:mt-4 sm:gap-4 sm:pt-4"><div className="min-w-0">{startingFrom ? <><span className="block text-[8px] font-bold uppercase tracking-wide text-slate-400 sm:text-[10px]">Starting from</span><strong className="mt-0.5 block truncate text-sm text-slate-950 sm:text-xl">Rs {startingFrom.toLocaleString()}</strong></> : <strong className="block text-xs text-emerald-700 sm:text-sm">View options</strong>}</div><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 sm:h-11 sm:w-11"><ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" /></span></div></div></button>;
+              })}
+            </div>
+          ) : activeCategory !== "all" && !activeSubcategory ? (
+            activeCategoryServices.length ? <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">{activeCategoryServices.map((service) => <ServiceCard key={service.id} service={service} />)}</div> : <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center text-slate-500">No services are available in this category yet.</div>
+          ) : activeSubcategory ? (
+            selectedServices.length ? <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">{selectedServices.map((service) => <ServiceCard key={service.id} service={service} />)}</div> : <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center text-slate-500">No services are available in this sub-service yet.</div>
+          ) : (
+          /* Two columns on phones, scaling to four across larger screens. */
+          <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
             {categoryList.slice(0, 9).map((category, index) => {
               const Icon = CAT_ICONS[category.id] || Wrench;
               const imageUrl = imgSrc(
@@ -204,12 +293,12 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
                   key={category.id}
                   type="button"
                   onClick={() => showCategory(category.id)}
-                  className={`group overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition-all duration-300 hover:scale-[1.02] hover:shadow-lg ${
-                    isActive ? "border-emerald-400 ring-2 ring-emerald-300" : "border-slate-200"
+                  className={`group min-w-0 overflow-hidden rounded-2xl border bg-white text-left shadow-[0_8px_30px_rgba(15,23,42,0.07)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl sm:rounded-3xl ${
+                    isActive ? "border-emerald-500 ring-2 ring-emerald-200" : "border-slate-200 hover:border-emerald-300"
                   }`}
                 >
                   {/* Image area */}
-                  <div className="relative h-36 w-full overflow-hidden bg-slate-100 sm:h-44 md:h-48 lg:h-52">
+                  <div className="relative h-36 w-full overflow-hidden bg-slate-100 sm:h-48 lg:h-52">
                     {imageUrl ? (
                       <CatImage src={imageUrl} alt={category.title} priority={index < 4} />
                     ) : (
@@ -219,15 +308,20 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
                     )}
                     {/* Active badge */}
                     {isActive && (
-                      <span className="absolute right-2 top-2 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                      <span className="absolute right-3 top-3 rounded-full bg-emerald-600 px-3 py-1 text-[10px] font-bold text-white shadow-md">
                         Selected
                       </span>
                     )}
+                    <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/45 to-transparent" />
                   </div>
 
                   {/* Title area */}
-                  <div className="p-3 sm:p-4">
-                    <h3 className={`text-sm font-bold leading-tight sm:text-base ${
+                  <div className="flex items-center gap-3 p-4 sm:p-5">
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isActive ? "bg-emerald-600 text-white" : "bg-emerald-50 text-emerald-600"}`}>
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                    <h3 className={`text-base font-black leading-tight ${
                       isActive ? "text-emerald-700" : "text-slate-900 group-hover:text-emerald-700"
                     }`}>
                       {category.title}
@@ -235,6 +329,8 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
                     {category.subtitle && (
                       <p className="mt-0.5 truncate text-xs text-slate-500">{category.subtitle}</p>
                     )}
+                    </div>
+                    <ArrowRight className="h-4 w-4 shrink-0 text-emerald-600 transition-transform group-hover:translate-x-1" />
                   </div>
                 </button>
               );
@@ -244,7 +340,7 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
             <button
               type="button"
               onClick={() => showCategory("all")}
-              className="group flex flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-sm transition-all duration-300 hover:border-emerald-400 hover:shadow-md"
+              className="group flex min-h-[230px] min-w-0 flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/60 p-4 text-center shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-emerald-500 hover:shadow-lg sm:min-h-[280px] sm:rounded-3xl sm:p-6"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 transition group-hover:bg-emerald-100">
                 <Layers3 className="h-6 w-6 text-emerald-600" />
@@ -255,28 +351,32 @@ export function AppLayout({ initialServices, categories, reviews }: AppLayoutPro
               </div>
             </button>
           </div>
+          )}
 
         </div>
       </section>
 
-      <section ref={servicesRef} id="popular-services" className="scroll-mt-28 bg-slate-50/70 py-12">
-        <div className="container-wide px-4 sm:px-6 lg:px-8">
+      <section id="popular-services" className="relative overflow-hidden bg-[radial-gradient(circle_at_12%_18%,rgba(16,185,129,0.28),transparent_28%),radial-gradient(circle_at_88%_82%,rgba(132,204,22,0.16),transparent_30%),linear-gradient(135deg,#071a18_0%,#0f2924_48%,#0b1720_100%)] py-14 text-white sm:py-16">
+        <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "radial-gradient(#fff 1px,transparent 1px)", backgroundSize: "20px 20px" }} />
+        <div className="absolute -left-24 top-20 h-64 w-64 rounded-full bg-emerald-400/10 blur-3xl" />
+        <div className="absolute -right-24 bottom-0 h-72 w-72 rounded-full bg-lime-300/10 blur-3xl" />
+        <div className="container-wide relative px-4 sm:px-6 lg:px-8">
           <div className="mb-7 flex items-end justify-between gap-4">
-            <div><h2 className="text-2xl font-black">Popular services</h2><p className="mt-1 text-sm text-slate-500">{filtered.length} service{filtered.length === 1 ? "" : "s"} available</p></div>
-            <Link href="/services" className="hidden items-center gap-1 text-sm font-bold text-emerald-700 sm:flex">View all services <ArrowRight className="h-4 w-4" /></Link>
+            <div><span className="block text-xs font-black uppercase tracking-[0.2em] text-lime-300">Customer favourites</span><h2 className="mt-2 text-2xl font-black sm:text-3xl">Popular services</h2><p className="mt-1 text-sm text-emerald-50/65">Reviewed services appear first, based on live customer feedback.</p></div>
+            <Link href="/services" className="hidden items-center gap-1 rounded-full border border-slate-700 px-4 py-2 text-sm font-bold text-emerald-300 transition hover:border-emerald-500 hover:bg-emerald-500/10 sm:flex">View all services <ArrowRight className="h-4 w-4" /></Link>
           </div>
           {popular.length ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{popular.map((service) => <ServiceCard key={service.id} service={service} />)}</div>
+            <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">{popular.map((service) => <ServiceCard key={service.id} service={service} />)}</div>
           ) : (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center">
-              <h3 className="font-bold">No services found</h3><p className="mt-1 text-sm text-slate-500">Try another search or category.</p>
+              <h3 className="font-bold text-slate-900">No services found</h3><p className="mt-1 text-sm text-slate-500">Try another search or category.</p>
               <button onClick={() => setActiveCategory("all")} className="mt-5 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white">Show all services</button>
             </div>
           )}
         </div>
       </section>
 
-      <section className="bg-white pb-12">
+      <section className="bg-white py-16 sm:py-20">
         <div className="container-wide px-4 sm:px-6 lg:px-8">
           <div className="grid overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50/70 sm:grid-cols-2 lg:grid-cols-4">
             {trustItems.map(({ icon: Icon, title, text }) => <div key={title} className="flex items-center gap-3 border-b border-emerald-100 p-5 last:border-0 sm:border-r lg:border-b-0"><Icon className="h-7 w-7 shrink-0 text-emerald-600" /><div><strong className="block text-sm">{title}</strong><span className="text-xs text-slate-500">{text}</span></div></div>)}
@@ -361,13 +461,13 @@ function ServiceCard({ service }: { service: ApiService }) {
   const original = Number(service.original_price || service.originalPrice || 0);
   const discount = original > service.price ? Math.round(((original - service.price) / original) * 100) : 0;
   return (
-    <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
-      <Link href={`/services/${service.id}`} prefetch={false} className="relative block h-44 overflow-hidden bg-slate-100">
-        {source ? <Image src={source} alt={service.title} fill className="object-cover transition duration-500 group-hover:scale-105" sizes="(max-width:640px) 100vw,(max-width:1024px) 50vw,25vw" /> : <div className="flex h-full items-center justify-center"><Wrench className="h-10 w-10 text-slate-300" /></div>}
-        <div className="absolute left-3 top-3 flex gap-2">{service.badge && <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white">{service.badge}</span>}{discount > 0 && <span className="rounded-full bg-rose-500 px-2.5 py-1 text-[10px] font-bold text-white">{discount}% OFF</span>}</div>
-        <span className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold"><Star className={`h-3 w-3 ${Number(service.reviews || 0) > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {Number(service.reviews || 0) > 0 ? `${Number(service.rating || 0).toFixed(1)} (${service.reviews})` : "0.0 · No reviews"}</span>
+    <article className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-white text-slate-900 shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(0,0,0,0.28)] sm:rounded-3xl">
+      <Link href={`/services/${service.id}`} prefetch={false} className="relative block h-36 overflow-hidden border-b border-slate-100 bg-white sm:h-48">
+        {source ? <Image src={source} alt={service.title} fill className="object-contain p-3 transition duration-500 group-hover:scale-[1.03]" sizes="(max-width:640px) 100vw,(max-width:1024px) 50vw,25vw" /> : <div className="flex h-full items-center justify-center"><Wrench className="h-10 w-10 text-slate-300" /></div>}
+        <div className="absolute left-2 top-2 flex gap-1 sm:left-3 sm:top-3 sm:gap-2">{service.badge && <span className="rounded-full bg-emerald-600 px-2 py-1 text-[8px] font-bold text-white sm:px-2.5 sm:text-[10px]">{service.badge}</span>}{discount > 0 && <span className="rounded-full bg-rose-500 px-2 py-1 text-[8px] font-bold text-white sm:px-2.5 sm:text-[10px]">{discount}% OFF</span>}</div>
+        <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[8px] font-bold sm:bottom-3 sm:right-3 sm:text-[10px]"><Star className={`h-3 w-3 ${Number(service.reviews || 0) > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {Number(service.reviews || 0) > 0 ? `${Number(service.rating || 0).toFixed(1)} (${service.reviews})` : "No reviews"}</span>
       </Link>
-      <div className="flex flex-1 flex-col p-4"><Link href={`/services/${service.id}`} prefetch={false}><h3 className="line-clamp-1 font-extrabold group-hover:text-emerald-700">{service.title}</h3></Link><p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-3 flex items-center gap-3 text-[10px] font-medium text-slate-500"><span className="flex items-center gap-1 text-emerald-700"><BadgeCheck className="h-3.5 w-3.5" /> Professional</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div><div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-3"><div><span className="block text-[9px] text-slate-400">Starting from</span><strong>Rs {service.price.toLocaleString()}</strong>{discount > 0 && <span className="ml-1 text-[10px] text-slate-400 line-through">Rs {original.toLocaleString()}</span>}</div><Link href={`/services/${service.id}`} prefetch={false} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-emerald-700">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div></div>
+      <div className="flex flex-1 flex-col p-3 sm:p-5"><Link href={`/services/${service.id}`} prefetch={false}><h3 className="line-clamp-2 min-h-10 text-sm font-black leading-5 group-hover:text-emerald-700 sm:min-h-12 sm:text-base sm:leading-6">{service.title}</h3></Link><p className="mt-1 hidden line-clamp-2 min-h-10 text-xs leading-5 text-slate-500 sm:block">{service.description}</p><div className="mt-2 flex flex-wrap items-center gap-1 text-[9px] font-medium text-slate-500 sm:mt-3 sm:gap-3 sm:text-[10px]"><span className="flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-1 font-bold text-emerald-700 sm:px-2"><BadgeCheck className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> Verified</span>{service.duration && <span className="hidden items-center gap-1 sm:flex"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div><div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 sm:mt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-4"><div className="min-w-0"><span className="block text-[8px] font-bold uppercase tracking-wide text-slate-400 sm:text-[9px]">Starts from</span><strong className="block truncate text-sm text-slate-950 sm:text-lg">Rs {service.price.toLocaleString()}</strong>{discount > 0 && <span className="hidden text-[10px] text-slate-400 line-through sm:inline">Rs {original.toLocaleString()}</span>}</div><Link href={`/services/${service.id}`} prefetch={false} className="flex h-9 w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 text-[10px] font-black text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700 sm:h-10 sm:w-auto sm:rounded-xl sm:px-4 sm:text-xs">Book now <ArrowRight className="h-3 w-3 sm:h-3.5 sm:w-3.5" /></Link></div></div>
     </article>
   );
 }

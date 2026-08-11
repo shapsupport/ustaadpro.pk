@@ -22,6 +22,7 @@ import { useCart } from "@/context/CartContext";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "";
 const CATALOG_CACHE_MS = 60_000;
+const CATALOG_BATCH_SIZE = 200;
 type ShopCatalogResponse = ApiShopResponse & { products?: ApiProduct[]; data?: ApiProduct[] };
 const catalogCache = new Map<string, { expiresAt: number; data: ShopCatalogResponse }>();
 
@@ -61,6 +62,57 @@ function uniqueProducts(items: ApiProduct[]) {
     seenNames.add(name);
     return true;
   });
+}
+
+function getShopShuffleSeed() {
+  const storageKey = "ustaadpro_shop_shuffle_seed";
+  try {
+    const savedSeed = sessionStorage.getItem(storageKey);
+    if (savedSeed) return Number(savedSeed);
+    const nextSeed = Math.floor(Math.random() * 2_147_483_647);
+    sessionStorage.setItem(storageKey, String(nextSeed));
+    return nextSeed;
+  } catch {
+    return 1;
+  }
+}
+
+function seededShuffle<T>(items: T[], seed: number) {
+  const shuffled = [...items];
+  let state = seed || 1;
+  const random = () => {
+    state = (state * 16_807) % 2_147_483_647;
+    return (state - 1) / 2_147_483_646;
+  };
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
+function diversifyProducts(items: ApiProduct[], seed: number) {
+  const groups = new Map<string, ApiProduct[]>();
+  items.forEach((product) => {
+    const category = product.category || "Other";
+    groups.set(category, [...(groups.get(category) || []), product]);
+  });
+
+  const queues = seededShuffle(
+    [...groups.entries()].map(([category, products], index) => ({
+      category,
+      products: seededShuffle(products, seed + index + 1),
+    })),
+    seed,
+  );
+  const diversified: ApiProduct[] = [];
+  while (queues.some((queue) => queue.products.length > 0)) {
+    queues.forEach((queue) => {
+      const product = queue.products.shift();
+      if (product) diversified.push(product);
+    });
+  }
+  return diversified;
 }
 
 export default function StorePageClient() {
@@ -106,23 +158,34 @@ export default function StorePageClient() {
 
   const loadProducts = useCallback(async () => {
     const requestId = ++catalogRequestRef.current;
-    const requestKey = `${selectedCategory}:${page}`;
+    const requestKey = selectedCategory;
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: String(pageSize), offset: String((page - 1) * pageSize) });
+      const params = new URLSearchParams({ limit: String(CATALOG_BATCH_SIZE), offset: "0" });
       if (selectedCategory !== "all") params.set("category", selectedCategory);
-      const data = await fetchCatalog(`${API_BASE_URL}/api/shop/products?${params}`);
-      const allProducts = Array.isArray(data?.products)
+      const firstPage = await fetchCatalog(`${API_BASE_URL}/api/shop/products?${params}`);
+      const catalogTotal = Number(firstPage?.total || 0);
+      const remainingOffsets = Array.from(
+        { length: Math.max(0, Math.ceil(catalogTotal / CATALOG_BATCH_SIZE) - 1) },
+        (_, index) => (index + 1) * CATALOG_BATCH_SIZE,
+      );
+      const remainingPages = await Promise.all(remainingOffsets.map((offset) => {
+        const pageParams = new URLSearchParams(params);
+        pageParams.set("offset", String(offset));
+        return fetchCatalog(`${API_BASE_URL}/api/shop/products?${pageParams}`);
+      }));
+      const dataPages = [firstPage, ...remainingPages];
+      const allProducts = dataPages.flatMap((data) => Array.isArray(data?.products)
         ? data.products
         : Array.isArray(data?.data)
           ? data.data
-          : [];
+          : []);
 
       const normalizedProducts = uniqueProducts(allProducts.filter((product: ApiProduct) => product?.id));
       if (requestId !== catalogRequestRef.current) return;
-      setProducts(normalizedProducts);
-      setCategories(Array.isArray(data?.categories) ? data.categories : []);
-      setTotal(Number(data?.total || normalizedProducts.length));
+      setProducts(diversifyProducts(normalizedProducts, getShopShuffleSeed()));
+      setCategories(Array.isArray(firstPage?.categories) ? firstPage.categories : []);
+      setTotal(catalogTotal || normalizedProducts.length);
     } catch {
       if (requestId === catalogRequestRef.current) {
         setProducts([]);
@@ -134,7 +197,7 @@ export default function StorePageClient() {
         setLoading(false);
       }
     }
-  }, [selectedCategory, page]);
+  }, [selectedCategory]);
 
   useEffect(() => {
     if (debouncedSearch) return;
@@ -182,8 +245,8 @@ export default function StorePageClient() {
   const activeFilters = selectedCategory !== "all" || Boolean(debouncedSearch);
   const visibleTotal = debouncedSearch ? searchResults.length : total;
   const pageCount = Math.max(1, Math.ceil(visibleTotal / pageSize));
-  const visibleProducts = debouncedSearch ? searchResults.slice((page - 1) * pageSize, page * pageSize) : products;
-  const catalogLoading = loading || (!debouncedSearch && loadedCatalogKey !== `${selectedCategory}:${page}`);
+  const visibleProducts = (debouncedSearch ? searchResults : products).slice((page - 1) * pageSize, page * pageSize);
+  const catalogLoading = loading || (!debouncedSearch && loadedCatalogKey !== selectedCategory);
   const skeletonCount = Math.max(12, products.length, visibleProducts.length);
   const handleSearchChange = useCallback((value: string) => {
     const isStartingSearch = !search.trim() && Boolean(value.trim());
@@ -388,14 +451,13 @@ function ProductCard({ product }: { product: ApiProduct }) {
         onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch { } }}
         className="block flex-1"
       >
-        <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
+        <div className="relative aspect-[4/3] overflow-hidden bg-white">
           {imageSrc ? (
             <Image
               src={imageSrc}
               alt={product.title}
               fill
-
-              className="object-cover transition-transform duration-500 group-hover:scale-105"
+              className="object-contain p-3 transition-transform duration-500 group-hover:scale-[1.03]"
               sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 25vw"
             />
           ) : (
@@ -403,8 +465,6 @@ function ProductCard({ product }: { product: ApiProduct }) {
               <Package className="h-16 w-16 text-gray-300" />
             </div>
           )}
-
-          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
 
           {hasDiscount ? (
             <div className="absolute left-3 top-3 rounded-full bg-red-500 px-2.5 py-1 text-xs font-semibold text-white">

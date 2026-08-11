@@ -51,6 +51,7 @@ function SafeImage({ src, alt, fallback, className }: { src: string; alt: string
       src={src}
       alt={alt}
       fill
+      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 50vw, 25vw"
       className={className ?? "object-cover"}
       onError={() => setError(true)}
 
@@ -512,7 +513,7 @@ export function ServicesPageContent({
             ) : searchedServices.length === 0 ? (
               <EmptyState onReset={backToCategories} />
             ) : (
-              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
                 {searchedServices.map((service, i) => (
                   <ServiceCard key={`${service.id}-${i}`} service={service} onBook={(quantity) => openBooking(service, quantity)} />
                 ))}
@@ -525,7 +526,7 @@ export function ServicesPageContent({
         {!isSearchMode && step === "category" && (
           <div>
             <StepHeader step={1} title="Select a Service Category" subtitle="Choose the type of work you need done" />
-            <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
               {displayCategories.map((category) => {
                 const IconComponent = CAT_ICONS[category.id] || Wrench;
                 const gradient = CAT_GRADIENTS[category.id] || "from-slate-500 to-slate-600";
@@ -540,34 +541,34 @@ export function ServicesPageContent({
                     key={category.id}
                     type="button"
                     onClick={() => selectCategory(category.id)}
-                    className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-emerald-300"
+                    className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md transition-all duration-300 hover:-translate-y-1 hover:border-emerald-300 hover:shadow-xl sm:rounded-3xl"
                   >
                     {/* Image / Gradient banner */}
-                    <div className={`relative h-28 w-full bg-gradient-to-br ${gradient} overflow-hidden`}>
+                    <div className={`relative m-2 h-36 overflow-hidden rounded-xl bg-gradient-to-br sm:m-3 sm:h-52 sm:rounded-2xl ${gradient}`}>
                       {imageUrl ? (
                         <SafeImage
                           src={imageUrl}
                           alt={category.title}
-                          className="object-cover opacity-80 group-hover:scale-105 transition-transform duration-500"
+                            className="object-cover opacity-90"
                           fallback={
                             <div className="flex h-full w-full items-center justify-center">
-                              <IconComponent className="h-10 w-10 text-white/80" />
+                              <IconComponent className="h-10 w-10 text-white/80 sm:h-14 sm:w-14" />
                             </div>
                           }
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center">
-                          <IconComponent className="h-10 w-10 text-white/90" />
+                          <IconComponent className="h-10 w-10 text-white/90 sm:h-14 sm:w-14" />
                         </div>
                       )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
                     </div>
                     {/* Text */}
-                    <div className="flex flex-1 flex-col p-3">
-                      <span className="font-bold text-sm text-slate-900 leading-tight">{category.title}</span>
-                      <span className="mt-1 text-[11px] text-slate-500 leading-snug line-clamp-2">{category.subtitle}</span>
-                      <span className="mt-2 flex items-center gap-1 text-[11px] font-bold text-emerald-700">
-                        View sub-services <ArrowRight className="h-3 w-3" />
+                    <div className="flex flex-1 flex-col p-3 sm:p-5">
+                      <span className="text-sm font-black leading-tight text-slate-900 sm:text-lg">{category.title}</span>
+                      <span className="mt-1 line-clamp-2 text-[10px] leading-snug text-slate-500 sm:mt-2 sm:text-sm sm:leading-5">{category.subtitle}</span>
+                      <span className="mt-3 flex items-center gap-1 text-[10px] font-black text-emerald-700 sm:mt-4 sm:text-sm">
+                        View sub-services <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </span>
                     </div>
                   </button>
@@ -580,13 +581,14 @@ export function ServicesPageContent({
         {/* ── STEP 2: SELECT SUB-SERVICE ── */}
         {!isSearchMode && step === "subcategory" && (
           <div>
-            <div className="flex items-center gap-3 mb-2">
+            <div className="mb-4 flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 onClick={backToCategories}
-                className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 transition"
+                className="inline-flex min-h-12 items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-base font-black text-emerald-800 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-100 hover:shadow-md"
               >
-                <ArrowLeft className="h-3.5 w-3.5" /> Back
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white shadow-sm"><ArrowLeft className="h-4 w-4" /></span>
+                Back to categories
               </button>
               <nav className="flex items-center gap-1.5 text-xs text-slate-500">
                 <span className="font-medium text-emerald-700">{activeCategoryObj?.title}</span>
@@ -604,7 +606,7 @@ export function ServicesPageContent({
                 </button>
               </div>
             ) : (
-              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
                 {currentSubcategories.map((subCat) => {
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   const subCatAny = subCat as any;
@@ -618,18 +620,18 @@ export function ServicesPageContent({
                     subCatAny.mobileiconurl
                   );
                   const IconComponent = CAT_ICONS[activeCategory] || Wrench;
-                  const gradient = CAT_GRADIENTS[activeCategory] || "from-emerald-500 to-teal-600";
                   const serviceCount = subCat.services?.length ?? 0;
+                  const prices = (subCat.services ?? []).map((service) => Number(service.price)).filter((price) => price > 0);
+                  const startingFrom = prices.length ? Math.min(...prices) : 0;
 
                   return (
                     <button
                       key={subCat.id}
                       type="button"
                       onClick={() => selectSubcategory(subCat)}
-                      className="group flex items-start gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-emerald-300"
+                      className="group min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-md transition-all duration-300 hover:-translate-y-1 hover:border-emerald-300 hover:shadow-xl sm:rounded-3xl"
                     >
-                      {/* Thumbnail */}
-                      <div className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br ${gradient}`}>
+                      <div className="relative m-2 h-36 overflow-hidden rounded-xl border border-slate-100 bg-white sm:m-3 sm:h-52 sm:rounded-2xl">
                         {subImgSrc ? (
                           <SafeImage
                             src={subImgSrc}
@@ -637,28 +639,26 @@ export function ServicesPageContent({
                             className="object-cover"
                             fallback={
                               <div className="flex h-full w-full items-center justify-center">
-                                <IconComponent className="h-8 w-8 text-white/80" />
+                                <IconComponent className="h-9 w-9 text-emerald-300 sm:h-12 sm:w-12" />
                               </div>
                             }
                           />
                         ) : (
                           <div className="flex h-full w-full items-center justify-center">
-                            <IconComponent className="h-8 w-8 text-white/80" />
+                            <IconComponent className="h-9 w-9 text-emerald-300 sm:h-12 sm:w-12" />
                           </div>
                         )}
+                        {serviceCount > 0 && <span className="absolute left-2 top-2 rounded-full bg-white px-2 py-1 text-[9px] font-black text-emerald-700 shadow sm:left-3 sm:top-3 sm:px-3 sm:py-1.5 sm:text-xs">{serviceCount} service{serviceCount !== 1 ? "s" : ""}</span>}
                       </div>
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-slate-900 leading-tight">{subCat.title}</p>
+                      <div className="p-3 sm:p-5">
+                        <p className="line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-emerald-700 sm:text-lg">{subCat.title}</p>
                         {subCatAny.description && (
-                          <p className="mt-1 text-xs text-slate-500 line-clamp-2 leading-snug">{subCatAny.description}</p>
+                          <p className="mt-2 hidden line-clamp-2 min-h-10 text-xs leading-5 text-slate-500 sm:block">{subCatAny.description}</p>
                         )}
-                        <div className="mt-2.5 flex items-center justify-between">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
-                            {serviceCount} service{serviceCount !== 1 ? "s" : ""}
-                          </span>
-                          <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 group-hover:gap-1.5 transition-all">
-                            Select <ArrowRight className="h-3.5 w-3.5" />
+                        <div className="mt-3 flex items-end justify-between gap-2 border-t border-slate-100 pt-3 sm:mt-4 sm:gap-4 sm:pt-4">
+                          <div className="min-w-0">{startingFrom > 0 ? <><span className="block text-[8px] font-bold uppercase tracking-wide text-slate-400 sm:text-[10px]">Starting from</span><strong className="mt-0.5 block truncate text-sm text-slate-950 sm:text-xl">Rs {startingFrom.toLocaleString()}</strong></> : <strong className="text-xs text-emerald-700 sm:text-sm">View options</strong>}</div>
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 sm:h-11 sm:w-11">
+                            <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" />
                           </span>
                         </div>
                       </div>
@@ -673,13 +673,16 @@ export function ServicesPageContent({
         {/* ── STEP 3: VIEW & BOOK SERVICES ── */}
         {!isSearchMode && step === "services" && activeSubcategory && (
           <div>
-            <div className="flex items-center gap-3 mb-2">
+            <div className="mb-4 flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 onClick={backToSubcategories}
-                className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 transition"
+                className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-800 shadow-sm transition hover:bg-emerald-100"
               >
-                <ArrowLeft className="h-3.5 w-3.5" /> Back
+                <ArrowLeft className="h-4 w-4" /> Back to sub-services
+              </button>
+              <button type="button" onClick={backToCategories} className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-700">
+                <Layers className="h-4 w-4" /> Back to categories
               </button>
               <nav className="flex items-center gap-1.5 text-xs text-slate-500">
                 <button onClick={backToCategories} className="font-medium text-emerald-700 hover:underline">{activeCategoryObj?.title}</button>
@@ -703,7 +706,7 @@ export function ServicesPageContent({
             {subcategoryServices.length === 0 ? (
               <EmptyState onReset={backToSubcategories} />
             ) : (
-              <div className="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+              <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
                 {subcategoryServices.map((service, i) => (
                   <ServiceCard key={`${service.id}-${i}`} service={service} onBook={(quantity) => openBooking(service, quantity)} />
                 ))}
@@ -748,7 +751,7 @@ function StepHeader({ step, title, subtitle }: { step: number; title: string; su
 
 function LoadingGrid() {
   return (
-    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
       {[1, 2, 3].map((i) => (
         <div key={i} className="h-64 animate-pulse rounded-2xl bg-slate-200" />
       ))}
@@ -792,23 +795,22 @@ function ServiceCard({ service, onBook }: { service: ApiService; onBook: (quanti
   });
 
   return (
-    <div className="group flex flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-      <div className="relative h-48 shrink-0 bg-slate-100 sm:h-56">
+    <div className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl sm:rounded-3xl">
+      <div className="relative m-2 h-36 shrink-0 overflow-hidden rounded-xl border border-slate-100 bg-white sm:m-3 sm:h-48 sm:rounded-2xl">
         {src ? (
           <Image
             src={src}
             alt={service.title}
             fill
 
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-            sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
+            className="object-cover"
+            sizes="(max-width:640px) 50vw, (max-width:1024px) 50vw, 25vw"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
             <Layers className="h-14 w-14 text-slate-300" />
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" />
         <div className="absolute left-3 top-3 flex flex-wrap gap-2 sm:left-4 sm:top-4">
           {service.badge ? (
             <span className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow">{service.badge}</span>
@@ -825,11 +827,11 @@ function ServiceCard({ service, onBook }: { service: ApiService; onBook: (quanti
         ) : null}
       </div>
 
-      <div className="flex flex-1 flex-col p-5">
+      <div className="flex flex-1 flex-col p-3 sm:p-5">
         <Link href={`/services/${service.id}`} prefetch={false} className="group-hover:text-emerald-600">
-          <h3 className="text-xl font-bold leading-snug text-slate-900 transition-colors">{service.title}</h3>
+          <h3 className="line-clamp-2 min-h-10 text-sm font-black leading-5 text-slate-900 transition-colors sm:min-h-12 sm:text-base sm:leading-6">{service.title}</h3>
         </Link>
-        <p className="mt-2 line-clamp-2 flex-1 text-sm leading-6 text-slate-500">
+        <p className="mt-2 hidden line-clamp-2 text-xs leading-5 text-slate-500 sm:block">
           {service.detailDescription || service.detail_description || service.description}
         </p>
 
@@ -839,9 +841,9 @@ function ServiceCard({ service, onBook }: { service: ApiService; onBook: (quanti
           <span className="text-xs text-slate-400">{Number(service.reviews || 0) > 0 ? `(${service.reviews} reviews)` : "(No reviews)"}</span>
         </div>
 
-        {allowsQuantity && <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-2.5"><div><p className="text-xs font-bold text-emerald-900">How many?</p><p className="text-[10px] text-emerald-700">{unitText || "Per item"}</p></div><div className="flex items-center overflow-hidden rounded-xl border border-emerald-200 bg-white"><button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))} disabled={quantity <= 1} aria-label="Decrease quantity" className="grid h-9 w-9 place-items-center text-slate-600 disabled:opacity-30"><Minus className="h-4 w-4" /></button><span className="grid h-9 min-w-9 place-items-center border-x border-emerald-100 text-sm font-black text-slate-900">{quantity}</span><button type="button" onClick={() => setQuantity((value) => Math.min(10, value + 1))} disabled={quantity >= 10} aria-label="Increase quantity" className="grid h-9 w-9 place-items-center text-slate-600 disabled:opacity-30"><Plus className="h-4 w-4" /></button></div></div>}
+        {allowsQuantity ? <div className="mt-4 flex min-h-24 flex-col justify-between gap-2 rounded-xl border border-emerald-100 bg-emerald-50 p-2.5 sm:min-h-[4.25rem] sm:flex-row sm:items-center"><div><p className="text-xs font-bold text-emerald-900">How many?</p><p className="text-[10px] text-emerald-700">{unitText || "Per item"}</p></div><div className="flex w-fit items-center overflow-hidden rounded-xl border border-emerald-200 bg-white"><button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))} disabled={quantity <= 1} aria-label="Decrease quantity" className="grid h-9 w-8 place-items-center text-slate-600 disabled:opacity-30 sm:w-9"><Minus className="h-4 w-4" /></button><span className="grid h-9 min-w-8 place-items-center border-x border-emerald-100 text-sm font-black text-slate-900 sm:min-w-9">{quantity}</span><button type="button" onClick={() => setQuantity((value) => Math.min(10, value + 1))} disabled={quantity >= 10} aria-label="Increase quantity" className="grid h-9 w-8 place-items-center text-slate-600 disabled:opacity-30 sm:w-9"><Plus className="h-4 w-4" /></button></div></div> : <div className="mt-4 flex min-h-24 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5 sm:min-h-[4.25rem]"><CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" /><div><p className="text-xs font-bold text-slate-800">Single service booking</p><p className="text-[10px] leading-4 text-slate-500">No quantity selection required</p></div></div>}
 
-        <div className="mt-5 border-t border-slate-100 pt-4">
+        <div className="mt-auto border-t border-slate-100 pt-4">
           <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
@@ -853,7 +855,7 @@ function ServiceCard({ service, onBook }: { service: ApiService; onBook: (quanti
             </div>
           </div>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <button type="button" onClick={addToCart} className={`flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-bold transition ${inCart ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"}`}><ShoppingCart className="h-4 w-4" />{inCart ? "Add another" : "Add to cart"}</button>
           <button
             type="button"
