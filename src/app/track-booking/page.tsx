@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { type ChangeEvent, useCallback, useEffect, useState } from "react";
-import { AlertCircle, ArrowRight, CalendarDays, Camera, ChevronDown, Clock3, CreditCard, Gift, MapPin, MessageSquareWarning, Package, ReceiptText, RefreshCw, ShoppingBag, Star, UserRound, WalletCards, Wrench, XCircle, ClipboardList } from "lucide-react";
+import { AlertCircle, ArrowRight, CalendarDays, Camera, ChevronDown, Clock3, CreditCard, Gift, Loader2, MapPin, MessageSquareWarning, Package, ReceiptText, RefreshCw, ShoppingBag, Star, UserRound, WalletCards, Wrench, XCircle, ClipboardList } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +26,10 @@ type Booking = {
   pendingPayment?: number;
   apiTotal?: number;
   paidAmount?: number;
+  /** PKR 200 eight-order loyalty discount applied to this booking */
+  loyaltyDiscount?: number;
+  /** General discount (reward points or loyalty) applied to this booking */
+  discount?: number;
 };
 
 type OrderItem = {
@@ -106,6 +110,25 @@ function listFrom(payload: unknown, kind: "service" | "shop"): Booking[] {
     const receiptList = Array.isArray(row.paymentReceipts) ? row.paymentReceipts as Booking["paymentReceipts"] : Array.isArray(row.payment_receipts) ? row.payment_receipts as Booking["paymentReceipts"] : singleReceipt ? [singleReceipt] : [];
     const receiptsPaid = (receiptList || []).filter((receipt) => receipt.status !== "rejected").reduce((sum, receipt) => sum + Number(receipt.amount || 0), 0);
     const apiTotal = Number(row.totalAmount || row.total || row.grandTotal || listedItemsTotal || 0);
+    const notesStr = String(row.requirements || row.notes || row.specialInstructions || row.special_instructions || "");
+    const hasLoyaltyText = /loyalty|8-order/i.test(notesStr);
+    let loyaltyDiscount = Number(row.loyaltyDiscount || row.loyalty_discount || 0);
+    if (!loyaltyDiscount && hasLoyaltyText) {
+      loyaltyDiscount = 200;
+    }
+    let discount = Math.max(loyaltyDiscount, Number(row.discount || row.rewardDiscount || row.reward_discount || 0));
+
+    if (!discount && typeof window !== "undefined") {
+      try {
+        const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]") as Array<Record<string, unknown>>;
+        const match = stored.find((item) => String(item.id) === String(row.id || row.orderId || ""));
+        if (match && (Number(match.loyaltyDiscount || 0) > 0 || Boolean(match.loyaltyApplied))) {
+          loyaltyDiscount = Number(match.loyaltyDiscount || 200);
+          discount = loyaltyDiscount;
+        }
+      } catch { /* ignore storage read error */ }
+    }
+
     return {
       ...row,
       id: String(row.id || row.orderId || ""),
@@ -126,6 +149,9 @@ function listFrom(payload: unknown, kind: "service" | "shop"): Booking[] {
       pendingPayment: Number(row.pendingPayment || row.pending_payment || row.remainingAmount || row.remaining_amount || row.amountPayable || row.amount_payable || 0),
       apiTotal,
       paidAmount: Number(row.paidAmount || row.paid_amount || row.amountPaid || row.amount_paid || receiptsPaid),
+      loyaltyDiscount,
+      discount,
+      notes: notesStr || undefined,
     } as Booking;
   }).filter((item) => item.id);
 }
@@ -139,33 +165,70 @@ export default function TrackBookingPage() {
   const { user, setAuthModalMode } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [view, setView] = useState<"all" | "service" | "shop">("all");
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
 
-  const load = useCallback(async () => {
+  const PAGE_SIZE = 20;
+
+  const fetchOrders = useCallback(async (targetOffset: number, isReset: boolean) => {
     if (!user?.email) return;
-    await Promise.resolve();
-    setLoading(true); setLoadError("");
+    if (isReset) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
+    setLoadError("");
     try {
       const headers = authHeaders();
       if (!token()) throw new Error("No authentication token");
       const [services, shop] = await Promise.all([
-        fetch(`${API_BASE}/api/orders`, { headers, cache: "no-store" }),
-        fetch(`${API_BASE}/api/shop/orders`, { headers, cache: "no-store" }),
+        fetch(`${API_BASE}/api/orders?limit=${PAGE_SIZE}&offset=${targetOffset}`, { headers, cache: "no-store" }),
+        fetch(`${API_BASE}/api/shop/orders?limit=${PAGE_SIZE}&offset=${targetOffset}`, { headers, cache: "no-store" }),
       ]);
       if (!services.ok && !shop.ok) throw new Error("Unable to load orders");
-      const serviceItems = services.ok ? listFrom(await services.json(), "service") : [];
-      const shopItems = shop.ok ? listFrom(await shop.json(), "shop") : [];
-      setBookings([...serviceItems, ...shopItems].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)));
+      const rawServices = services.ok ? await services.json() : [];
+      const rawShop = shop.ok ? await shop.json() : [];
+
+      const serviceItems = services.ok ? listFrom(rawServices, "service") : [];
+      const shopItems = shop.ok ? listFrom(rawShop, "shop") : [];
+      const fetchedList = [...serviceItems, ...shopItems];
+
+      const rawServicesLen = Array.isArray(rawServices) ? rawServices.length : (rawServices as { orders?: unknown[]; data?: unknown[] })?.orders?.length ?? (rawServices as { orders?: unknown[]; data?: unknown[] })?.data?.length ?? serviceItems.length;
+      const rawShopLen = Array.isArray(rawShop) ? rawShop.length : (rawShop as { orders?: unknown[]; data?: unknown[] })?.orders?.length ?? (rawShop as { orders?: unknown[]; data?: unknown[] })?.data?.length ?? shopItems.length;
+
+      setHasMore(rawServicesLen >= PAGE_SIZE || rawShopLen >= PAGE_SIZE);
+
+      setBookings((current) => {
+        const combined = isReset ? fetchedList : [...current, ...fetchedList];
+        const uniqueMap = new Map<string, Booking>();
+        for (const item of combined) {
+          uniqueMap.set(`${item.kind}-${item.id}`, item);
+        }
+        return Array.from(uniqueMap.values()).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+      });
+
+      setOffset(targetOffset + PAGE_SIZE);
+
       if (!services.ok || !shop.ok) setLoadError(`Some ${services.ok ? "shop orders" : "service bookings"} could not be refreshed. The available records are shown below.`);
     } catch {
-      try {
-        const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]") as Booking[];
-        setBookings(stored.filter((item) => item.userEmail === user.email).map((item) => ({ ...item, kind: item.kind || (item.items?.length ? "shop" : "service") })));
-        setLoadError("Showing bookings saved on this device. Sign in again to refresh live status.");
-      } catch { setBookings([]); setLoadError("Bookings could not be loaded."); }
-    } finally { setLoading(false); }
+      if (isReset) {
+        try {
+          const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]") as Booking[];
+          setBookings(stored.filter((item) => item.userEmail === user.email).map((item) => ({ ...item, kind: item.kind || (item.items?.length ? "shop" : "service") })));
+          setLoadError("Showing bookings saved on this device. Sign in again to refresh live status.");
+        } catch { setBookings([]); setLoadError("Bookings could not be loaded."); }
+      }
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
   }, [user]);
+
+  const load = useCallback(() => fetchOrders(0, true), [fetchOrders]);
+  const loadMore = useCallback(() => fetchOrders(offset, false), [fetchOrders, offset]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void load(); }, 0);
@@ -174,7 +237,7 @@ export default function TrackBookingPage() {
 
   useEffect(() => {
     if (!user?.email) return;
-    const interval = setInterval(() => { load(); }, 30000);
+    const interval = setInterval(() => { void load(); }, 30000);
     return () => clearInterval(interval);
   }, [user, load]);
 
@@ -227,8 +290,8 @@ export default function TrackBookingPage() {
                       <div
                         key={i}
                         className={`h-2.5 w-2.5 rounded-sm transition-colors ${(loyaltyCycleProgress === 8 || i < loyaltyCycleProgress)
-                            ? "bg-emerald-400"
-                            : "bg-white/20"
+                          ? "bg-emerald-400"
+                          : "bg-white/20"
                           }`}
                       />
                     ))}
@@ -260,6 +323,29 @@ export default function TrackBookingPage() {
         <div className="mt-4">
           {loading && !bookings.length ? <div className="grid gap-4 md:grid-cols-2" role="status" aria-label="Loading bookings"><span className="sr-only">Loading bookings…</span>{Array.from({ length: 4 }).map((_, index) => <div key={index} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-4"><Skeleton className="h-14 w-14 rounded-2xl" /><div className="flex-1 space-y-2"><Skeleton className="h-3 w-28" /><Skeleton className="h-6 w-2/3" /><Skeleton className="h-4 w-40" /></div><Skeleton className="h-8 w-24 rounded-full" /></div></div>)}</div> : bookings.length === 0 ? <Empty /> : visibleBookings.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm"><Package className="mx-auto h-10 w-10 text-slate-300" /><p className="mt-3 font-bold text-slate-700">No activity in this section</p><p className="mt-1 text-sm text-slate-500">Try another filter to see your bookings and orders.</p></div> : <div className="grid items-start gap-4 lg:grid-cols-2">{visibleBookings.map((booking) => <BookingCard key={`${booking.kind}-${booking.id}`} booking={booking} onUpdate={(updates) => updateBooking(booking.id, booking.kind, updates)} />)}</div>}
         </div>
+
+        {hasMore && visibleBookings.length > 0 && (
+          <div className="mt-8 flex justify-center pb-4">
+            <button
+              type="button"
+              onClick={() => void loadMore()}
+              disabled={loadingMore || loading}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50"
+            >
+              {loadingMore ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                  Loading more orders...
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-4 w-4 text-emerald-600" />
+                  Load More Orders
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </main>
   );
@@ -276,9 +362,49 @@ function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate: (updat
   const latestReceipt = receipts[receipts.length - 1];
   const receiptStatus = latestReceipt?.status?.toLowerCase();
   const paid = Number(booking.paidAmount ?? receipts.filter((receipt) => receipt.status !== "rejected").reduce((sum, receipt) => sum + Number(receipt.amount || 0), 0));
-  const paymentTotal = Number(booking.apiTotal || booking.servicePrice || 0);
+  const notesText = String(booking.notes || (booking as unknown as Record<string, unknown>).specialInstructions || (booking as unknown as Record<string, unknown>).requirements || "");
+  const appliedLoyaltyDiscount = Number(booking.loyaltyDiscount || (/loyalty|8-order/i.test(notesText) ? 200 : 0));
+  const appliedDiscount = Math.max(appliedLoyaltyDiscount, Number(booking.discount || 0));
+  const totalAppliedDiscount = appliedDiscount;
+  const discountApplied = totalAppliedDiscount > 0;
+
+  const rawApiPrice = Number(booking.apiTotal || booking.servicePrice || 0);
+  let finalTotalFromNotes: number | null = null;
+  const finalTotalMatch = notesText.match(/Final Total:\s*(?:Rs|PKR)?\s*([\d,]+)/i);
+  if (finalTotalMatch) {
+    const val = Number(finalTotalMatch[1].replace(/,/g, ""));
+    if (Number.isFinite(val) && val > 0) finalTotalFromNotes = val;
+  }
+
+  let originalTotal: number;
+  let paymentTotal: number;
+
+  if (discountApplied) {
+    if (finalTotalFromNotes !== null) {
+      paymentTotal = finalTotalFromNotes;
+      originalTotal = rawApiPrice > finalTotalFromNotes ? rawApiPrice : finalTotalFromNotes + totalAppliedDiscount;
+    } else {
+      originalTotal = rawApiPrice;
+      paymentTotal = Math.max(0, rawApiPrice - totalAppliedDiscount);
+    }
+  } else {
+    originalTotal = rawApiPrice;
+    paymentTotal = rawApiPrice;
+  }
+
   const serverPending = Number(booking.pendingPayment || 0);
-  const paymentRemaining = serverPending > 0 ? serverPending : Math.max(0, paymentTotal - paid);
+  let parsedRemainingFromNotes: number | null = null;
+  const remainingMatch = notesText.match(/Remaining Payable:\s*(?:Rs|PKR)?\s*([\d,]+)/i);
+  if (remainingMatch) {
+    const val = Number(remainingMatch[1].replace(/,/g, ""));
+    if (Number.isFinite(val) && val >= 0) parsedRemainingFromNotes = val;
+  }
+
+  const paymentRemaining = serverPending > 0
+    ? serverPending
+    : (parsedRemainingFromNotes !== null && discountApplied
+      ? parsedRemainingFromNotes
+      : Math.max(0, paymentTotal - paid));
   const isAdvance = booking.paymentMethod.toLowerCase().includes("200 advance");
   let normalized = rawStatus;
   if (booking.kind !== "shop") {
@@ -314,7 +440,15 @@ function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate: (updat
         <div className={`flex shrink-0 items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-bold transition ${open ? "bg-emerald-50 text-emerald-700" : "text-slate-500 group-hover:bg-slate-50"}`}><span className="hidden sm:inline">{open ? "Hide" : "Details"}</span><ChevronDown className={`h-5 w-5 transition ${open ? "rotate-180" : ""}`} /></div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <SummaryValue label="Total" value={`PKR ${total.toLocaleString("en-PK")}`} />
+        {discountApplied && !isShop ? (
+          <div className="min-w-0 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Total</p>
+            <p className="mt-0.5 text-[10px] font-semibold text-slate-400 line-through">PKR {originalTotal.toLocaleString("en-PK")}</p>
+            <p className="text-xs font-black text-emerald-700 sm:text-sm">PKR {total.toLocaleString("en-PK")}</p>
+          </div>
+        ) : (
+          <SummaryValue label="Total" value={`PKR ${total.toLocaleString("en-PK")}`} />
+        )}
         <SummaryValue label={isShop ? "Payment" : "Paid online"} value={isShop ? booking.paymentMethod : `PKR ${paid.toLocaleString("en-PK")}`} />
         <SummaryValue label={isShop ? "Items" : "Remaining"} value={isShop ? String(booking.items?.length || 0) : `PKR ${remaining.toLocaleString("en-PK")}`} />
         <SummaryValue label="Schedule" value={booking.preferredTime || (isShop ? "Delivery pending" : "Awaiting confirmation")} truncate />
@@ -339,26 +473,47 @@ function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate: (updat
         </section>
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h3 className="flex items-center gap-2 font-bold text-slate-900"><CreditCard className="h-4 w-4 text-emerald-600" /> Payment summary</h3>
-          <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-slate-900 p-3 text-center text-white">
+          {/* Show discount breakdown row above the dark summary bar when a discount was applied */}
+          {discountApplied && !isShop && (
+            <div className="mt-3 space-y-1.5 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2.5 text-xs">
+              <div className="flex justify-between text-slate-500">
+                <span>Original price</span>
+                <span className="font-semibold line-through">PKR {originalTotal.toLocaleString("en-PK")}</span>
+              </div>
+              {appliedLoyaltyDiscount > 0 && (
+                <div className="flex justify-between text-emerald-700">
+                  <span className="flex items-center gap-1"><Gift className="h-3 w-3" /> 8-order loyalty reward</span>
+                  <span className="font-black">- PKR {appliedLoyaltyDiscount.toLocaleString("en-PK")}</span>
+                </div>
+              )}
+              {appliedDiscount > 0 && appliedDiscount !== appliedLoyaltyDiscount && (
+                <div className="flex justify-between text-violet-700">
+                  <span>Reward points</span>
+                  <span className="font-black">- PKR {appliedDiscount.toLocaleString("en-PK")}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-emerald-200 pt-1.5 font-black text-emerald-800">
+                <span>Discounted total</span>
+                <span>PKR {total.toLocaleString("en-PK")}</span>
+              </div>
+            </div>
+          )}
+          <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-slate-900 p-3 text-center text-white">
             <SummaryValue label="Total" value={`PKR ${total.toLocaleString("en-PK")}`} dark />
             <SummaryValue label="Paid" value={`PKR ${paid.toLocaleString("en-PK")}`} dark accent />
             <SummaryValue label="Remaining" value={`PKR ${remaining.toLocaleString("en-PK")}`} dark />
           </div>
           <div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="text-slate-500">Method</span><span className="text-right font-bold text-slate-800">{booking.paymentMethod}</span></div>
           {latestReceipt && <div className="mt-2 flex items-center justify-between gap-3 text-xs"><span className="text-slate-500">Latest receipt</span><span className={`rounded-full px-2 py-1 font-bold capitalize ${receiptStatus === "verified" ? "bg-emerald-50 text-emerald-700" : receiptStatus === "rejected" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{latestReceipt.status || "submitted"}</span></div>}
-          {/* Loyalty discount badge: show if order total looks discounted or if API signals it */}
-          {(() => {
-            const raw = booking as unknown as Record<string, unknown>;
-            const hasLoyaltyFlag =
-              Number(raw.loyaltyDiscount || raw.loyalty_discount || 0) > 0 ||
-              Boolean(raw.loyaltyApplied || raw.loyalty_applied);
-            return hasLoyaltyFlag ? (
-              <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-                <Gift className="h-4 w-4 shrink-0 text-emerald-600" />
-                <span className="text-xs font-black text-emerald-700">PKR 200 Loyalty Discount Applied</span>
-              </div>
-            ) : null;
-          })()}
+          {/* Loyalty discount badge */}
+          {discountApplied && !isShop && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+              <Gift className="h-4 w-4 shrink-0 text-emerald-600" />
+              <span className="text-xs font-black text-emerald-700">
+                {appliedLoyaltyDiscount > 0 ? `PKR ${appliedLoyaltyDiscount.toLocaleString("en-PK")} Loyalty Discount Applied` : `PKR ${totalAppliedDiscount.toLocaleString("en-PK")} Reward Discount Applied`}
+              </span>
+            </div>
+          )}
         </section>
       </div>
 
@@ -427,10 +582,14 @@ function UploadReceiptForm({ booking }: { booking: Booking }) {
   const receipts = booking.paymentReceipts?.length ? booking.paymentReceipts : booking.paymentReceipt ? [booking.paymentReceipt] : [];
   const isInitialPayment = !receipts.length;
   const paid = Number(booking.paidAmount ?? receipts.filter((receipt) => receipt.status !== "rejected").reduce((sum, receipt) => sum + Number(receipt.amount || 0), 0));
-  const calculatedPending = Math.max(0, Number(booking.apiTotal || booking.servicePrice || 0) - paid);
+  const loyaltyDisc = Number(booking.loyaltyDiscount || 0);
+  const generalDisc = Number(booking.discount || 0);
+  const appliedDisc = Math.max(loyaltyDisc, generalDisc);
+  const discountedTotal = Math.max(0, Number(booking.apiTotal || booking.servicePrice || 0) - appliedDisc);
+  const calculatedPending = Math.max(0, discountedTotal - paid);
   const isInspection = /visit|inspection/i.test(booking.unitDescription || "");
   const knownPending = booking.pendingPayment ? Number(booking.pendingPayment) : calculatedPending;
-  const initialAmount = isFullPayment ? Number(booking.servicePrice || 0) : 200;
+  const initialAmount = isFullPayment ? discountedTotal : 200;
   const [quotedAmount, setQuotedAmount] = useState(knownPending > 0 ? String(knownPending) : "");
   const amountDue = isInitialPayment ? initialAmount : isInspection ? Number(quotedAmount || 0) : knownPending;
 

@@ -405,7 +405,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
       const isRewardPoints = useRewardPoints && rewardEligible && !loyaltyDiscountEligible;
       const serverRewardPointsEligible = rewardPoints >= 4; // server requires at least 4 points (Rs 100 value) to process useRewardPoints
-      const shouldSendUseRewardPoints = (loyaltyDiscountEligible && serverRewardPointsEligible) || (isRewardPoints && serverRewardPointsEligible);
+      const shouldSendUseRewardPoints = isRewardPoints && serverRewardPointsEligible;
       const appliedDiscount = loyaltyDiscountEligible ? loyaltyDiscount : (isRewardPoints ? rewardDiscount : 0);
 
       // 1. Submit Booking
@@ -882,9 +882,9 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                   total={calculatedTotal}
                   receiptFileName={receiptFileName}
                   onReceiptSelect={handleReceiptSelect}
-                  rewardEligible={rewardEligible}
+                  rewardEligible={rewardEligible && !loyaltyDiscountEligible}
                   rewardLoading={rewardLoading}
-                  useRewardPoints={useRewardPoints && rewardEligible}
+                  useRewardPoints={useRewardPoints && rewardEligible && !loyaltyDiscountEligible}
                   onUseRewardPointsChange={(value) => { setUseRewardPoints(value); setReceiptDataUrl(""); setReceiptFileName(""); }}
                 />
               </div>}
