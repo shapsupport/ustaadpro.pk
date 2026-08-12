@@ -350,14 +350,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       //   ? `${requirements.trim()}\n[EasyPaisa Payment Screenshot Attached: ${receiptFileName || "receipt.png"}]`.trim()
       //   : requirements.trim();
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
       // Billing data is sent in dedicated numeric fields below. Keep customer
       // instructions customer-authored so admin notes never contain totals.
->>>>>>> b6728a80387d216efed34b5d35963ed497b0b44f
-      const noteWithReceipt = requirements.trim();
       const noteWithReceipt = requirements.trim();
 
       const appliedDiscount = loyaltyDiscount;
