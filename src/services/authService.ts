@@ -50,11 +50,19 @@ export interface VerifySignupOtpPayload {
   email?: string;
   phone?: string;
   otp: string;
+  code?: string;
+  verificationCode?: string;
   verificationChannel?: "email" | "phone";
 }
 
 export async function verifySignupOtp(data: VerifySignupOtpPayload): Promise<AuthResponse> {
-  const res = await api.post<AuthResponse>("/verify-signup-otp", data);
+  const code = data.code ?? data.verificationCode ?? data.otp;
+  const res = await api.post<AuthResponse>("/verify-signup-otp", {
+    ...data,
+    otp: code,
+    code,
+    verificationCode: code,
+  });
   return res.data;
 }
 

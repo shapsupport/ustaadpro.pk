@@ -175,6 +175,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: otpModal.email,
         phone: otpModal.phone,
         otp: code,
+        code,
+        verificationCode: code,
         verificationChannel: otpModal.verificationChannel,
       });
       persistSession(token, newUser);
