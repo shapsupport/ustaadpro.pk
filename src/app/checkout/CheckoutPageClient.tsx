@@ -47,6 +47,10 @@ export default function CheckoutPageClient() {
   const [booking, setBooking] = useState<BookingRecord | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [rewardEligible, setRewardEligible] = useState(false);
+  const [useRewardPoints, setUseRewardPoints] = useState(false);
+  const [useWalletBalance, setUseWalletBalance] = useState(false);
+  const walletBalance = Number(user?.walletBalance || 0);
 
   // ── Fetch public settings ───────────────────────────────────────────────
   const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk").replace(/\/$/, "");
@@ -63,6 +67,33 @@ export default function CheckoutPageClient() {
       });
     return () => { alive = false; };
   }, [API_BASE_URL]);
+
+  useEffect(() => {
+    if (isShop || !user) {
+      return;
+    }
+    const token = localStorage.getItem("ustaadpro_token");
+    if (!token) return;
+    let alive = true;
+    const headers = { Authorization: `Bearer ${token}` };
+    fetch(`${API_BASE_URL}/api/orders/loyalty-status`, { headers, cache: "no-store" })
+      .then(async (response) => {
+        if (response.ok) return response.json() as Promise<{ eligible?: boolean }>;
+        const fallback = await fetch(`${API_BASE_URL}/api/orders`, { headers, cache: "no-store" });
+        if (!fallback.ok) throw new Error("Orders unavailable");
+        const orders = await fallback.json() as Array<{ status?: string; rewardDiscount?: number; rewarddiscount?: number }>;
+        const pendingReward = orders.some((order) =>
+          String(order.status || "").toLowerCase() === "checking_receipt" && Number(order.rewardDiscount || order.rewarddiscount || 0) > 0
+        );
+        return { eligible: Number(user.rewardPoints || 0) >= 12 && !pendingReward };
+      })
+      .then((payload: { eligible?: boolean }) => {
+        if (!alive) return;
+        setRewardEligible(Boolean(payload.eligible));
+      })
+      .catch(() => { if (alive) setRewardEligible(false); })
+    return () => { alive = false; };
+  }, [API_BASE_URL, checkoutPrice, isShop, user]);
 
   // ── Derived values ──────────────────────────────────────────────────────
   const selectedAddress = useMemo(
@@ -81,18 +112,20 @@ export default function CheckoutPageClient() {
   const [livePaymentMethod, setLivePaymentMethod] = useState<PaymentMethod>(isShop ? "cod" : "Rs 200 Advance");
 
   const subtotal = isShop ? productPrice * quantity : servicePrice;
-  const taxAmount = isShop ? 0 : subtotal * (settings.serviceTaxPercent / 100);
+  const selectedRewardDiscount = !isShop && rewardEligible && useRewardPoints ? Math.min(300, subtotal) : 0;
+  const taxableSubtotal = Math.max(0, subtotal - selectedRewardDiscount);
+  const taxAmount = isShop ? 0 : taxableSubtotal * (settings.serviceTaxPercent / 100);
   const inspectionFee = isShop ? 0 : settings.inspectionFee;
   const shippingCost = isShop ? settings.shippingCost : 0;
 
   const totalPayable = useMemo(
-    () => subtotal + taxAmount + inspectionFee + shippingCost,
-    [subtotal, taxAmount, inspectionFee, shippingCost]
+    () => taxableSubtotal + taxAmount + inspectionFee + shippingCost,
+    [taxableSubtotal, taxAmount, inspectionFee, shippingCost]
   );
 
   // ── Handle form submit ──────────────────────────────────────────────────
   const handleSubmit = useCallback(
-    async (formData: FormData, paymentMethod: PaymentMethod) => {
+    async (formData: FormData, paymentMethod: PaymentMethod, applyWallet: boolean) => {
       setIsSubmitting(true);
       setSubmitError("");
       setLivePaymentMethod(paymentMethod);
@@ -110,6 +143,9 @@ export default function CheckoutPageClient() {
         let confirmedTotal = totalPayable;
         let confirmedInspectionFee = inspectionFee;
         let confirmedTax = taxAmount;
+        let confirmedDiscount = 0;
+        let confirmedLoyaltyDiscount = 0;
+        let confirmedOriginalTotal = totalPayable;
         if (isShop) {
           const data = await checkoutShopOrder({
             items: [{ productId, quantity }],
@@ -142,11 +178,18 @@ export default function CheckoutPageClient() {
             paymentMethod,
             inspectionFee: settings.inspectionFee,
             tax: taxAmount,
+            loyaltyDiscount: selectedRewardDiscount,
+            discount: selectedRewardDiscount,
+            useRewardPoints,
+            useWalletBalance: applyWallet,
           });
           orderId = resData.order?.id || `BK-${Date.now()}`;
           confirmedTotal = Number(resData.order?.total ?? totalPayable);
           confirmedInspectionFee = Number(resData.order?.inspectionFee ?? inspectionFee);
           confirmedTax = Number(resData.order?.tax ?? taxAmount);
+          confirmedDiscount = Number(resData.order?.rewardDiscount ?? selectedRewardDiscount);
+          confirmedLoyaltyDiscount = Number(resData.order?.loyaltyDiscount ?? selectedRewardDiscount);
+          confirmedOriginalTotal = Number(resData.order?.originalTotal ?? (confirmedTotal + confirmedDiscount));
         }
 
         const record: BookingRecord = {
@@ -157,6 +200,9 @@ export default function CheckoutPageClient() {
           total: confirmedTotal,
           inspectionFee: isShop ? 0 : confirmedInspectionFee,
           tax: isShop ? 0 : confirmedTax,
+          discount: confirmedDiscount,
+          loyaltyDiscount: confirmedLoyaltyDiscount,
+          originalTotal: confirmedOriginalTotal,
           paymentMethod,
           status: isShop ? "placed" : "checking_receipt",
           createdAt: new Date().toISOString(),
@@ -190,7 +236,7 @@ export default function CheckoutPageClient() {
         setIsSubmitting(false);
       }
     },
-    [selectedAddress, serviceTitle, workTitle, servicePrice, user, serviceId, workPriceId, settings, isShop, productId, productTitle, productPrice, productImage, quantity, checkoutTitle, checkoutPrice, taxAmount, location.coords]
+    [selectedAddress, serviceTitle, workTitle, servicePrice, user, serviceId, workPriceId, settings, isShop, productId, productTitle, productPrice, productImage, quantity, checkoutTitle, checkoutPrice, taxAmount, selectedRewardDiscount, useRewardPoints, totalPayable, inspectionFee, location.coords]
   );
 
 
@@ -234,12 +280,15 @@ export default function CheckoutPageClient() {
               minimumBookingLeadHours={settings.minimumBookingLeadHours}
               submitError={submitError}
               onScheduleChange={() => setSubmitError("")}
+              walletBalance={walletBalance}
+              onWalletChange={setUseWalletBalance}
             />
           </div>
 
           {/* ── Right: Sticky summary ─────────────────────────── */}
           <aside className="hidden lg:block">
             <div className="sticky top-6">
+              {rewardEligible && <button type="button" onClick={() => setUseRewardPoints((value) => !value)} className={`mb-4 w-full rounded-2xl border p-4 text-left ${useRewardPoints ? "border-violet-500 bg-violet-50" : "border-violet-200 bg-white"}`}><strong className="block text-sm text-slate-900">Redeem 12 points for PKR 300</strong><span className="text-xs text-slate-500">Deducted before tax</span></button>}
               <div className="mb-4">
                 <h2 className="text-base font-bold text-slate-800">Order summary</h2>
                 <p className="text-xs text-slate-500">
@@ -254,6 +303,9 @@ export default function CheckoutPageClient() {
                 paymentMethod={livePaymentMethod}
                 selectedAddress={selectedAddress}
                 isShop={isShop}
+                loyaltyDiscount={selectedRewardDiscount}
+                walletBalance={walletBalance}
+                useWalletBalance={useWalletBalance}
               />
             </div>
           </aside>

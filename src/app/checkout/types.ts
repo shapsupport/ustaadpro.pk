@@ -34,6 +34,9 @@ export type BookingRecord = {
   total?: number;
   inspectionFee?: number;
   tax?: number;
+  discount?: number;
+  loyaltyDiscount?: number;
+  originalTotal?: number;
   paymentMethod: PaymentMethod;
   status: string;
   createdAt: string;
