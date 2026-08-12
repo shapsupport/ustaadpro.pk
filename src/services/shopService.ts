@@ -83,7 +83,6 @@ export async function checkoutShopOrder(
         ? "cod"
         : payload.paymentMethod,
     });
-    console.log("[UstaadPro] Shop order API response:\n", JSON.stringify(res.data, null, 2));
     return res.data;
   } catch (err: unknown) {
     const axiosErr = err as {

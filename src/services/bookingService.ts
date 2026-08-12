@@ -123,7 +123,7 @@ export async function createBooking(data: CreateBookingPayload): Promise<Booking
 
   try {
     const res = await bookingClient.post<BookingResponse>("/orders/checkout", payload);
-    console.log("[UstaadPro] Service order API response:\n", JSON.stringify(res.data, null, 2)); return res.data;
+    return res.data;
   } catch (err: any) {
     const serverMessage = err.response?.data?.message || err.response?.data?.error || err.message || "";
 
