@@ -407,8 +407,8 @@ function ServiceCard({
             </div>
           </div>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-          <button type="button" onClick={addToCart} className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold transition ${inCart ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"}`}><ShoppingCart className="h-4 w-4" />{inCart ? "Add another" : "Add to cart"}</button>
+          <div className="mt-3 grid grid-cols-[3.25rem_minmax(0,1fr)] gap-2">
+          <button type="button" onClick={addToCart} aria-label={inCart ? `Add another ${service.title} to cart` : `Add ${service.title} to cart`} title={inCart ? "Add another to cart" : "Add to cart"} className={`relative grid min-h-11 place-items-center rounded-xl border transition ${inCart ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"}`}><ShoppingCart className="h-5 w-5" /><span className="absolute right-1.5 top-1.5 grid h-4 w-4 place-items-center rounded-full bg-emerald-600 text-[11px] font-black leading-none text-white">+</span></button>
           <button
             type="button"
             onClick={() => onBook(quantity)}

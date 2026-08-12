@@ -180,7 +180,7 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
 
   return (
     <>
-      <div className="min-h-screen bg-slate-50 pt-4">
+      <div className="min-h-screen bg-slate-50">
         {/* Back bar */}
         <div className="border-b border-slate-100 bg-white/90 px-4 py-3 backdrop-blur-md">
           <div className="max-w-6xl mx-auto flex items-center gap-3">

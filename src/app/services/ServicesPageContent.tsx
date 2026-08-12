@@ -52,7 +52,7 @@ function SafeImage({ src, alt, fallback, className }: { src: string; alt: string
       alt={alt}
       fill
       sizes="(max-width: 640px) 50vw, (max-width: 1024px) 50vw, 25vw"
-      className={className ?? "object-cover"}
+      className={`${className ?? "object-cover"} block [backface-visibility:hidden] [transform:translateZ(0)_scale(1.015)]`}
       onError={() => setError(true)}
 
     />
@@ -803,7 +803,7 @@ function ServiceCard({ service, onBook }: { service: ApiService; onBook: (quanti
             alt={service.title}
             fill
 
-            className="object-cover"
+            className="block object-cover [backface-visibility:hidden] [transform:translateZ(0)_scale(1.015)]"
             sizes="(max-width:640px) 50vw, (max-width:1024px) 50vw, 25vw"
           />
         ) : (
@@ -855,8 +855,8 @@ function ServiceCard({ service, onBook }: { service: ApiService; onBook: (quanti
             </div>
           </div>
           </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <button type="button" onClick={addToCart} className={`flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-bold transition ${inCart ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"}`}><ShoppingCart className="h-4 w-4" />{inCart ? "Add another" : "Add to cart"}</button>
+          <div className="mt-3 grid grid-cols-[3.25rem_minmax(0,1fr)] gap-2">
+          <button type="button" onClick={addToCart} aria-label={inCart ? `Add another ${service.title} to cart` : `Add ${service.title} to cart`} title={inCart ? "Add another to cart" : "Add to cart"} className={`relative grid min-h-12 place-items-center rounded-2xl border transition ${inCart ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"}`}><ShoppingCart className="h-5 w-5" /><span className="absolute right-1.5 top-1.5 grid h-4 w-4 place-items-center rounded-full bg-emerald-600 text-[11px] font-black leading-none text-white">+</span></button>
           <button
             type="button"
             onClick={() => onBook(quantity)}

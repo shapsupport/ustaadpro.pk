@@ -34,6 +34,24 @@ function imageUrl(result: Result) {
   return source.startsWith("http") ? source : `${API_BASE}${source.startsWith("/") ? source : `/${source}`}`;
 }
 
+function cacheSelectedProduct(result: Result) {
+  if (result.resultType !== "shop_product" || !result.id) return;
+  try {
+    sessionStorage.setItem(`ustaadpro_product_${result.id}`, JSON.stringify({
+      id: String(result.id),
+      title: result.title || "Untitled product",
+      category: result.category || "Other",
+      description: result.description || "",
+      price: Number(result.price || 0),
+      originalPrice: Number(result.originalPrice || result.price || 0),
+      imageUrl: result.imageUrl || result.image_url || "",
+      stock: Number(result.stock || 0),
+      isActive: result.isActive ?? true,
+      createdAt: result.createdAt || "",
+    }));
+  } catch { /* Storage may be unavailable; the detail loader has a network fallback. */ }
+}
+
 function levenshtein(a: string, b: string) {
   const rows = Array.from({ length: a.length + 1 }, (_, index) => [index]);
   for (let column = 0; column <= b.length; column += 1) rows[0][column] = column;
@@ -85,6 +103,7 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
 
   const popular = scope === "service" ? SERVICE_POPULAR : SHOP_POPULAR.map((item) => item.label);
   const categories = scope === "service" ? SERVICE_CATEGORIES : SHOP_CATEGORIES;
+  const mobileStoreSearch = mobile && pathname.startsWith("/store") && scope === "shop_product";
 
   useEffect(() => {
     if (!open || mobile) return;
@@ -96,18 +115,18 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
   }, [mobile, open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || mobileStoreSearch) return;
     let active = true;
     getSearchVocabulary(scope)
       .then((terms) => { if (active) setApiVocabulary(terms); })
       .catch(() => { if (active) setApiVocabulary([]); });
     return () => { active = false; };
-  }, [open, scope]);
+  }, [mobileStoreSearch, open, scope]);
 
   useEffect(() => {
     const value = query.trim();
     if (!value) return;
-    if (pathname.startsWith("/store") && scope === "shop_product") return;
+    if (mobile && pathname.startsWith("/store") && scope === "shop_product") return;
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setLoading(true);
@@ -125,7 +144,7 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
       }
     }, 300);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [category, pathname, query, scope]);
+  }, [category, mobile, pathname, query, scope]);
 
   useEffect(() => {
     if (!pathname.startsWith("/store")) return;
@@ -210,11 +229,11 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
     setResults([]);
   }
 
-  const panel = open ? (
+  const panel = open && !mobileStoreSearch ? (
     <div className={cn(
       "border border-slate-200 bg-white text-left shadow-2xl",
       mobile
-        ? "mt-3 isolate overflow-hidden rounded-[24px] [clip-path:inset(0_round_24px)]"
+        ? "fixed inset-x-3 bottom-3 z-[110] isolate max-h-[55dvh] overflow-hidden rounded-[24px] [clip-path:inset(0_round_24px)]"
         : "fixed left-1/2 top-24 z-[100] isolate w-[min(1120px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-[28px] [clip-path:inset(0_round_28px)]",
     )}>
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
@@ -232,7 +251,17 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
         </div>
       ) : null}
 
-      <div className={cn(
+      {mobileStoreSearch ? (
+        <div className="p-4">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-lime-600">Quick product search</p>
+          <p className="mt-1 text-sm font-bold text-slate-900">{query.trim() ? `Showing products similar to “${query.trim()}”` : "What are you looking for?"}</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Matching products update in the shop grid beneath this search.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {SHOP_POPULAR.map((item) => <button key={item.label} type="button" onClick={() => runPopularSearch(item.label)} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600">{item.label}</button>)}
+          </div>
+          <button type="button" onClick={() => setOpen(false)} className="mt-4 w-full rounded-xl bg-lime-500 px-4 py-3 text-sm font-black text-white transition hover:bg-lime-600">View matching products</button>
+        </div>
+      ) : <div className={cn(
         "search-results-scrollbar grid gap-0 overflow-y-auto overscroll-contain",
         mobile ? "max-h-[65vh] grid-cols-1" : "max-h-[calc(100vh-11rem)] grid-cols-[280px_1fr]",
       )}>
@@ -261,7 +290,7 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
                 const isService = result.resultType === "service";
                 const href = isService ? `/services/${result.id}` : `/store/${result.id}`;
                 const image = imageUrl(result);
-                return <Link key={result.suggestionId || `${scope}-${result.id}`} href={href} prefetch={false} onClick={() => { remember(query); setOpen(false); onNavigate?.(); }} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg">
+                return <Link key={result.suggestionId || `${scope}-${result.id}`} href={href} prefetch={false} onClick={() => { cacheSelectedProduct(result); remember(query); setOpen(false); onNavigate?.(); }} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg">
                   <div className="relative aspect-[4/3] bg-slate-100">{image ? <Image src={image} alt={result.title || "Search result"} fill sizes="220px" className="object-cover transition group-hover:scale-105" /> : <Search className="absolute inset-0 m-auto h-7 w-7 text-slate-300" />}</div>
                   <div className="p-3"><p className="line-clamp-2 text-sm font-black text-slate-900">{result.title || "Untitled result"}</p><p className="mt-2 text-sm font-black text-emerald-700">Rs {Number(result.price || 0).toLocaleString("en-PK")}</p></div>
                 </Link>;
@@ -269,7 +298,7 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
             </div>
           ) : query.trim() ? <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center"><div><Search className="mx-auto h-7 w-7 text-slate-300" /><p className="mt-3 text-sm font-bold text-slate-600">No matching {scope === "service" ? "services" : "products"} found.</p></div></div> : <div className="flex min-h-48 items-center justify-center rounded-2xl bg-emerald-50/60 text-center"><div><Search className="mx-auto h-8 w-8 text-emerald-500" /><p className="mt-3 text-sm font-bold text-emerald-900">Search across Ustaad Pro</p><p className="mt-1 text-xs text-emerald-700">Choose Services or Shop, then type what you need.</p></div></div>}
         </section>
-      </div>
+      </div>}
     </div>
   ) : null;
 

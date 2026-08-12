@@ -19,10 +19,10 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
+import { UniversalSearch } from "@/components/search/UniversalSearch";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "";
 const CATALOG_CACHE_MS = 60_000;
-const CATALOG_BATCH_SIZE = 200;
 type ShopCatalogResponse = ApiShopResponse & { products?: ApiProduct[]; data?: ApiProduct[] };
 const catalogCache = new Map<string, { expiresAt: number; data: ShopCatalogResponse }>();
 
@@ -127,9 +127,24 @@ export default function StorePageClient() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const pageSize = 15;
+  const [mobileNavVisible, setMobileNavVisible] = useState(true);
+  const pageSize = 16;
   const resultsRef = useRef<HTMLDivElement>(null);
   const catalogRequestRef = useRef(0);
+  const lastMobileScrollY = useRef(0);
+
+  useEffect(() => {
+    const handleMobileScroll = () => {
+      if (window.innerWidth >= 768) return;
+      const current = window.scrollY;
+      if (current <= 80) setMobileNavVisible(true);
+      else if (Math.abs(current - lastMobileScrollY.current) > 8) setMobileNavVisible(current < lastMobileScrollY.current);
+      lastMobileScrollY.current = current;
+    };
+    lastMobileScrollY.current = window.scrollY;
+    window.addEventListener("scroll", handleMobileScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleMobileScroll);
+  }, []);
 
   useEffect(() => {
     let shouldReturnToTop = false;
@@ -161,29 +176,19 @@ export default function StorePageClient() {
     const requestKey = selectedCategory;
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: String(CATALOG_BATCH_SIZE), offset: "0" });
+      const params = new URLSearchParams({ limit: String(pageSize), offset: String((page - 1) * pageSize) });
       if (selectedCategory !== "all") params.set("category", selectedCategory);
       const firstPage = await fetchCatalog(`${API_BASE_URL}/api/shop/products?${params}`);
       const catalogTotal = Number(firstPage?.total || 0);
-      const remainingOffsets = Array.from(
-        { length: Math.max(0, Math.ceil(catalogTotal / CATALOG_BATCH_SIZE) - 1) },
-        (_, index) => (index + 1) * CATALOG_BATCH_SIZE,
-      );
-      const remainingPages = await Promise.all(remainingOffsets.map((offset) => {
-        const pageParams = new URLSearchParams(params);
-        pageParams.set("offset", String(offset));
-        return fetchCatalog(`${API_BASE_URL}/api/shop/products?${pageParams}`);
-      }));
-      const dataPages = [firstPage, ...remainingPages];
-      const allProducts = dataPages.flatMap((data) => Array.isArray(data?.products)
-        ? data.products
-        : Array.isArray(data?.data)
-          ? data.data
-          : []);
+      const allProducts = Array.isArray(firstPage?.products)
+        ? firstPage.products
+        : Array.isArray(firstPage?.data)
+          ? firstPage.data
+          : [];
 
       const normalizedProducts = uniqueProducts(allProducts.filter((product: ApiProduct) => product?.id));
       if (requestId !== catalogRequestRef.current) return;
-      setProducts(diversifyProducts(normalizedProducts, getShopShuffleSeed()));
+      setProducts(diversifyProducts(normalizedProducts, getShopShuffleSeed() + page));
       setCategories(Array.isArray(firstPage?.categories) ? firstPage.categories : []);
       setTotal(catalogTotal || normalizedProducts.length);
     } catch {
@@ -197,7 +202,7 @@ export default function StorePageClient() {
         setLoading(false);
       }
     }
-  }, [selectedCategory]);
+  }, [page, selectedCategory]);
 
   useEffect(() => {
     if (debouncedSearch) return;
@@ -245,9 +250,9 @@ export default function StorePageClient() {
   const activeFilters = selectedCategory !== "all" || Boolean(debouncedSearch);
   const visibleTotal = debouncedSearch ? searchResults.length : total;
   const pageCount = Math.max(1, Math.ceil(visibleTotal / pageSize));
-  const visibleProducts = (debouncedSearch ? searchResults : products).slice((page - 1) * pageSize, page * pageSize);
+  const visibleProducts = debouncedSearch ? searchResults.slice((page - 1) * pageSize, page * pageSize) : products;
   const catalogLoading = loading || (!debouncedSearch && loadedCatalogKey !== selectedCategory);
-  const skeletonCount = Math.max(12, products.length, visibleProducts.length);
+  const skeletonCount = 12;
   const handleSearchChange = useCallback((value: string) => {
     const isStartingSearch = !search.trim() && Boolean(value.trim());
     setSearch(value);
@@ -298,21 +303,21 @@ export default function StorePageClient() {
   return (
     <div className="min-h-screen bg-slate-50">
       <section className="border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-2xl">
-              <Badge className="mb-3 border-lime-400/20 bg-lime-500/10 text-sm text-lime-700">
+              <Badge className="mb-2 border-lime-400/20 bg-lime-500/10 text-xs text-lime-700 sm:mb-3 sm:text-sm">
                 <ShoppingBag className="mr-1.5 h-3.5 w-3.5" />
                 Live inventory
               </Badge>
-              <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-4xl">
                 Shop the best essentials for every project.
               </h1>
-              <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
+              <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-600 sm:mt-3 sm:text-base sm:leading-7">
                 Browse the latest products from the live API, filter instantly, and place your order with a few simple steps.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="hidden flex-wrap items-center gap-3 sm:flex">
               <div className="rounded-full border border-lime-200 bg-lime-50 px-3 py-2 text-sm font-semibold text-lime-700">
                 {total} products available
               </div>
@@ -324,15 +329,20 @@ export default function StorePageClient() {
         </div>
       </section>
 
-      <div className="mx-auto max-w-[1536px] px-4 py-6 sm:px-6 lg:px-8">
-        <div className="grid gap-6 lg:grid-cols-[230px_minmax(0,1fr)]">
-          <aside className="sticky top-24 z-30 w-full min-w-0 self-start rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur">
+      <div className="mx-auto max-w-[1536px] px-3 py-3 sm:px-6 sm:py-6 lg:px-8">
+        <div className="grid gap-3 sm:gap-6 lg:grid-cols-[230px_minmax(0,1fr)]">
+          <aside className={`sticky z-30 w-full min-w-0 self-start rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-md backdrop-blur transition-[top] duration-300 sm:rounded-3xl sm:p-4 sm:shadow-xl lg:top-24 ${mobileNavVisible ? "top-20" : "top-2"}`}>
             <div className="flex items-center gap-2">
               <SlidersHorizontal className="h-4 w-4 text-lime-600" />
-              <h2 className="text-lg font-semibold text-slate-900">Filters</h2>
+              <h2 className="text-sm font-semibold text-slate-900 sm:text-lg">Browse products</h2>
+              <span className="ml-auto text-xs font-bold text-slate-500 lg:hidden">{visibleTotal.toLocaleString("en-PK")} products</span>
             </div>
 
-            <div className="mt-4 flex flex-col gap-3">
+            <div className="mt-3 lg:hidden">
+              <UniversalSearch mobile defaultScope="shop_product" />
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2 sm:mt-4 sm:gap-3">
               <div className="min-w-0 flex-1">
                 <p className="mb-2 hidden text-[11px] font-black uppercase tracking-[0.18em] text-slate-400 lg:block">Product categories</p>
                 <div className="shop-category-scrollbar flex gap-2 overflow-x-auto overflow-y-hidden pb-2 lg:flex-col lg:overflow-visible lg:pb-0">
@@ -343,7 +353,7 @@ export default function StorePageClient() {
                         key={item.name}
                         type="button"
                         onClick={() => chooseCategory(item.name)}
-                        className={`flex shrink-0 items-center justify-between gap-2 rounded-2xl border px-3 py-2.5 text-left text-sm font-medium transition lg:w-full ${isActive
+                        className={`flex shrink-0 items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-left text-xs font-medium transition sm:rounded-2xl sm:px-3 sm:py-2.5 sm:text-sm lg:w-full ${isActive
                           ? "border-lime-500 bg-lime-50 text-lime-700"
                           : "border-slate-200 bg-white text-slate-700 hover:border-lime-200 hover:text-lime-700"
                           }`}
@@ -356,7 +366,7 @@ export default function StorePageClient() {
                 </div>
               </div>
 
-              <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="hidden shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 lg:block">
                 <p className="text-xs font-medium text-slate-500">Results available</p>
                 <p className="mt-0.5 whitespace-nowrap text-sm font-bold text-slate-900">{visibleTotal.toLocaleString("en-PK")} products</p>
               </div>
@@ -370,7 +380,7 @@ export default function StorePageClient() {
           </aside>
 
           <div ref={resultsRef} className="min-h-screen scroll-mt-28 space-y-6">
-            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:block">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-[0.25em] text-lime-600">Catalog</p>
@@ -385,7 +395,7 @@ export default function StorePageClient() {
             {catalogLoading || searching ? (
               <ProductGridSkeleton count={skeletonCount} />
             ) : visibleProducts.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
                 {visibleProducts.map((product) => (
                   <ProductCard
                     key={product.id}
@@ -444,7 +454,7 @@ function ProductCard({ product }: { product: ApiProduct }) {
   };
 
   return (
-    <Card className="group flex h-full flex-col overflow-hidden border border-slate-200 transition-all hover:-translate-y-1 hover:border-lime-200 hover:shadow-xl">
+    <Card className="group flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 transition-all hover:-translate-y-1 hover:border-lime-200 hover:shadow-xl sm:rounded-2xl">
       {/* Clickable image + info area */}
       <Link
         href={`/store/${product.id}`}
@@ -457,8 +467,8 @@ function ProductCard({ product }: { product: ApiProduct }) {
               src={imageSrc}
               alt={product.title}
               fill
-              className="object-contain p-3 transition-transform duration-500 group-hover:scale-[1.03]"
-              sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 25vw"
+              className="object-contain p-1.5 transition-transform duration-500 group-hover:scale-[1.03] sm:p-3"
+              sizes="(max-width:640px) 50vw, (max-width:1024px) 50vw, 25vw"
             />
           ) : (
             <div className="flex h-full items-center justify-center">
@@ -467,36 +477,36 @@ function ProductCard({ product }: { product: ApiProduct }) {
           )}
 
           {hasDiscount ? (
-            <div className="absolute left-3 top-3 rounded-full bg-red-500 px-2.5 py-1 text-xs font-semibold text-white">
+            <div className="absolute left-1.5 top-1.5 rounded-full bg-red-500 px-1.5 py-0.5 text-[9px] font-semibold text-white sm:left-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-xs">
               Save {Math.round(((Number(product.originalPrice) - Number(product.price)) / Number(product.originalPrice)) * 100)}%
             </div>
           ) : null}
         </div>
 
-        <div className="p-3 pb-2">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-lime-600">{product.category}</p>
-          <h3 className="mt-1.5 line-clamp-2 text-base font-bold leading-snug text-slate-900 transition-colors group-hover:text-lime-700">
+        <div className="p-2 pb-1.5 sm:p-3 sm:pb-2">
+          <p className="truncate text-[9px] font-bold uppercase tracking-[0.12em] text-lime-600 sm:text-[11px] sm:tracking-[0.18em]">{product.category}</p>
+          <h3 className="mt-1 line-clamp-2 min-h-9 text-xs font-bold leading-[1.125rem] text-slate-900 transition-colors group-hover:text-lime-700 sm:mt-1.5 sm:min-h-0 sm:text-base sm:leading-snug">
             {product.title}
           </h3>
 
-          <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+          <div className="mt-1 hidden items-center gap-2 text-xs text-slate-500 sm:mt-2 sm:flex">
             <span>{product.stock > 0 ? "Available to order" : "Currently unavailable"}</span>
           </div>
 
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-xl font-black text-slate-900">{formatPrice(product.price)}</span>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1 sm:mt-3 sm:gap-2">
+            <span className="text-sm font-black text-slate-900 sm:text-xl">{formatPrice(product.price)}</span>
             {hasDiscount ? (
-              <span className="text-sm text-slate-400 line-through">{formatPrice(product.originalPrice)}</span>
+              <span className="text-[10px] text-slate-400 line-through sm:text-sm">{formatPrice(product.originalPrice)}</span>
             ) : null}
           </div>
         </div>
       </Link>
 
       {/* Action buttons */}
-      <div className="p-3 pt-1">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <span className="text-xs font-bold text-slate-600">Quantity</span>
-          <div className="flex h-9 items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+      <div className="p-2 pt-1 sm:p-3 sm:pt-1">
+        <div className="mb-1.5 flex items-center justify-end gap-2 sm:mb-2 sm:justify-between">
+          <span className="hidden text-xs font-bold text-slate-600 sm:inline">Quantity</span>
+          <div className="flex h-8 items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 sm:h-9 sm:rounded-xl">
             <button type="button" onClick={() => setSafeQuantity(quantity - 1)} disabled={quantity <= 1 || isOutOfStock} className="flex h-full w-8 items-center justify-center text-slate-600 hover:bg-slate-200 disabled:opacity-35" aria-label="Decrease quantity"><Minus className="h-3.5 w-3.5" /></button>
             <input
               type="number"
@@ -505,7 +515,7 @@ function ProductCard({ product }: { product: ApiProduct }) {
               value={quantity}
               disabled={isOutOfStock}
               onChange={(event) => setSafeQuantity(Number(event.target.value))}
-              className="h-full w-12 border-x border-slate-200 bg-white text-center text-sm font-black text-slate-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="h-full w-8 border-x border-slate-200 bg-white text-center text-xs font-black text-slate-900 outline-none [appearance:textfield] sm:w-12 sm:text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               aria-label={`Quantity for ${product.title}`}
             />
             <button type="button" onClick={() => setSafeQuantity(quantity + 1)} disabled={quantity >= product.stock || isOutOfStock} className="flex h-full w-8 items-center justify-center text-slate-600 hover:bg-slate-200 disabled:opacity-35" aria-label="Increase quantity"><Plus className="h-3.5 w-3.5" /></button>
@@ -515,7 +525,7 @@ function ProductCard({ product }: { product: ApiProduct }) {
           <Link
             href={`/store/${product.id}`}
             onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch { } }}
-            className="flex h-10 flex-1 items-center justify-center rounded-xl bg-lime-500 text-xs font-bold text-white transition hover:bg-lime-600"
+            className="flex h-9 flex-1 items-center justify-center rounded-lg bg-lime-500 px-1 text-[10px] font-bold text-white transition hover:bg-lime-600 sm:h-10 sm:rounded-xl sm:text-xs"
           >
             View details
           </Link>
@@ -524,7 +534,7 @@ function ProductCard({ product }: { product: ApiProduct }) {
             onClick={handleAddToCart}
             disabled={isOutOfStock}
             aria-label={added ? "Added to cart" : "Add to cart"}
-            className={`flex h-10 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition cursor-pointer ${isOutOfStock
+            className={`flex h-9 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-bold transition cursor-pointer sm:h-10 sm:rounded-xl sm:px-3 ${isOutOfStock
               ? "cursor-not-allowed border-slate-200 text-slate-400 bg-slate-50"
               : added
                 ? "border-emerald-600 bg-emerald-600 text-white"

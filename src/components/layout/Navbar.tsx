@@ -29,6 +29,8 @@ export function Navbar() {
   const { location, setShowPicker } = useLocation();
   const { user, setAuthModalMode } = useAuth();
   const isDetailPage = /^\/(services|store)\/[^/]+$/.test(pathname);
+  const isMobileStorePage = pathname === "/store";
+  const autoHideNav = isDetailPage || isMobileStorePage;
   const searchScope = pathname.startsWith("/store") ? "shop_product" : "service";
   const visibleNavItems = navItems.filter((item) => item.href !== "/track-booking" || Boolean(user));
 
@@ -37,7 +39,7 @@ export function Navbar() {
       const currentScrollY = window.scrollY;
       setScrolled(currentScrollY > 10);
 
-      if (!isDetailPage || currentScrollY <= 80) {
+      if (!autoHideNav || currentScrollY <= 80) {
         setNavHidden(false);
       } else if (Math.abs(currentScrollY - lastScrollY.current) > 8) {
         setNavHidden(currentScrollY > lastScrollY.current);
@@ -49,15 +51,15 @@ export function Navbar() {
     window.addEventListener("scroll", handleScroll, { passive: true });
 
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [isDetailPage]);
+  }, [autoHideNav]);
 
   return (
     <>
       <header
         className={cn(
           "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
-          isDetailPage && navHidden && !mobileOpen && !profileOpen
-            ? "-translate-y-full"
+          autoHideNav && navHidden && !mobileOpen && !profileOpen
+            ? isMobileStorePage ? "-translate-y-full md:translate-y-0" : "-translate-y-full"
             : "translate-y-0",
           scrolled
             ? "border-b border-slate-100 bg-white/95 shadow-sm backdrop-blur-md py-1"
