@@ -1,19 +1,16 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Geist_Mono } from "next/font/google";
-import { Navbar } from "@/components/layout/Navbar";
-import { Footer } from "@/components/layout/Footer";
 import { MainWrapper } from "@/components/layout/MainWrapper";
+import { SiteChrome } from "@/components/layout/SiteChrome";
 import { LocationProvider } from "@/context/LocationContext";
 import { LocationModal } from "@/components/location/LocationModal";
 import { AuthProvider } from "@/context/AuthContext";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { OtpModal } from "@/components/auth/OtpModal";
-import { WhatsAppBot } from "@/components/shared/WhatsAppBot";
 import { CartProvider } from "@/context/CartContext";
 import { ToastProvider } from "@/context/ToastContext";
 import { ServiceCartProvider } from "@/context/ServiceCartContext";
-import FloatingServiceCart from "@/components/booking/FloatingServiceCart";
 import { siteConfig } from "@/lib/constants";
 import "./globals.css";
 
@@ -115,14 +112,12 @@ export default function RootLayout({
             <CartProvider>
               <ServiceCartProvider>
                 <LocationProvider>
-                  <Navbar />
+                  <SiteChrome position="top" />
                   <LocationModal />
                   <AuthModal />
                   <OtpModal />
                   <MainWrapper>{children}</MainWrapper>
-                  <FloatingServiceCart />
-                  <WhatsAppBot />
-                  <Footer />
+                  <SiteChrome position="bottom" />
                 </LocationProvider>
               </ServiceCartProvider>
             </CartProvider>

@@ -33,6 +33,7 @@ import { bookingTimestamp, clampBookingLeadHours, earliestBookingTimestamp, next
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 const BOOKING_DRAFT_KEY = "ustaadpro_booking_draft";
+const CHECKOUT_SELECTION_KEY = "ustaadpro_service_checkout";
 
 // ── Service Area: Rawalpindi + Islamabad ────────────────────────────────
 const SERVICE_AREA = { south: 33.40, north: 33.80, west: 72.85, east: 73.30 };
@@ -56,6 +57,7 @@ interface BookingModalProps {
   };
   services?: BookingModalProps["service"][];
   onBookingComplete?: () => void;
+  pageMode?: boolean;
 }
 
 function getTodayString() {
@@ -85,7 +87,7 @@ function validateSpecificAddress(value: string, mapLocationSelected: boolean): s
   return "";
 }
 
-export default function BookingModal({ isOpen, onClose, service, services, onBookingComplete }: BookingModalProps) {
+export default function BookingModal({ isOpen, onClose, service, services, onBookingComplete, pageMode = false }: BookingModalProps) {
   const { user, setAuthModalMode } = useAuth();
   const router = useRouter();
   const { items: cartItems, addService, updateQuantity, removeService } = useServiceCart();
@@ -97,7 +99,17 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const addressCardRef = useRef<HTMLDivElement>(null);
   const scheduleCardRef = useRef<HTMLDivElement>(null);
   const receiptAreaRef = useRef<HTMLDivElement>(null);
+  const errorAlertRef = useRef<HTMLDivElement>(null);
   const [validationFocus, setValidationFocus] = useState<{ target: "contact" | "address" | "schedule" | "receipt"; attempt: number } | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || pageMode) return;
+    const selection = JSON.stringify(services?.length ? services : [service]);
+    sessionStorage.setItem(CHECKOUT_SELECTION_KEY, selection);
+    localStorage.setItem(CHECKOUT_SELECTION_KEY, selection);
+    router.push("/service-checkout");
+    onClose();
+  }, [isOpen, pageMode, onClose, router, service, services]);
 
   // Basic Form State
   const [name, setName] = useState("");
@@ -213,10 +225,15 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
   // Derived Calculations
   const baseSelectedServices = services?.length ? services : [service];
-  const selectedServices = baseSelectedServices.map((item) => ({
-    ...item,
-    price: livePrices[`${item.id}:${item.selectedWorkPriceId || "service"}`] ?? item.price,
-  }));
+  const selectedServices = baseSelectedServices.map((item) => {
+    const key = `${item.id}:${item.selectedWorkPriceId || "service"}`;
+    const currentCartItem = cartItems.find((entry) => entry.key === key);
+    return {
+      ...item,
+      quantity: currentCartItem?.quantity ?? item.quantity,
+      price: livePrices[key] ?? item.price,
+    };
+  });
   const unitPrice = service.price;
   const quantity = Math.max(1, Math.min(10, Number(service.quantity || 1)));
   const daysCount = useMemo(
@@ -253,14 +270,26 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     const frame = window.requestAnimationFrame(() => {
       const container = modalBodyRef.current;
       const target = targets[validationFocus.target].current;
-      if (!container || !target) return;
+      if (!target) return;
+      if (pageMode) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        const field = target.querySelector<HTMLElement>("input, button, textarea, [tabindex]");
+        window.setTimeout(() => field?.focus({ preventScroll: true }), 350);
+        return;
+      }
+      if (!container) return;
       const containerRect = container.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
       const top = container.scrollTop + targetRect.top - containerRect.top - 12;
       container.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [validationFocus]);
+  }, [validationFocus, pageMode]);
+
+  useEffect(() => {
+    if (!error || validationFocus) return;
+    errorAlertRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [error, validationFocus]);
 
   const focusValidationCard = (target: "contact" | "address" | "schedule" | "receipt") => {
     setValidationFocus((current) => ({ target, attempt: (current?.attempt || 0) + 1 }));
@@ -288,21 +317,26 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     setError("");
     const reader = new FileReader();
     reader.onload = () => setReceiptDataUrl(String(reader.result || ""));
-    reader.onerror = () => setError("The selected receipt image could not be read.");
+    reader.onerror = () => {
+      setError("The selected receipt image could not be read.");
+      focusValidationCard("receipt");
+    };
     reader.readAsDataURL(file);
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || (!pageMode && isOpen)) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setValidationFocus(null);
     setInvalidContact({});
 
     // Auth Check
     const token = typeof window !== "undefined" ? localStorage.getItem("ustaadpro_token") : null;
     if (!user || !token) {
       setError("Please sign in or create an account to place your booking.");
+      setValidationFocus(null);
       setAuthModalMode("login");
       return;
     }
@@ -363,7 +397,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       return;
     }
 
-    if (step === "details") {
+    if (step === "details" && !pageMode) {
       setQuoteLoading(true);
       try {
         const settingsResponse = await fetch(`${API_BASE}/api/settings`, { cache: "no-store" });
@@ -523,7 +557,9 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
         setAuthModalMode("login");
       } else if (/choose.*time|hour\(s\).*from now|booking time/i.test(msg)) {
         setScheduleError(msg);
+        focusValidationCard("schedule");
       } else {
+        setValidationFocus(null);
         setError(msg);
       }
     } finally {
@@ -579,40 +615,53 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex touch-pan-y items-end justify-center overscroll-contain bg-slate-900/60 p-0 backdrop-blur-sm animate-in fade-in duration-200 sm:items-center sm:p-4">
-        <div className="relative flex max-h-[90dvh] min-w-0 w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl">
-          <div className="z-20 flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-4 py-3 sm:px-6 sm:py-4">
+      <div className={pageMode ? "min-h-screen bg-slate-50 px-3 py-5 sm:px-6 sm:py-8" : "fixed inset-0 z-50 flex touch-pan-y items-end justify-center overscroll-contain bg-slate-900/60 p-0 backdrop-blur-sm animate-in fade-in duration-200 sm:items-center sm:p-4"}>
+        <div className={pageMode ? "relative mx-auto flex min-w-0 w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:rounded-3xl" : "relative flex max-h-[90dvh] min-w-0 w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl"}>
+          <div className={`${pageMode ? "sticky top-0" : ""} z-20 flex shrink-0 items-center justify-between border-b border-slate-100 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 sm:py-5`}>
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-              {step === "payment" && (
+              {pageMode && (
+                <button type="button" onClick={() => router.back()} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" aria-label="Go back">
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+              )}
+              {!pageMode && step === "payment" && (
                 <button type="button" onClick={returnToDetails} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-200 text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" aria-label="Back to booking details">
                   <ArrowLeft className="h-4 w-4" />
                 </button>
               )}
               <div className="min-w-0">
-                <h2 className="text-lg font-black text-slate-900 sm:text-xl">{step === "details" ? "Booking details" : "Review & payment"}</h2>
-                <p className="max-w-[12rem] truncate text-xs font-bold text-emerald-600 sm:max-w-md">Step {step === "details" ? "1" : "2"} of 2 · {selectedServices.length > 1 ? `${selectedServices.length} services selected` : service.title}</p>
+                <h1 className="text-lg font-black text-slate-900 sm:text-2xl">Complete your booking</h1>
+                <p className="max-w-[16rem] truncate text-xs font-bold text-emerald-600 sm:max-w-xl">All details on one page · {selectedServices.length > 1 ? `${selectedServices.length} services selected` : service.title}</p>
               </div>
             </div>
+            {pageMode && <button type="button" onClick={addMoreServices} className="hidden rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-black text-emerald-700 transition hover:bg-emerald-100 sm:inline-flex">Book other services</button>}
             <button
               type="button"
               onClick={handleModalClose}
-              className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              className={`${pageMode ? "hidden" : ""} rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition`}
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
           {/* Modal Body */}
-          <div ref={modalBodyRef} className="min-w-0 max-h-[calc(100dvh-4.25rem)] overflow-x-hidden overflow-y-auto overscroll-contain touch-pan-y [overflow-anchor:none] booking-modal-scrollbar sm:max-h-[calc(94dvh-4.5rem)]">
+          <div ref={modalBodyRef} className={pageMode ? "min-w-0 overflow-x-hidden" : "min-w-0 max-h-[calc(100dvh-4.25rem)] overflow-x-hidden overflow-y-auto overscroll-contain touch-pan-y [overflow-anchor:none] booking-modal-scrollbar sm:max-h-[calc(94dvh-4.5rem)]"}>
           {bookingSuccess ? (
             <div className="p-6 sm:p-8 text-center space-y-4">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-lg shadow-emerald-600/10">
                 <CheckCircle2 className="h-10 w-10" />
               </div>
-              <h3 className="text-2xl font-black text-slate-900">Payment Submitted!</h3>
+              <h3 className="text-2xl font-black text-slate-900">Order placed successfully!</h3>
               <p className="text-sm text-slate-600 max-w-md mx-auto">
-                Your payment and service request were submitted. Admin will verify the payment and process your booking. You will be notified shortly.
+                Your booking has been received. Track its status anytime from Track Booking while our team verifies the payment and assigns a professional.
               </p>
+              <div className="mx-auto flex max-w-lg items-center justify-center gap-2 text-[11px] font-bold text-slate-500 sm:text-xs">
+                <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-emerald-700">1. Order placed</span>
+                <span aria-hidden="true">→</span>
+                <span className="rounded-full bg-amber-100 px-3 py-1.5 text-amber-700">2. Verification</span>
+                <span aria-hidden="true">→</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1.5">3. Professional assigned</span>
+              </div>
 
               {/* Order Reference Box */}
               <div className="my-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-1">
@@ -641,20 +690,21 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={handleModalClose}
-                className="w-full rounded-2xl bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition"
-              >
-                Done & Close
-              </button>
+              <div className="mx-auto grid max-w-xl gap-3 sm:grid-cols-2">
+                <button type="button" onClick={() => router.push("/track-booking")} className="rounded-2xl bg-emerald-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700">
+                  Track this booking
+                </button>
+                <button type="button" onClick={() => router.push("/services")} className="rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-bold text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700">
+                  Book another service
+                </button>
+              </div>
             </div>
           ) : (
             <form
               noValidate
               onSubmit={handleSubmit}
-              className={step === "details"
-                ? "grid min-w-0 grid-cols-1 content-start gap-3 overflow-x-hidden bg-slate-50/40 p-3 sm:p-4 lg:grid-cols-2 lg:gap-4"
+              className={step === "details" || pageMode
+                ? "grid min-w-0 grid-cols-1 content-start gap-3 overflow-x-hidden bg-slate-50/40 p-3 sm:p-5 lg:grid-cols-2 lg:gap-5"
                 : "flex min-w-0 flex-col gap-3 overflow-x-hidden bg-slate-50/40 p-3 sm:p-4"}
             >
               <p className="text-right text-[11px] font-semibold text-slate-500 lg:col-span-2"><span className="font-black text-red-500">*</span> Required fields</p>
@@ -677,14 +727,14 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
               {/* Error Alert */}
               {error && (
-                <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 lg:col-span-2">
+                <div ref={errorAlertRef} role="alert" tabIndex={-1} className="flex scroll-mt-6 items-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 outline-none lg:col-span-2">
                   <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
                   <span className="min-w-0 break-words leading-5">{error}</span>
                 </div>
               )}
 
               {/* Service Summary Card */}
-              <div className={`rounded-2xl border border-emerald-200 bg-white p-3 shadow-sm sm:p-4 ${step === "payment" ? "lg:col-span-2" : "lg:row-span-2 lg:h-full lg:self-stretch"}`}>
+              <div className={`rounded-2xl border border-emerald-200 bg-white p-3 shadow-sm sm:p-4 ${step === "payment" && !pageMode ? "lg:col-span-2" : "lg:row-span-2 lg:h-full lg:self-stretch"}`}>
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-[10px] uppercase font-bold text-slate-400">Selected service{selectedServices.length === 1 ? "" : "s"}</p>
                   <p className="text-sm font-black text-emerald-700">Rs {listedServicesTotal.toLocaleString()}</p>
@@ -722,12 +772,11 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" onClick={addMoreServices} className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">+ Add more services</button>
-                  {step === "payment" && <button type="button" onClick={returnToDetails} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">Back to modify details</button>}
                 </div>
-                {step === "payment" && <p className="mt-2 text-[10px] text-slate-400">Live prices and fees were refreshed from the UstaadPro API. The backend confirms the authoritative total when the order is submitted.</p>}
+                <p className="mt-2 text-[10px] text-slate-400">The backend confirms the authoritative total when the order is submitted.</p>
               </div>
 
-              {step === "payment" && <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
+              {step === "payment" && !pageMode && <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
                 <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-black text-slate-900">Shared booking details</h3><button type="button" onClick={returnToDetails} className="text-xs font-bold text-emerald-700 hover:underline">Modify details</button></div>
                 <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
                   <div><p className="font-bold uppercase tracking-wide text-slate-400">Customer</p><p className="mt-1 font-semibold text-slate-800">{name} · {phone}</p></div>
@@ -738,7 +787,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>}
 
               {/* Contact Information */}
-              <div ref={contactCardRef} className={`${step === "details" ? "lg:col-start-2" : "hidden"} rounded-2xl border bg-white p-4 shadow-sm transition ${invalidContact.name || invalidContact.phone ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
+              <div ref={contactCardRef} className={`${step === "details" || pageMode ? "lg:col-start-2" : "hidden"} rounded-2xl border bg-white p-4 shadow-sm transition ${invalidContact.name || invalidContact.phone ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
                 <h3 className="mb-3 text-sm font-black text-slate-900">Your contact details</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                 <div>
@@ -774,7 +823,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>
 
               {/* FEATURE 3: Address & Map Picker */}
-              <div ref={addressCardRef} className={`${step === "details" ? "lg:col-start-2" : "hidden"} space-y-3 rounded-2xl border bg-white p-4 shadow-sm transition ${addressTouched && (addressFieldError || error.includes("outside our service area")) ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
+              <div ref={addressCardRef} className={`${step === "details" || pageMode ? "lg:col-start-2" : "hidden"} space-y-3 rounded-2xl border bg-white p-4 shadow-sm transition ${addressTouched && (addressFieldError || error.includes("outside our service area")) ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
                 <h3 className="text-sm font-black text-slate-900">Where should we send the professional?</h3>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-600">
@@ -837,7 +886,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 </div>
               </div>
 
-              <div ref={scheduleCardRef} className={`${step === "details" ? "" : "hidden"} space-y-4 rounded-2xl border bg-white p-4 shadow-sm transition lg:col-span-2 ${scheduleError ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
+              <div ref={scheduleCardRef} className={`${step === "details" || pageMode ? "" : "hidden"} space-y-4 rounded-2xl border bg-white p-4 shadow-sm transition lg:col-span-2 ${scheduleError ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
                 <div><h3 className="text-sm font-black text-slate-900">Choose booking date & time</h3><p className="mt-1 text-xs text-slate-500">Select a date, recurrence preference, and an available arrival slot.</p></div>
                 {/* FEATURE 2: Recurring Booking Picker */}
                 <RecurringPicker
@@ -891,7 +940,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>
 
               {/* FEATURE 4: Payment Option & EasyPaisa Receipt Upload */}
-              {step === "payment" && <div className="min-w-0 lg:col-span-2">
+              {(step === "payment" || pageMode) && <div className="min-w-0 lg:col-span-2">
                 <EasyPaisaPaymentSection
                   paymentMethod={paymentMethod}
                   onPaymentMethodChange={(method) => { setPaymentMethod(method); setReceiptDataUrl(""); setReceiptFileName(""); setReceiptValidationError(false); }}
@@ -908,7 +957,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>}
 
               {/* Special Instructions */}
-              <div className={`${step === "details" ? "" : "hidden"} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2`}>
+              <div className={`${step === "details" || pageMode ? "" : "hidden"} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2`}>
                 <label className="block text-xs font-bold text-slate-600 mb-1">
                   Requirements / Special Instructions
                 </label>
@@ -947,7 +996,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                         {quoteLoading ? "Preparing live bill..." : "Submitting Booking..."}
                       </>
                     ) : (
-                      step === "details" ? "Proceed to payment" : paymentNow > 0 ? `Pay Rs ${paymentNow.toLocaleString()} & Confirm Booking` : "Redeem Reward & Confirm Booking"
+                      paymentNow > 0 ? `Pay Rs ${paymentNow.toLocaleString()} & Confirm Booking` : "Redeem Reward & Confirm Booking"
                     )}
                   </button>
                 )}
