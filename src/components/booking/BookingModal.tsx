@@ -394,14 +394,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       //   ? `${requirements.trim()}\n[EasyPaisa Payment Screenshot Attached: ${receiptFileName || "receipt.png"}]`.trim()
       //   : requirements.trim();
 
-      let noteWithReceipt = requirements.trim();
-      if (loyaltyDiscountEligible) {
-        const remainingToPay = Math.max(0, calculatedTotal - paymentNow);
-        const loyaltyTag = `[8-Order Loyalty Reward: PKR 200 Discount Applied | Final Total: Rs ${calculatedTotal.toLocaleString("en-PK")} | Advance Paid: Rs ${paymentNow.toLocaleString("en-PK")} | Remaining Payable: Rs ${remainingToPay.toLocaleString("en-PK")}]`;
-        noteWithReceipt = noteWithReceipt
-          ? `${noteWithReceipt}\n${loyaltyTag}`.trim()
-          : loyaltyTag;
-      }
+      const noteWithReceipt = requirements.trim();
 
       const isRewardPoints = useRewardPoints && rewardEligible && !loyaltyDiscountEligible;
       const serverRewardPointsEligible = rewardPoints >= 4; // server requires at least 4 points (Rs 100 value) to process useRewardPoints

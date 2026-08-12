@@ -15,6 +15,7 @@ import {
   loginWithPhone as apiLoginWithPhone,
   requestPasswordResetOtp,
   resetPasswordWithOtp,
+  deleteAccountUser,
   type AuthUser,
   type SignupPayload,
 } from "@/services/authService";
@@ -65,6 +66,7 @@ interface AuthContextValue {
   requestPasswordReset: (email: string, channel?: "email" | "phone") => Promise<void>;
   resetPassword: (code: string, newPassword: string) => Promise<void>;
   logout: () => void;
+  deleteAccount: () => Promise<void>;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -269,6 +271,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  // ── Delete Account ───────────────────────────────────────────────────────
+  const deleteAccount = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      await deleteAccountUser();
+      clearSession();
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const closeOtpModal = useCallback(() => setOtpModal(null), []);
   const returnFromOtp = useCallback(() => {
     if (!otpModal) return;
@@ -295,6 +309,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         requestPasswordReset,
         resetPassword,
         logout,
+        deleteAccount,
       }}
     >
       {children}

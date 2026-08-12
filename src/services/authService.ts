@@ -172,3 +172,11 @@ export async function getProfile(): Promise<AuthUser> {
   const res = await api.get<AuthUser>("/profile");
   return res.data;
 }
+
+// ── Delete account (authenticated) ─────────────────────────────────────────
+
+export async function deleteAccountUser(): Promise<{ message: string }> {
+  const res = await api.delete<{ message: string }>("/account");
+  return res.data;
+}
+
