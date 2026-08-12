@@ -93,14 +93,12 @@ async function getDetailedServices(signal?: AbortSignal) {
   }).then(async (response) => {
     if (!response.ok) throw new Error(`Services returned HTTP ${response.status}`);
     const services: DetailedService[] = await response.json();
-    return Promise.all(services.map(async (service) => {
-      const detailResponse = await fetch(
-        `${API_BASE_URL}/api/services/${encodeURIComponent(String(service.id || ""))}`,
-        { cache: "no-store", signal },
-      );
-      if (!detailResponse.ok) return { ...service, resultType: "service" as const };
-      const detail = await detailResponse.json();
-      return { ...service, ...detail, resultType: "service" as const } as DetailedService;
+    // The collection endpoint already includes workPrices and all fields used by
+    // search. Fetching every service detail here caused an N+1 request burst and
+    // quickly hit API rate limits on any page containing the navbar.
+    return services.map((service) => ({
+      ...service,
+      resultType: "service" as const,
     }));
   }).catch((error) => {
     detailedServicesPromise = null;

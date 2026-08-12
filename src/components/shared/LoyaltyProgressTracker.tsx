@@ -2,17 +2,13 @@
 
 import { Gift, CheckCircle2, LockKeyhole } from "lucide-react";
 
-// Every 9th order (after 8 are completed) gets PKR 200 loyalty discount.
-// completedOrders % 9 = how many blocks to fill (0-8).
-// When blocksFilled === 8, the next booking is eligible for PKR 200 OFF.
-
-const ORDERS_PER_CYCLE = 9; // 9th order = discount
-const BLOCKS = 8; // 8 blocks shown (1-8)
-const DISCOUNT_VALUE = 200;
+const ORDERS_PER_CYCLE = 12;
+const BLOCKS = 12;
+const DISCOUNT_VALUE = 300;
 
 interface LoyaltyProgressTrackerProps {
-  /** Total number of completed eligible orders */
-  completedOrders: number;
+  /** Current available reward points */
+  rewardPoints: number;
   /** Compact mode for embedding in sidebars / stats sections */
   compact?: boolean;
   /** Show the reward unlock summary card alongside the tracker */
@@ -22,15 +18,13 @@ interface LoyaltyProgressTrackerProps {
 }
 
 export function LoyaltyProgressTracker({
-  completedOrders,
+  rewardPoints,
   compact = false,
   showSummaryCard = false,
   completedCycles = 0,
 }: LoyaltyProgressTrackerProps) {
-  // How many blocks are filled in the current cycle (0-8)
-  const blocksFilled = completedOrders % ORDERS_PER_CYCLE;
-  // True when user has 8 completed orders in this cycle → next booking gets PKR 200 OFF
-  const rewardReady = blocksFilled === BLOCKS;
+  const blocksFilled = Math.min(BLOCKS, Math.max(0, rewardPoints));
+  const rewardReady = rewardPoints >= BLOCKS;
 
   if (compact) {
     return (
@@ -51,9 +45,9 @@ export function LoyaltyProgressTracker({
         </div>
         <span className="text-xs font-bold text-slate-600">
           {rewardReady ? (
-            <span className="text-emerald-600">PKR 200 OFF Ready!</span>
+            <span className="text-emerald-600">PKR 300 OFF Ready!</span>
           ) : (
-            `${blocksFilled}/8`
+            `${blocksFilled}/12`
           )}
         </span>
       </div>
@@ -66,28 +60,27 @@ export function LoyaltyProgressTracker({
       <div className="flex items-center gap-2">
         <Gift className="h-5 w-5 text-emerald-600" />
         <h2 className="text-xl font-black text-slate-900">
-          Eight-order loyalty reward
+          Twelve-point loyalty reward
         </h2>
         {rewardReady && (
           <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-emerald-300 animate-pulse">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            PKR 200 OFF Ready!
+            PKR 300 OFF Ready!
           </span>
         )}
       </div>
 
       <p className="text-sm leading-6 text-slate-600">
-        Complete 8 eligible orders to unlock a <strong>PKR 200 discount</strong> on
-        your next (9th) booking. After the discount is applied, your counter resets
-        and the next cycle begins.
+        Every completed service order earns 1 point worth PKR 25. Twelve points
+        unlock a <strong>PKR 300 automatic discount</strong> on your next booking.
       </p>
 
       {/* Progress text */}
       <div className="flex justify-between text-xs font-bold">
         <span className="text-slate-600">
           {rewardReady
-            ? "8 of 8 orders completed — discount ready!"
-            : `${blocksFilled} of 8 orders toward the next reward`}
+            ? "12 of 12 points earned — discount ready!"
+            : `${blocksFilled} of 12 points toward the next reward`}
         </span>
         <span className={rewardReady ? "text-emerald-700" : "text-slate-500"}>
           PKR {rewardReady ? DISCOUNT_VALUE : blocksFilled * 25} / PKR {DISCOUNT_VALUE}
@@ -106,8 +99,7 @@ export function LoyaltyProgressTracker({
         />
       </div>
 
-      {/* 8 Block grid */}
-      <div className="grid grid-cols-8 gap-1.5">
+      <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-12">
         {Array.from({ length: BLOCKS }).map((_, i) => {
           const filled = i < blocksFilled || rewardReady;
           return (
@@ -126,7 +118,7 @@ export function LoyaltyProgressTracker({
       </div>
 
       <p className="text-[11px] text-slate-500">
-        Each admin-confirmed service order increases your progress. After the 9th (discounted) order, the counter resets for the next cycle.
+        The API adds 1 point after completion. Once 12 points are available, PKR 300 is applied and the 12 points are redeemed automatically.
       </p>
 
       {/* Reward summary card */}
@@ -161,7 +153,7 @@ export function LoyaltyProgressTracker({
 }
 
 /**
- * Badge shown inside order/admin detail when a PKR 200 loyalty discount was applied.
+ * Badge shown inside order/admin detail when a PKR 300 loyalty discount was applied.
  */
 export function LoyaltyDiscountBadge({ className = "" }: { className?: string }) {
   return (
@@ -169,7 +161,7 @@ export function LoyaltyDiscountBadge({ className = "" }: { className?: string })
       className={`inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-300 ${className}`}
     >
       <Gift className="h-3 w-3" />
-      PKR 200 Loyalty Discount Applied
+      PKR 300 Loyalty Discount Applied
     </span>
   );
 }

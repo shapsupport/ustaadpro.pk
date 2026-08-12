@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, CheckCircle2, Coins, CreditCard, Gift, History, RefreshCw, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { getProfile, type AuthUser } from "@/services/authService";
@@ -9,10 +9,9 @@ import { Button } from "@/components/ui/button";
 import { LoyaltyProgressTracker } from "@/components/shared/LoyaltyProgressTracker";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
-// Loyalty cycle: every 9th order (after 8 completed) = PKR 200 OFF
-const ORDERS_PER_CYCLE = 9;
 const VALUE_PER_ORDER = 25;
-const REWARD_VALUE = 200;
+const POINTS_PER_REWARD = 12;
+const REWARD_VALUE = 300;
 
 type PaymentActivity = {
   id: string;
@@ -104,15 +103,10 @@ export default function WalletPage() {
 
   useEffect(() => { if (user) void loadWallet(); }, [user]);
 
-  const eligibleOrders = useMemo(() => activity.filter((item) => {
-    if (item.kind !== "service") return false; // Loyalty only applies to service bookings
-    const status = (item.status || "").toLowerCase().replace(/\s+/g, "_");
-    return /^(confirmed|assigned|in[_ ]?progress|completed|delivered)$/.test(status);
-  }).length, [activity]);
-  // Loyalty cycle: mod 9 (every 9th order = PKR 200 OFF after 8 are done)
-  const loyaltyCycleProgress = eligibleOrders % ORDERS_PER_CYCLE; // 0-8
-  const completedCycles = Math.floor(eligibleOrders / ORDERS_PER_CYCLE);
-  const loyaltyEarned = eligibleOrders * VALUE_PER_ORDER;
+  const rewardPoints = Number(profile?.rewardPoints || 0);
+  const loyaltyCycleProgress = Math.min(POINTS_PER_REWARD, rewardPoints);
+  const rewardReady = rewardPoints >= POINTS_PER_REWARD;
+  const loyaltyEarned = rewardPoints * VALUE_PER_ORDER;
   const paidTotal = activity.reduce((sum, item) => sum + item.paid, 0);
   const payableTotal = activity.reduce((sum, item) => sum + item.payable, 0);
 
@@ -120,7 +114,7 @@ export default function WalletPage() {
     <section className="border-b border-emerald-900/10 bg-gradient-to-br from-emerald-950 via-emerald-900 to-slate-950 text-white">
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
         <div className="flex max-w-3xl items-center gap-3"><div className="rounded-2xl bg-lime-300/10 p-3 ring-1 ring-lime-300/20"><WalletCards className="h-7 w-7 text-lime-300" /></div><div><p className="text-xs font-bold uppercase tracking-[.22em] text-lime-300">UstaadPro Wallet</p><h1 className="mt-1 text-3xl font-black sm:text-4xl">Payments and rewards, made simple</h1></div></div>
-        <p className="mt-4 max-w-2xl text-sm leading-6 text-emerald-100 sm:text-base">See wallet refunds, booking payments, outstanding listed charges, and your progress toward the eight-order loyalty reward.</p>
+        <p className="mt-4 max-w-2xl text-sm leading-6 text-emerald-100 sm:text-base">See wallet refunds, booking payments, outstanding listed charges, and your progress toward the twelve-point loyalty reward.</p>
       </div>
     </section>
 
@@ -130,37 +124,33 @@ export default function WalletPage() {
         <MetricCard icon={<WalletCards />} label="Wallet balance" value={`PKR ${Number(profile?.walletBalance || 0).toLocaleString("en-PK")}`} help="Verified eligible cancellation refunds" color="emerald" />
         <MetricCard icon={<CreditCard />} label="Payments submitted" value={`PKR ${paidTotal.toLocaleString("en-PK")}`} help="Across your loaded orders" color="blue" />
         <MetricCard icon={<History />} label="Listed amount payable" value={`PKR ${payableTotal.toLocaleString("en-PK")}`} help="Excludes later on-site quotes" color="amber" />
-        <MetricCard icon={<Coins />} label="Loyalty value earned" value={`PKR ${loyaltyEarned.toLocaleString("en-PK")}`} help={`${eligibleOrders} confirmed, fully paid order${eligibleOrders === 1 ? "" : "s"} × PKR 25`} color="violet" />
+        <MetricCard icon={<Coins />} label="Available reward value" value={`PKR ${loyaltyEarned.toLocaleString("en-PK")}`} help={`${rewardPoints} point${rewardPoints === 1 ? "" : "s"} × PKR 25`} color="violet" />
       </div>
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1fr_320px] lg:items-start">
           <LoyaltyProgressTracker
-            completedOrders={eligibleOrders}
+            rewardPoints={rewardPoints}
             showSummaryCard={false}
           />
-          <div className={`rounded-2xl p-5 text-center ${loyaltyCycleProgress === 8 ? "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200" : completedCycles > 0 ? "bg-slate-50 text-slate-800 ring-1 ring-slate-200" : "bg-slate-100 text-slate-700"}`}>
-            {loyaltyCycleProgress === 8 ? (
+          <div className={`rounded-2xl p-5 text-center ${rewardReady ? "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200" : "bg-slate-100 text-slate-700"}`}>
+            {rewardReady ? (
               <CheckCircle2 className="mx-auto h-9 w-9 text-emerald-600" />
-            ) : completedCycles > 0 ? (
-              <Gift className="mx-auto h-9 w-9 text-slate-400" />
             ) : (
               <Gift className="mx-auto h-9 w-9 text-slate-300" />
             )}
             <p className="mt-3 text-sm font-bold">
-              {loyaltyCycleProgress === 8
-                ? "PKR 200 OFF Ready!"
-                : completedCycles > 0
-                ? `${completedCycles} reward${completedCycles > 1 ? "s" : ""} unlocked`
-                : `${8 - loyaltyCycleProgress} more order${8 - loyaltyCycleProgress === 1 ? "" : "s"} to unlock`}
+              {rewardReady
+                ? "PKR 300 OFF Ready!"
+                : `${POINTS_PER_REWARD - loyaltyCycleProgress} more point${POINTS_PER_REWARD - loyaltyCycleProgress === 1 ? "" : "s"} to unlock`}
             </p>
             <p className="mt-1 text-2xl font-black">
-              PKR {(completedCycles * REWARD_VALUE).toLocaleString("en-PK")}
+              PKR {Math.min(REWARD_VALUE, loyaltyEarned).toLocaleString("en-PK")}
             </p>
-            <p className="mt-1 text-xs opacity-70">Cumulative discount value</p>
-            {loyaltyCycleProgress === 8 && (
+            <p className="mt-1 text-xs opacity-70">Available reward value</p>
+            {rewardReady && (
               <p className="mt-3 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-bold text-emerald-800">
-                Your next booking gets <strong>PKR 200 OFF</strong> automatically!
+                Your next booking gets <strong>PKR 300 OFF</strong> automatically!
               </p>
             )}
           </div>
@@ -181,22 +171,21 @@ function GuestWallet({ onLogin }: { onLogin: () => void }) {
       <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <Sparkles className="h-9 w-9 text-emerald-600" />
-          <h2 className="mt-4 text-2xl font-black text-slate-900">PKR 200 OFF on your 9th booking</h2>
+          <h2 className="mt-4 text-2xl font-black text-slate-900">Earn PKR 300 after 12 completed orders</h2>
           <p className="mt-3 leading-7 text-slate-600">
-            Complete 8 eligible orders to unlock a <strong>PKR 200 discount</strong> on
-            your 9th booking. After the discount is applied, your counter resets and
-            the next cycle begins.
+            Every completed service order earns 1 point worth PKR 25. Twelve points
+            unlock a <strong>PKR 300 automatic discount</strong> on your next booking.
           </p>
-          <div className="mt-6 grid grid-cols-8 gap-1.5">
-            {Array.from({ length: 8 }).map((_, index) => (
+          <div className="mt-6 grid grid-cols-6 gap-1.5 sm:grid-cols-12">
+            {Array.from({ length: 12 }).map((_, index) => (
               <div key={index} className="grid h-10 place-items-center rounded-xl bg-emerald-50 text-sm font-black text-emerald-700 ring-1 ring-emerald-200">
                 {index + 1}
               </div>
             ))}
           </div>
           <div className="mt-3 flex justify-between text-xs font-bold text-slate-500">
-            <span>Complete 8 orders</span>
-            <span>9th order = PKR 200 OFF</span>
+            <span>Complete 12 orders</span>
+            <span>12 points = PKR 300 OFF</span>
           </div>
           <Button className="mt-7 w-full sm:w-auto" onClick={onLogin}>Sign in to see my wallet</Button>
         </section>

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { CreditCard, Gift, ShieldCheck, Info, Upload } from "lucide-react";
+import { CreditCard, ShieldCheck, Info, Upload, WalletCards, Gift } from "lucide-react";
 
 interface EasyPaisaPaymentSectionProps {
   paymentMethod: "Rs 200 Advance" | "Full Payment in Advance";
@@ -9,10 +9,12 @@ interface EasyPaisaPaymentSectionProps {
   total: number;
   receiptFileName: string;
   onReceiptSelect: (file: File | null) => void;
-  rewardEligible?: boolean;
-  rewardLoading?: boolean;
-  useRewardPoints?: boolean;
-  onUseRewardPointsChange?: (value: boolean) => void;
+  walletBalance: number;
+  useWalletBalance: boolean;
+  onUseWalletBalanceChange: (value: boolean) => void;
+  rewardEligible: boolean;
+  useRewardPoints: boolean;
+  onUseRewardPointsChange: (value: boolean) => void;
 }
 
 export default function EasyPaisaPaymentSection({
@@ -21,16 +23,19 @@ export default function EasyPaisaPaymentSection({
   total,
   receiptFileName,
   onReceiptSelect,
-  rewardEligible = false,
-  rewardLoading = false,
-  useRewardPoints = false,
+  walletBalance,
+  useWalletBalance,
+  onUseWalletBalanceChange,
+  rewardEligible,
+  useRewardPoints,
   onUseRewardPointsChange,
 }: EasyPaisaPaymentSectionProps) {
-  const rewardDiscount = useRewardPoints ? Math.min(200, total) : 0;
+  const walletApplied = useWalletBalance ? Math.min(walletBalance, total) : 0;
+  const afterWalletTotal = Math.max(0, total - walletApplied);
   const cashDue = paymentMethod === "Rs 200 Advance"
-    ? Math.max(0, Math.min(200, total) - rewardDiscount)
-    : Math.max(0, total - rewardDiscount);
-  const remaining = paymentMethod === "Rs 200 Advance" ? Math.max(0, total - 200) : 0;
+    ? afterWalletTotal <= 250 ? afterWalletTotal : Math.max(0, 200 - walletApplied)
+    : afterWalletTotal;
+  const remaining = paymentMethod === "Rs 200 Advance" ? Math.max(0, afterWalletTotal - cashDue) : 0;
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
       <div className="flex items-center justify-between">
@@ -44,6 +49,19 @@ export default function EasyPaisaPaymentSection({
         </span>
       </div>
 
+      {rewardEligible && <button type="button" onClick={() => onUseRewardPointsChange(!useRewardPoints)} className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${useRewardPoints ? "border-violet-500 bg-violet-50 ring-1 ring-violet-300" : "border-violet-200 bg-white hover:bg-violet-50"}`}><Gift className="h-5 w-5 text-violet-700" /><span className="flex-1"><strong className="block text-sm">Redeem 12 reward points</strong><span className="text-[11px] text-slate-500">Apply PKR 300 before tax</span></span></button>}
+
+      {walletBalance > 0 && (
+        <button type="button" onClick={() => onUseWalletBalanceChange(!useWalletBalance)} className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${useWalletBalance ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-300" : "border-slate-200 bg-white hover:border-emerald-300"}`}>
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-700"><WalletCards className="h-5 w-5" /></span>
+          <span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-900">Use wallet balance</span><span className="block text-[11px] text-slate-500">Available PKR {walletBalance.toLocaleString("en-PK")} · Apply PKR {Math.min(walletBalance, total).toLocaleString("en-PK")}</span></span>
+          <span className={`h-5 w-9 rounded-full p-0.5 transition ${useWalletBalance ? "bg-emerald-600" : "bg-slate-200"}`}><span className={`block h-4 w-4 rounded-full bg-white transition ${useWalletBalance ? "translate-x-4" : ""}`} /></span>
+        </button>
+      )}
+
+      {walletApplied > 0 && <div className="flex justify-between rounded-xl bg-emerald-100 px-3 py-2 text-xs font-bold text-emerald-800"><span>Wallet adjustment</span><span>− Rs {walletApplied.toLocaleString("en-PK")}</span></div>}
+      {paymentMethod === "Rs 200 Advance" && afterWalletTotal > 0 && afterWalletTotal <= 250 && <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">The remaining PKR {afterWalletTotal.toLocaleString("en-PK")} must be paid in full to place this order.</p>}
+
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <button type="button" onClick={() => onPaymentMethodChange("Rs 200 Advance")} className={`rounded-2xl border p-3 text-center transition ${paymentMethod === "Rs 200 Advance" ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-400" : "border-slate-200 bg-white"}`}>
           <span className="text-lg font-black text-emerald-600">Rs 200</span>
@@ -53,30 +71,15 @@ export default function EasyPaisaPaymentSection({
         <button type="button" onClick={() => onPaymentMethodChange("Full Payment in Advance")} className={`rounded-2xl border p-3 text-center transition ${paymentMethod === "Full Payment in Advance" ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-400" : "border-slate-200 bg-white"}`}>
           <span className="text-lg font-black text-emerald-600">Rs {total.toLocaleString("en-PK")}</span>
           <p className="text-xs font-bold text-slate-800">Pay in full</p>
-          <p className="text-[10px] text-slate-500">No balance on the listed charge</p>
+          <p className="text-[10px] font-bold text-emerald-700">Extra 5% discount before tax</p>
         </button>
       </div>
-
-      {(rewardEligible || rewardLoading) && (
-        <button
-          type="button"
-          disabled={rewardLoading}
-          onClick={() => onUseRewardPointsChange?.(!useRewardPoints)}
-          className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${useRewardPoints ? "border-violet-500 bg-violet-50 ring-1 ring-violet-300" : "border-violet-200 bg-white hover:bg-violet-50"}`}
-        >
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-100 text-violet-700"><Gift className="h-5 w-5" /></span>
-          <span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-900">Redeem PKR 200 loyalty reward</span><span className="block text-[11px] text-slate-500">Use it for the booking advance or deduct it from full payment.</span></span>
-          <span className={`h-5 w-9 rounded-full p-0.5 transition ${useRewardPoints ? "bg-violet-600" : "bg-slate-200"}`}><span className={`block h-4 w-4 rounded-full bg-white transition ${useRewardPoints ? "translate-x-4" : ""}`} /></span>
-        </button>
-      )}
 
       <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-900 p-3 text-center text-white sm:gap-2">
         <div><p className="text-[9px] uppercase text-slate-400">Service total</p><p className="text-xs font-bold">Rs {total.toLocaleString("en-PK")}</p></div>
         <div><p className="text-[9px] uppercase text-slate-400">Pay now</p><p className="text-xs font-bold text-lime-300">Rs {cashDue.toLocaleString("en-PK")}</p></div>
         <div><p className="text-[9px] uppercase text-slate-400">Remaining</p><p className="text-xs font-bold">Rs {remaining.toLocaleString("en-PK")}</p></div>
       </div>
-
-      {useRewardPoints && <p className="rounded-xl bg-violet-100 px-3 py-2 text-xs font-bold text-violet-800">PKR {rewardDiscount.toLocaleString("en-PK")} loyalty reward applied to this booking.</p>}
 
       {/* Notice when EasyPaisa selected */}
       {cashDue > 0 && <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 animate-in fade-in duration-200">
@@ -95,7 +98,7 @@ export default function EasyPaisaPaymentSection({
         <Upload className="h-4 w-4" />
         {receiptFileName || "Upload booking payment receipt *"}
         <input type="file" accept="image/*" required={!receiptFileName} className="sr-only" onChange={(event) => onReceiptSelect(event.target.files?.[0] ?? null)} />
-      </label> : <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center text-xs font-bold text-emerald-800">Your PKR 200 reward covers the booking confirmation. No receipt is required.</div>}
+      </label> : null}
     </div>
   );
 }
