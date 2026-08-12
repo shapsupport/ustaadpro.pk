@@ -15,7 +15,7 @@ function uniqueResults(results: SearchResult[]) {
 
 let serviceVocabularyPromise: Promise<string[]> | null = null;
 let productVocabularyPromise: Promise<string[]> | null = null;
-let detailedServicesPromise: Promise<DetailedService[]> | null = null;
+let servicesPromise: Promise<DetailedService[]> | null = null;
 
 type DetailedService = SearchResult & {
   workPrices?: Array<{
@@ -47,7 +47,7 @@ export function getSearchVocabulary(scope: SearchResult["resultType"], signal?: 
   if (scope === "service") {
     serviceVocabularyPromise ??= Promise.all([
       fetch(`${API_BASE_URL}/api/categories/`, { cache: "no-store", signal }).then((response) => response.ok ? response.json() : []),
-      getDetailedServices(signal),
+      getServices(signal),
     ]).then(([categories, services]) => searchableTerms([
       ...(Array.isArray(categories) ? categories.flatMap((item) => [item.title, item.subtitle]) : []),
       ...services.flatMap((item) => [
@@ -69,16 +69,7 @@ export function getSearchVocabulary(scope: SearchResult["resultType"], signal?: 
     if (!response.ok) return [];
     const metadata = await response.json();
     const categories = Array.isArray(metadata?.categories) ? metadata.categories.map((item: { name?: string }) => item.name || "") : [];
-    const batches = await Promise.all(categories.map(async (category: string) => {
-      const params = new URLSearchParams({ category, limit: "30", offset: "0" });
-      const categoryResponse = await fetch(`${API_BASE_URL}/api/shop/products?${params}`, { cache: "no-store", signal });
-      if (!categoryResponse.ok) return [];
-      const data = await categoryResponse.json();
-      return Array.isArray(data?.products)
-        ? data.products.flatMap((item: ApiProduct) => [item.title, item.description])
-        : [];
-    }));
-    return searchableTerms([...categories, ...batches.flat()]);
+    return searchableTerms(categories);
   }).catch((error) => {
     productVocabularyPromise = null;
     throw error;
@@ -86,8 +77,8 @@ export function getSearchVocabulary(scope: SearchResult["resultType"], signal?: 
   return productVocabularyPromise;
 }
 
-async function getDetailedServices(signal?: AbortSignal) {
-  detailedServicesPromise ??= fetch(`${API_BASE_URL}/api/services/`, {
+async function getServices(signal?: AbortSignal) {
+  servicesPromise ??= fetch(`${API_BASE_URL}/api/services/`, {
     cache: "no-store",
     signal,
   }).then(async (response) => {
@@ -96,15 +87,12 @@ async function getDetailedServices(signal?: AbortSignal) {
     // The collection endpoint already includes workPrices and all fields used by
     // search. Fetching every service detail here caused an N+1 request burst and
     // quickly hit API rate limits on any page containing the navbar.
-    return services.map((service) => ({
-      ...service,
-      resultType: "service" as const,
-    }));
+    return services.map((service) => ({ ...service, resultType: "service" as const }));
   }).catch((error) => {
-    detailedServicesPromise = null;
+    servicesPromise = null;
     throw error;
   });
-  return detailedServicesPromise;
+  return servicesPromise;
 }
 
 export async function searchServicesFromApi(
@@ -112,7 +100,7 @@ export async function searchServicesFromApi(
   category = "all",
   signal?: AbortSignal,
 ): Promise<SearchResult[]> {
-  const services = await getDetailedServices(signal);
+  const services = await getServices(signal);
   const normalizedQuery = query.trim().toLowerCase();
   return services.flatMap((service) => {
     const serviceCategory = String(service.category_id || service.categoryId || "").toLowerCase();
@@ -151,7 +139,7 @@ export async function searchSuggestions(
   scope: "all" | SearchResult["resultType"] = "all",
   signal?: AbortSignal,
 ): Promise<SearchResult[]> {
-  const params = new URLSearchParams({ q: query.trim(), limit: "30", offset: "0" });
+  const params = new URLSearchParams({ q: query.trim(), limit: "15", offset: "0" });
   const response = await fetch(`${API_BASE_URL}/api/search?${params}`, { cache: "no-store", signal });
   if (!response.ok) throw new Error(`Search returned HTTP ${response.status}`);
   const data = await response.json();
@@ -163,7 +151,7 @@ export async function searchSuggestions(
     ];
   }
 
-  return results.filter((result) => result.resultType === scope).slice(0, 30);
+  return results.filter((result) => result.resultType === scope).slice(0, 15);
 }
 
 export async function searchProductsByCategory(
@@ -172,7 +160,7 @@ export async function searchProductsByCategory(
 ): Promise<SearchResult[]> {
   const params = new URLSearchParams({
     category: category.trim(),
-    limit: "30",
+    limit: "15",
     offset: "0",
   });
   const response = await fetch(`${API_BASE_URL}/api/shop/products?${params}`, {
@@ -191,21 +179,12 @@ export async function searchProductsByCategory(
 export async function searchApi(query: string, resultType: "service", signal?: AbortSignal): Promise<ApiService[]>;
 export async function searchApi(query: string, resultType: "shop_product", signal?: AbortSignal): Promise<ApiProduct[]>;
 export async function searchApi(query: string, resultType: SearchResult["resultType"], signal?: AbortSignal): Promise<ApiService[] | ApiProduct[]> {
-  const matches: SearchResult[] = [];
-  let offset = 0;
-  let hasMore = true;
-  while (hasMore && offset < 5_000) {
-    const params = new URLSearchParams({ q: query.trim(), limit: "50", offset: String(offset) });
-    const response = await fetch(`${API_BASE_URL}/api/search?${params}`, { cache: "no-store", signal });
-    if (!response.ok) throw new Error(`Search returned HTTP ${response.status}`);
-    const data = await response.json();
-    const results: SearchResult[] = Array.isArray(data?.results) ? data.results : [];
-    matches.push(...results.filter((result) => result.resultType === resultType));
-    hasMore = Boolean(data?.hasMore);
-    offset += Number(data?.limit || 50);
-  }
-
-  const deduplicatedMatches = uniqueResults(matches);
+  const params = new URLSearchParams({ q: query.trim(), limit: "15", offset: "0" });
+  const response = await fetch(`${API_BASE_URL}/api/search?${params}`, { cache: "no-store", signal });
+  if (!response.ok) throw new Error(`Search returned HTTP ${response.status}`);
+  const data = await response.json();
+  const results: SearchResult[] = Array.isArray(data?.results) ? data.results : [];
+  const deduplicatedMatches = uniqueResults(results.filter((result) => result.resultType === resultType));
 
   if (resultType === "shop_product") {
     return deduplicatedMatches.map((result) => ({

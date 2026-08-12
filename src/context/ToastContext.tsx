@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 
-const TOAST_DURATION_MS = 5000;
+const TOAST_DURATION_MS = 3000;
 const SUCCESS_TOAST_EVENT = "ustaadpro:success-toast";
 
 export function showSuccessToast(message: string) {
@@ -55,7 +55,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         <div
           role="status"
           aria-live="polite"
-          className="fixed right-4 top-20 z-[200] flex w-[calc(100%-2rem)] max-w-sm items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-4 text-slate-800 shadow-2xl sm:right-6 sm:top-24"
+          className="fixed bottom-4 right-4 z-[200] flex w-[calc(100%-2rem)] max-w-sm items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-4 text-slate-800 shadow-2xl sm:bottom-6 sm:right-6"
         >
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
             <CheckCircle2 className="h-6 w-6" />

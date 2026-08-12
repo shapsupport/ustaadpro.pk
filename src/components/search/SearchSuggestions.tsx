@@ -24,6 +24,7 @@ function SuggestionItem({ result }: { result: SearchResult }) {
   return (
     <Link
       href={href}
+      prefetch={false}
       className="flex items-center gap-3 rounded-xl p-2.5 transition hover:bg-emerald-50 focus:bg-emerald-50 focus:outline-none"
     >
       <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100">

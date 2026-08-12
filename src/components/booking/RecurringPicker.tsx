@@ -85,7 +85,7 @@ export default function RecurringPicker({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-600 mb-1">
-                From Date *
+                From Date <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -108,7 +108,7 @@ export default function RecurringPicker({
 
             <div>
               <label className="block text-xs font-bold text-slate-600 mb-1">
-                To Date *
+                To Date <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />

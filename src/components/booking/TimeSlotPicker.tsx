@@ -54,7 +54,7 @@ export default function TimeSlotPicker({
       <div className="flex items-center justify-between">
         <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-600">
           <Clock className="h-4 w-4 text-emerald-600" />
-          Select Preferred Time Slot *
+          Select Preferred Time Slot <span className="text-red-500">*</span>
         </label>
         {selectedTime && (
           <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">

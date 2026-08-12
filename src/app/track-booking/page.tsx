@@ -239,7 +239,6 @@ export default function TrackBookingPage() {
     const interval = setInterval(() => { void load(); }, 30000);
     return () => clearInterval(interval);
   }, [user, load]);
-
   if (!user) return <SignIn onLogin={() => setAuthModalMode("login")} />;
 
   const visibleBookings = view === "all" ? bookings : bookings.filter((booking) => booking.kind === view);

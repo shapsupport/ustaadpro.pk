@@ -84,6 +84,21 @@ export default function CartCheckoutModal({
     setMounted(true);
   }, []);
 
+  // Keep the page behind the checkout fixed without causing a scrollbar-width
+  // layout jump. The modal itself owns the only active vertical scrollbar.
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
+    };
+  }, [isOpen]);
+
   // Shipping is configured by the API and can be changed without a frontend deploy.
   useEffect(() => {
     if (!isOpen) return;
@@ -229,8 +244,9 @@ export default function CartCheckoutModal({
 
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-        <div className="relative w-full max-w-5xl max-h-[94vh] mx-2 sm:mx-0 overflow-y-auto rounded-2xl sm:rounded-3xl bg-white shadow-2xl transition-all booking-modal-scrollbar">
+      <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-900/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+        <div className="relative w-full max-w-5xl overflow-hidden rounded-t-3xl bg-white shadow-2xl transition-all sm:rounded-3xl">
+          <div className="max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain booking-modal-scrollbar sm:max-h-[94dvh]">
           {/* Header */}
           <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-100 bg-white/95 px-4 sm:px-6 py-3 sm:py-4 backdrop-blur-md">
             <div>
@@ -269,7 +285,7 @@ export default function CartCheckoutModal({
                 <p className="text-xs uppercase font-bold tracking-wider text-slate-400">
                   Order Reference ID
                 </p>
-                <p className="text-2xl font-black text-emerald-700">
+                <p className="break-all text-xl font-black text-emerald-700 sm:text-2xl">
                   {orderSuccess.orderId}
                 </p>
                 <p className="text-xs font-bold text-slate-700 pt-1">
@@ -295,8 +311,8 @@ export default function CartCheckoutModal({
             <form onSubmit={handleSubmit} autoComplete="on" className="p-4 sm:p-5 space-y-3">
               {/* Auth Notice */}
               {!user && (
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-col items-stretch gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
                     <span>Sign in required to place your order.</span>
                   </div>
@@ -312,9 +328,9 @@ export default function CartCheckoutModal({
 
               {/* Error Alert */}
               {error && (
-                <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                <div className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
                   <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
-                  <span>{error}</span>
+                  <span className="min-w-0 break-words leading-5">{error}</span>
                 </div>
               )}
 
@@ -459,7 +475,7 @@ export default function CartCheckoutModal({
               </div>
 
               {/* Payment Method */}
-              <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
                 <div className="flex items-center gap-2">
                   <ShoppingCart className="h-4 w-4 text-emerald-700" />
                   <span className="text-sm font-bold text-emerald-900">
@@ -504,6 +520,7 @@ export default function CartCheckoutModal({
               </div>
             </form>
           )}
+          </div>
         </div>
       </div>
 
