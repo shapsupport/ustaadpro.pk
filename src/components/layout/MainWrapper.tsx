@@ -15,7 +15,7 @@ export function MainWrapper({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   return (
-    <main className="min-h-[calc(100dvh-5rem)] flex-1 pt-20">
+    <main className={pathname === "/service-checkout" ? "min-h-dvh flex-1" : "min-h-[calc(100dvh-5rem)] flex-1 pt-20"}>
       {children}
     </main>
   );
