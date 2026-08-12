@@ -12,8 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 const STORAGE_KEY = "ustaadpro_bookings";
-// Loyalty: every 9th booking (after 8 confirmed orders) = PKR 200 OFF
-const LOYALTY_CYCLE = 9;
+const LOYALTY_CYCLE = 12;
 
 type Booking = {
   id: string; serviceId?: string; serviceTitle: string; workTitle?: string; servicePrice: number;
@@ -26,7 +25,7 @@ type Booking = {
   pendingPayment?: number;
   apiTotal?: number;
   paidAmount?: number;
-  /** PKR 200 eight-order loyalty discount applied to this booking */
+  /** Automatic reward discount applied to this booking */
   loyaltyDiscount?: number;
   /** General discount (reward points or loyalty) applied to this booking */
   discount?: number;
@@ -247,14 +246,8 @@ export default function TrackBookingPage() {
   const serviceCount = bookings.filter((booking) => booking.kind === "service").length;
   const shopCount = bookings.filter((booking) => booking.kind === "shop").length;
   const completedCount = bookings.filter((booking) => ["completed", "delivered"].includes(booking.status.toLowerCase().replace(/\s+/g, "_"))).length;
-  // Loyalty progress: count only admin-confirmed service orders for the cycle
-  const confirmedServiceOrders = bookings.filter((booking) => {
-    if (booking.kind === "shop") return false;
-    const status = booking.status.toLowerCase().replace(/\s+/g, "_");
-    return /^(confirmed|assigned|in[_ ]?progress|completed|delivered)$/.test(status);
-  }).length;
-  const loyaltyCycleProgress = confirmedServiceOrders % LOYALTY_CYCLE; // 0-8
-  const loyaltyRewardReady = loyaltyCycleProgress === 8;
+  const loyaltyCycleProgress = Math.min(LOYALTY_CYCLE, Number(user?.rewardPoints || 0));
+  const loyaltyRewardReady = loyaltyCycleProgress >= LOYALTY_CYCLE;
   const updateBooking = (id: string, kind: Booking["kind"], updates: Partial<Booking>) => {
     setBookings((current) => current.map((booking) => booking.id === id && booking.kind === kind ? { ...booking, ...updates } : booking));
   };
@@ -286,10 +279,10 @@ export default function TrackBookingPage() {
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Loyalty Progress</p>
                 <div className="mt-1 flex items-center gap-2">
                   <div className="flex gap-0.5">
-                    {Array.from({ length: 8 }).map((_, i) => (
+                    {Array.from({ length: 12 }).map((_, i) => (
                       <div
                         key={i}
-                        className={`h-2.5 w-2.5 rounded-sm transition-colors ${(loyaltyCycleProgress === 8 || i < loyaltyCycleProgress)
+                        className={`h-2.5 w-2.5 rounded-sm transition-colors ${(loyaltyRewardReady || i < loyaltyCycleProgress)
                           ? "bg-emerald-400"
                           : "bg-white/20"
                           }`}
@@ -298,11 +291,11 @@ export default function TrackBookingPage() {
                   </div>
                   {loyaltyRewardReady ? (
                     <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-black text-white animate-pulse">
-                      PKR 200 OFF Ready!
+                      PKR 300 OFF Ready!
                     </span>
                   ) : (
                     <span className="text-[11px] font-bold text-slate-300">
-                      {loyaltyCycleProgress}/8
+                      {loyaltyCycleProgress}/12
                     </span>
                   )}
                 </div>
@@ -482,7 +475,7 @@ function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate: (updat
               </div>
               {appliedLoyaltyDiscount > 0 && (
                 <div className="flex justify-between text-emerald-700">
-                  <span className="flex items-center gap-1"><Gift className="h-3 w-3" /> 8-order loyalty reward</span>
+                  <span className="flex items-center gap-1"><Gift className="h-3 w-3" /> Automatic reward discount</span>
                   <span className="font-black">- PKR {appliedLoyaltyDiscount.toLocaleString("en-PK")}</span>
                 </div>
               )}

@@ -7,7 +7,7 @@ import {
   useCallback,
   useState,
 } from "react";
-import { CalendarDays, Clock3, MessageSquare, User, Phone, AlertCircle, Loader2, Info } from "lucide-react";
+import { CalendarDays, Clock3, MessageSquare, User, Phone, AlertCircle, Loader2, Info, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,13 +22,16 @@ interface CheckoutFormProps {
   initialPhone: string;
   onSubmit: (
     formData: FormData,
-    paymentMethod: PaymentMethod
+    paymentMethod: PaymentMethod,
+    useWalletBalance: boolean,
   ) => void;
   isSubmitting: boolean;
   isShop?: boolean;
   minimumBookingLeadHours?: number;
   submitError?: string;
   onScheduleChange?: () => void;
+  walletBalance?: number;
+  onWalletChange?: (value: boolean) => void;
 }
 
 export function CheckoutForm({
@@ -40,6 +43,8 @@ export function CheckoutForm({
   minimumBookingLeadHours = 0,
   submitError = "",
   onScheduleChange,
+  walletBalance = 0,
+  onWalletChange,
 }: CheckoutFormProps) {
   const { location } = useLocation();
 
@@ -53,6 +58,7 @@ export function CheckoutForm({
     notes: "",
   });
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(isShop ? "cod" : "Rs 200 Advance");
+  const [useWalletBalance, setUseWalletBalance] = useState(false);
   const [error, setError] = useState("");
   const [scheduleError, setScheduleError] = useState("");
   const leadHours = clampBookingLeadHours(minimumBookingLeadHours);
@@ -109,7 +115,7 @@ export function CheckoutForm({
       setScheduleError("");
     }
 
-    onSubmit(formData, paymentMethod);
+    onSubmit(formData, paymentMethod, useWalletBalance);
   };
 
   return (
@@ -221,6 +227,7 @@ export function CheckoutForm({
           isShop={isShop}
           onPaymentChange={setPaymentMethod}
         />
+        {!isShop && walletBalance > 0 && <button type="button" onClick={() => { const next = !useWalletBalance; setUseWalletBalance(next); onWalletChange?.(next); }} className={`mt-4 flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition ${useWalletBalance ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-300" : "border-slate-200 bg-white"}`}><WalletCards className="h-5 w-5 text-emerald-600" /><span className="flex-1"><strong className="block text-sm text-slate-900">Use wallet balance</strong><span className="text-xs text-slate-500">Available PKR {walletBalance.toLocaleString("en-PK")}</span></span><span className={`h-5 w-9 rounded-full p-0.5 ${useWalletBalance ? "bg-emerald-600" : "bg-slate-200"}`}><span className={`block h-4 w-4 rounded-full bg-white transition ${useWalletBalance ? "translate-x-4" : ""}`} /></span></button>}
       </Section>
 
       {/* ─── 5. Special Instructions ────────────────────────── */}

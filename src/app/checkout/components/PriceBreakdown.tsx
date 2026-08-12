@@ -13,6 +13,9 @@ interface PriceBreakdownProps {
   paymentMethod: PaymentMethod;
   selectedAddress: string;
   isShop?: boolean;
+  loyaltyDiscount?: number;
+  walletBalance?: number;
+  useWalletBalance?: boolean;
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -29,16 +32,19 @@ export function PriceBreakdown({
   paymentMethod,
   selectedAddress,
   isShop = false,
+  loyaltyDiscount = 0,
+  walletBalance = 0,
+  useWalletBalance = false,
 }: PriceBreakdownProps) {
   const subtotal = servicePrice;
-  const taxAmount = useMemo(
-    () => isShop ? 0 : subtotal * (settings.serviceTaxPercent / 100),
-    [subtotal, settings.serviceTaxPercent, isShop]
-  );
+  const discountedSubtotal = Math.max(0, subtotal - loyaltyDiscount);
+  const discountedTax = isShop ? 0 : discountedSubtotal * (settings.serviceTaxPercent / 100);
   const total = useMemo(
-    () => subtotal + taxAmount + (isShop ? 0 : settings.inspectionFee) + (isShop ? settings.shippingCost : 0),
-    [subtotal, taxAmount, settings.inspectionFee, settings.shippingCost, isShop]
+    () => discountedSubtotal + discountedTax + (isShop ? 0 : settings.inspectionFee) + (isShop ? settings.shippingCost : 0),
+    [discountedSubtotal, discountedTax, settings.inspectionFee, settings.shippingCost, isShop]
   );
+  const walletApplied = !isShop && useWalletBalance ? Math.min(walletBalance, total) : 0;
+  const amountPayable = Math.max(0, total - walletApplied);
   const rewardPoints = useMemo(
     () => Math.floor(subtotal / settings.rewardPointValue),
     [subtotal, settings.rewardPointValue]
@@ -66,10 +72,12 @@ export function PriceBreakdown({
         <div className="mt-3 space-y-2 text-slate-600">
           <Row label={isShop ? "Product subtotal" : "Service subtotal"} value={fmt(subtotal)} />
           {!isShop && <Row label="Inspection fee" value={fmt(settings.inspectionFee)} />}
+          {!isShop && loyaltyDiscount > 0 && <Row label="12-point reward" value={`- ${fmt(loyaltyDiscount)}`} />}
+          {walletApplied > 0 && <Row label="Wallet adjustment" value={`- ${fmt(walletApplied)}`} />}
           {!isShop && (
             <Row
               label={`Tax (${settings.serviceTaxPercent}%)`}
-              value={fmt(taxAmount)}
+              value={fmt(discountedTax)}
             />
           )}
           {isShop && <Row label="Shipping" value={fmt(settings.shippingCost)} />}
@@ -77,7 +85,7 @@ export function PriceBreakdown({
         <Separator className="my-3" />
         <div className="flex items-center justify-between font-bold text-slate-900">
           <span>Total payable</span>
-          <span className="text-lg">{fmt(total)}</span>
+          <span className="text-lg">{fmt(amountPayable)}</span>
         </div>
       </div>
 

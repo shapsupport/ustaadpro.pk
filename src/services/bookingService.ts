@@ -45,8 +45,21 @@ export interface CreateBookingPayload {
   addressLat?: number;
   addressLng?: number;
   useRewardPoints?: boolean;
+  useWalletBalance?: boolean;
   loyaltyDiscount?: number;
   discount?: number;
+  walletUsed?: number;
+  servicesSubtotal?: number;
+  platformCharges?: number;
+  amountPayable?: number;
+  billingBreakdown?: {
+    servicesSubtotal: number;
+    inspectionFee: number;
+    platformCharges: number;
+    originalTotal: number;
+    discount: number;
+    amountPayable: number;
+  };
 }
 
 export interface BookingResponseOrder {
@@ -60,6 +73,11 @@ export interface BookingResponseOrder {
   inspectionFee: number;
   tax: number;
   createdAt: string;
+  originalTotal?: number;
+  rewardDiscount?: number;
+  loyaltyDiscount?: number;
+  discount?: number;
+  walletUsed?: number;
   items?: any[];
 }
 
@@ -115,6 +133,7 @@ export async function createBooking(data: CreateBookingPayload): Promise<Booking
     specialInstructions: data.requirements || "",
     recurringOccurrences: Math.max(1, Number(data.recurringOccurrences || 1)),
     useRewardPoints: Boolean(data.useRewardPoints),
+    useWalletBalance: Boolean(data.useWalletBalance),
     loyaltyDiscount: Math.max(0, Number(data.loyaltyDiscount || 0)),
     discount: Math.max(0, Number(data.discount || 0)),
     inspectionFee: Math.max(0, Number(data.inspectionFee || 0)),
@@ -122,7 +141,9 @@ export async function createBooking(data: CreateBookingPayload): Promise<Booking
   };
 
   try {
+    console.log("[service-checkout] POST /api/orders/checkout", JSON.stringify(payload, null, 2));
     const res = await bookingClient.post<BookingResponse>("/orders/checkout", payload);
+    console.log("[service-checkout] response", JSON.stringify(res.data, null, 2));
     return res.data;
   } catch (err: any) {
     const serverMessage = err.response?.data?.message || err.response?.data?.error || err.message || "";

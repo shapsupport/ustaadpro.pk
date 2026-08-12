@@ -96,12 +96,16 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
   }, [mobile, open]);
 
   useEffect(() => {
+    // Building the typo-correction vocabulary is relatively expensive. Do it only
+    // when someone opens search, not whenever the navbar mounts on an unrelated
+    // page (for example, /wallet).
+    if (!open) return;
     let active = true;
     getSearchVocabulary(scope)
       .then((terms) => { if (active) setApiVocabulary(terms); })
       .catch(() => { if (active) setApiVocabulary([]); });
     return () => { active = false; };
-  }, [scope]);
+  }, [open, scope]);
 
   useEffect(() => {
     const value = query.trim();
