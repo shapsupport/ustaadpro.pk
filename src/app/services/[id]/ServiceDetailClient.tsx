@@ -23,6 +23,7 @@ import {
   Plus,
   Wallet,
   Info,
+  MessageCircle,
 } from "lucide-react";
 import type { ApiReview, ApiService, WorkPrice } from "@/lib/api-types";
 import BookingModal from "@/components/booking/BookingModal";
@@ -675,15 +676,14 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                     <Plus className="h-4 w-4" />
                     Add to service cart
                   </button>
-                  <a
-                    href="https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%2C%20I%20want%20to%20book%20a%20service."
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => setIsBookingOpen(true)}
                     className="flex items-center justify-center gap-2 w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-2xl text-sm transition-colors mt-3"
                   >
-                    <ShoppingBag className="h-4 w-4" />
-                    Book via WhatsApp
-                  </a>
+                    <MessageCircle className="h-4 w-4" />
+                    Checkout via WhatsApp
+                  </button>
                 </div>
 
                 {/* Trust badges */}

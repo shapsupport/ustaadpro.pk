@@ -19,6 +19,7 @@ import {
   ShoppingBag,
   ArrowLeft,
   ArrowRight,
+  MessageCircle,
   ShieldCheck,
 } from "lucide-react";
 import { checkoutShopOrder } from "@/services/shopService";
@@ -29,6 +30,7 @@ import MapAddressPickerModal from "../location/MapAddressPickerModal";
 import { showSuccessToast } from "@/context/ToastContext";
 import { PAKISTAN_CITIES } from "@/data/pakistanCities";
 import { DEFAULT_SETTINGS } from "@/app/checkout/types";
+import { money, openWhatsAppOrder } from "@/lib/whatsapp-order";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk").replace(/\/$/, "");
 const SAVED_SHOP_ADDRESS_TTL = 30 * 24 * 60 * 60 * 1000;
@@ -314,7 +316,7 @@ export default function CartCheckoutModal({
       `Street/Road: ${street.trim()}`,
       `Area: ${area.trim()}`,
       `City: ${city}`,
-      instructions.trim() ? `Instructions: ${instructions.trim()}` : "",
+      instructions.trim() ? `Instructions: ${instructions.trim()}` : null,
       mapAddress ? `Map location: ${mapAddress}` : "",
     ].filter(Boolean).join(" | ");
 
@@ -374,6 +376,58 @@ export default function CartCheckoutModal({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleWhatsAppOrder = () => {
+    setError("");
+    const addressValues: Record<AddressField, string> = { name, phone, city, house, street, area };
+    const invalidField = (Object.keys(addressValues) as AddressField[]).find(
+      (field) => Boolean(getAddressFieldError(field, addressValues[field]))
+    );
+    if (invalidField) {
+      setTouched({ name: true, phone: true, city: true, house: true, street: true, area: true });
+      setError(getAddressFieldError(invalidField, addressValues[invalidField]));
+      focusInvalidField(invalidField);
+      return;
+    }
+    if (shippingLoading || items.length === 0) {
+      setError(shippingLoading ? "Please wait while the final delivery total is calculated." : "Your cart is empty.");
+      return;
+    }
+
+    const normalizedPhone = normalizePakistaniPhone(phone)!;
+    const itemLines = items.map((item, index) =>
+      `${index + 1}. ${item.product.title} × ${item.quantity} — ${money(item.product.price * item.quantity)}`
+    );
+    const completeAddress = [
+      house.trim(), street.trim(), area.trim(), city.trim(), mapAddress.trim(),
+    ].filter((part, index, parts) => part && parts.indexOf(part) === index).join(", ");
+    const message = [
+      "*Ustaad Pro — Shop Order Request*",
+      "",
+      `Customer: ${name.trim()}`,
+      `Phone: ${normalizedPhone}`,
+      `Delivery address: ${completeAddress}`,
+      instructions.trim() ? `Instructions: ${instructions.trim()}` : "",
+      "",
+      "*Selected products*",
+      ...itemLines,
+      "",
+      `Product subtotal: ${money(subtotal)}`,
+      `Shipping fee: ${money(shippingCost)}`,
+      `*Final total: ${money(displayedTotal)}*`,
+      "Payment: Cash on Delivery",
+      "",
+      "Please confirm the payment instructions for this order.",
+      "Payment screenshot: I will send the screenshot in this WhatsApp chat after transferring the required amount.",
+    ].filter((line): line is string => line !== null).join("\n");
+
+    if (user?.email) {
+      try {
+        localStorage.setItem(savedShopAddressKey(user.email), JSON.stringify({ city: city.trim(), house: house.trim(), street: street.trim(), area: area.trim(), mapAddress: mapAddress.trim(), mapCoords, expiresAt: Date.now() + SAVED_SHOP_ADDRESS_TTL } satisfies SavedShopAddress));
+      } catch { /* WhatsApp checkout still works without storage. */ }
+    }
+    openWhatsAppOrder(message);
   };
 
   const handleClose = () => {
@@ -694,6 +748,16 @@ export default function CartCheckoutModal({
                     )}
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={handleWhatsAppOrder}
+                  disabled={shippingLoading || items.length === 0}
+                  className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-500 bg-white px-3 py-3 text-sm font-bold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  Order via WhatsApp — {shippingLoading ? "Calculating…" : formatPrice(displayedTotal)}
+                </button>
+                <p className="text-center text-[11px] text-slate-500">The complete order and total will open in WhatsApp. Send your payment screenshot there after transfer.</p>
                 <p className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-slate-500"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> 100% Safe &amp; Secure Checkout</p>
               </div>
             </form>

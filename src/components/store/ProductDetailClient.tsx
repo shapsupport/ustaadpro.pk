@@ -16,6 +16,7 @@ import {
   ShoppingBag,
   ShoppingCart,
   ChevronRight,
+  MessageCircle,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { StickyCheckoutBar } from "@/components/shared/StickyCheckoutBar";
@@ -60,6 +61,12 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
   };
 
   const handleBuyNow = () => {
+    if (maxQuantity === 0) return;
+    addItem(product, quantity);
+    router.push("/shop-checkout");
+  };
+
+  const handleBuyViaWhatsApp = () => {
     if (maxQuantity === 0) return;
     addItem(product, quantity);
     router.push("/shop-checkout");
@@ -225,7 +232,7 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
                 </div>
 
                 {/* CTA Buttons */}
-                <div ref={purchaseActionsRef} className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <div ref={purchaseActionsRef} className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
                   {/* Add to Cart */}
                   <button
                     type="button"
@@ -265,6 +272,21 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
                   >
                     <ShoppingBag className="h-5 w-5" />
                     Buy Now
+                  </button>
+
+                  {/* Buy via WhatsApp */}
+                  <button
+                    type="button"
+                    onClick={handleBuyViaWhatsApp}
+                    disabled={maxQuantity === 0}
+                    className={`flex min-w-0 items-center justify-center gap-2 rounded-2xl px-3 py-3.5 text-sm font-bold text-white shadow-lg transition-colors sm:py-4 sm:text-base ${
+                      maxQuantity === 0
+                        ? "cursor-not-allowed bg-slate-300 shadow-none"
+                        : "cursor-pointer bg-[#25D366] shadow-emerald-600/20 hover:bg-[#20bd5a]"
+                    }`}
+                  >
+                    <MessageCircle className="h-5 w-5 shrink-0" />
+                    <span>Buy via WhatsApp</span>
                   </button>
                 </div>
               </div>

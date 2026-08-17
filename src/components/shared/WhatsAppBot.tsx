@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Bot, MessageCircle, PhoneCall } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { siteConfig, whatsappBotUrl, whatsappCallUrl } from "@/lib/constants";
+import { createWhatsAppOrderUrl } from "@/lib/whatsapp-order";
 import {
   Dialog,
   DialogContent,
@@ -27,8 +28,7 @@ export function WhatsAppBot() {
   const [showDesktopNumber, setShowDesktopNumber] = useState(false);
   const telephone = siteConfig.phone.replace(/\s+/g, "");
   const isShop = pathname.startsWith("/store");
-  const shopWhatsAppUrl =
-    "https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%2C%20please%20call%20me%20on%20WhatsApp%20to%20help%20with%20a%20product%20order.";
+  const shopWhatsAppUrl = createWhatsAppOrderUrl("Hi Ustaad Pro, please call me on WhatsApp to help with a product order.");
 
   function handlePhoneCall() {
     const canCallDirectly =

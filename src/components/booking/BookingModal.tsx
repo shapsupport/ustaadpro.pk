@@ -18,6 +18,7 @@ import {
   Plus,
   Trash2,
   ArrowLeft,
+  MessageCircle,
 } from "lucide-react";
 import { createBooking, uploadPaymentReceipt, ServiceItemInput } from "@/services/bookingService";
 import { useAuth } from "@/context/AuthContext";
@@ -32,6 +33,7 @@ import { useServiceCart } from "@/context/ServiceCartContext";
 import { useLocation } from "@/context/LocationContext";
 import { bookingTimestamp, clampBookingLeadHours, earliestBookingTimestamp, nextAvailableBookingDate, pakistanDateAndTime } from "@/lib/booking-time";
 import { calculateRewards } from "@/lib/rewards";
+import { money, normalizePakistaniMobile, openWhatsAppOrder } from "@/lib/whatsapp-order";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 const BOOKING_DRAFT_KEY = "ustaadpro_booking_draft";
@@ -652,6 +654,63 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     }
   };
 
+  const handleWhatsAppBooking = () => {
+    setError("");
+    setInvalidContact({});
+    if (!name.trim()) {
+      setInvalidContact({ name: true }); setError("Please enter your full name."); focusValidationCard("contact"); return;
+    }
+    const normalizedPhone = normalizePakistaniMobile(phone);
+    if (!normalizedPhone) {
+      setInvalidContact({ phone: true }); setError("Please enter a valid Pakistani mobile number (e.g. 0300 1234567)."); focusValidationCard("contact"); return;
+    }
+    if (!specificAddress.trim() || addressFieldError) {
+      setAddressTouched(true); setError(addressFieldError || "Please enter your House / Street Address before continuing."); focusValidationCard("address"); return;
+    }
+    if (!fromDate || !selectedTime) {
+      setScheduleError(!fromDate ? "Please select a service date." : "Please select a 30-minute time slot from the grid.");
+      if (step === "payment") setStep("details");
+      focusValidationCard("schedule"); return;
+    }
+    const selectedDateTime = bookingTimestamp(fromDate, selectedTime);
+    if (!Number.isFinite(selectedDateTime) || selectedDateTime < earliestBookingTimestamp(minimumBookingLeadHours)) {
+      setScheduleError("Please choose a valid future booking date and time."); focusValidationCard("schedule"); return;
+    }
+
+    const itemLines = selectedServices.map((item, index) => {
+      const itemQuantity = Math.max(1, Math.min(10, Number(item.quantity || 1)));
+      return `${index + 1}. ${item.selectedWorkTitle || item.title} × ${itemQuantity} — ${money(Number(item.price) * itemQuantity * daysCount)}`;
+    });
+    const amountDueNow = paymentMethod === "Rs 200 Advance" ? Math.min(200, calculatedTotal) : calculatedTotal;
+    const message = [
+      "*Ustaad Pro — Service Booking Request*",
+      "",
+      `Customer: ${name.trim()}`,
+      `Phone: ${normalizedPhone}`,
+      `Service address: ${[specificAddress.trim(), selectedLocation.trim()].filter(Boolean).join(" · ")}`,
+      `Schedule: ${fromDate} at ${selectedTime}`,
+      isRecurring ? `Recurring occurrences: ${daysCount}` : "Booking type: One time",
+      requirements.trim() ? `Requirements: ${requirements.trim()}` : null,
+      "",
+      "*Selected services*",
+      ...itemLines,
+      "",
+      `Service subtotal: ${money(serviceSubtotal)}`,
+      rewardDiscount > 0 ? `Reward discount: - ${money(rewardDiscount)}` : null,
+      fullAdvanceDiscount > 0 ? `Full advance discount: - ${money(fullAdvanceDiscount)}` : null,
+      `Inspection/service charge: ${money(inspectionFee)}`,
+      `Service tax (${serviceTaxPercent}%): ${money(serviceTax)}`,
+      walletAdjustment > 0 ? `Wallet balance: - ${money(walletAdjustment)}` : null,
+      `*Final total: ${money(calculatedTotal)}*`,
+      `Payment option: ${paymentMethod}`,
+      `*Amount to pay now: ${money(amountDueNow)}*`,
+      "",
+      "Please confirm this booking and the payment details.",
+      "Payment screenshot: I will send the screenshot in this WhatsApp chat after transferring the amount due now.",
+    ].filter((line): line is string => line !== null).join("\n");
+    openWhatsAppOrder(message);
+  };
+
   const handleModalClose = () => {
     setBookingSuccess(null);
     setError("");
@@ -1071,12 +1130,14 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>
 
               {/* Submit Button */}
-              <div className="pt-2 lg:col-span-2">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 lg:col-span-2">
+                <h3 className="text-sm font-black text-slate-900">Complete your booking</h3>
+                <p className="mt-1 text-xs text-slate-500">Confirm securely here or send the same services, details, and calculated total through WhatsApp.</p>
                 {!user ? (
                   <button
                     type="button"
                     onClick={() => setAuthModalMode("login")}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-600 py-3.5 font-bold text-white shadow-lg shadow-amber-600/20 hover:bg-amber-700 transition"
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-600 py-3.5 font-bold text-white shadow-lg shadow-amber-600/20 hover:bg-amber-700 transition"
                   >
                     <LogIn className="h-5 w-5" />
                     Sign In to Complete Booking
@@ -1085,7 +1146,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                   <button
                     type="submit"
                     disabled={loading || quoteLoading}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-4 font-bold text-white shadow-lg shadow-emerald-600/25 hover:bg-emerald-700 transition disabled:opacity-50 text-sm sm:text-base"
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-4 font-bold text-white shadow-lg shadow-emerald-600/25 hover:bg-emerald-700 transition disabled:opacity-50 text-sm sm:text-base"
                   >
                     {loading || quoteLoading ? (
                       <>
@@ -1097,6 +1158,16 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                     )}
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={handleWhatsAppBooking}
+                  disabled={loading || quoteLoading || selectedServices.length === 0}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#25D366] py-3.5 text-sm font-black text-white shadow-lg shadow-emerald-600/20 transition hover:bg-[#20bd5a] disabled:cursor-not-allowed disabled:opacity-50 sm:text-base"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  Checkout via WhatsApp — {money(calculatedTotal)}
+                </button>
+                <p className="mt-2 text-center text-[11px] text-slate-500">Your itemized booking and final total will open in WhatsApp. Send the payment screenshot there after transfer.</p>
               </div>
             </form>
           )}

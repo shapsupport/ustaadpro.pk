@@ -336,10 +336,13 @@ function BookingActions({ booking, completed, isCancelled, acceptsReceipt, onUpd
   const normalized = booking.status.toLowerCase().replace(/\s+/g, "_");
   const terminal = ["completed", "delivered", "cancelled", "canceled", "refunded"].includes(normalized);
   const cancellableServiceStatus = ["confirmed", "checking_receipt"].includes(normalized);
-  const canCancel = !terminal && (booking.kind === "shop" || cancellableServiceStatus);
+  const shopHasShipped = booking.kind === "shop" && ["shipped", "out_for_delivery"].includes(normalized);
+  const canCancel = !terminal && (booking.kind === "shop" ? !shopHasShipped : cancellableServiceStatus);
   const cancellationHint = booking.kind === "service" && !terminal && !cancellableServiceStatus
     ? "This booking can no longer be cancelled after assignment. Please contact support for urgent help."
-    : "";
+    : shopHasShipped
+      ? "This order has already shipped and can no longer be cancelled. Please contact support if you need help."
+      : "";
   const receipts = booking.paymentReceipts?.length ? booking.paymentReceipts : booking.paymentReceipt ? [booking.paymentReceipt] : [];
   const paid = Number(booking.paidAmount ?? receipts.filter((receipt) => receipt.status !== "rejected").reduce((sum, receipt) => sum + Number(receipt.amount || 0), 0));
   const calculatedPending = Math.max(0, Number(booking.apiTotal || booking.servicePrice || 0) - paid);
@@ -364,7 +367,7 @@ function BookingActions({ booking, completed, isCancelled, acceptsReceipt, onUpd
     {panel === "review" && <ReviewForm booking={booking} />}
     {panel === "receipt" && <UploadReceiptForm booking={booking} onUploaded={() => onUpdate({ paymentReceipt: { status: "submitted", paymentStage: booking.status.toLowerCase() === "completed" ? "remaining" : "advance" } })} />}
     {panel === "issue" && <IssueForm booking={booking} />}
-    {panel === "cancel" && <CancelForm booking={booking} onCancelled={() => { onUpdate({ status: "cancelled" }); setPanel(null); }} />}
+    {panel === "cancel" && canCancel && <CancelForm booking={booking} onCancelled={() => { onUpdate({ status: "cancelled" }); setPanel(null); }} />}
   </div>;
 }
 
