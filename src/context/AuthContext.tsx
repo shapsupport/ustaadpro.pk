@@ -15,6 +15,7 @@ import {
   loginWithPhone as apiLoginWithPhone,
   requestPasswordResetOtp,
   resetPasswordWithOtp,
+  deleteAccountUser,
   type AuthUser,
   type SignupPayload,
 } from "@/services/authService";
@@ -46,6 +47,7 @@ export interface OtpModalState {
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
+  updateUser: (user: AuthUser) => void;
 
   // ── Modal routing ──────────────────────────────────────────────────────
   /** null = closed, "login" | "signup" | "forgot" = open */
@@ -65,6 +67,7 @@ interface AuthContextValue {
   requestPasswordReset: (email: string, channel?: "email" | "phone") => Promise<void>;
   resetPassword: (code: string, newPassword: string) => Promise<void>;
   logout: () => void;
+  deleteAccount: () => Promise<void>;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -271,6 +274,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const updateUser = useCallback((updatedUser: AuthUser) => {
+    setUser(updatedUser);
+    try {
+      localStorage.setItem("ustaadpro_user", JSON.stringify(updatedUser));
+    } catch { }
+  }, []);
+
+  // ── Delete Account ───────────────────────────────────────────────────────
+  const deleteAccount = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      await deleteAccountUser();
+      clearSession();
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const closeOtpModal = useCallback(() => setOtpModal(null), []);
   const returnFromOtp = useCallback(() => {
     if (!otpModal) return;
@@ -285,6 +307,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isLoading,
+        updateUser,
         authModalMode,
         setAuthModalMode,
         otpModal,
@@ -297,6 +320,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         requestPasswordReset,
         resetPassword,
         logout,
+        deleteAccount,
       }}
     >
       {children}

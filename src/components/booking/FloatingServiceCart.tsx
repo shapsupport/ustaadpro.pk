@@ -9,7 +9,27 @@ export default function FloatingServiceCart() {
   const { items, total, updateQuantity, removeService, clearServices } = useServiceCart();
   const [open, setOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [stickyCheckoutVisible, setStickyCheckoutVisible] = useState(false);
   const cartRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const syncPosition = () => {
+      const stickyCheckout = document.querySelector<HTMLElement>(
+        '[data-sticky-checkout-visible="true"]',
+      );
+      setStickyCheckoutVisible(Boolean(stickyCheckout));
+    };
+
+    syncPosition();
+    const observer = new MutationObserver(syncPosition);
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["data-sticky-checkout-visible"],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -29,7 +49,7 @@ export default function FloatingServiceCart() {
   if (!items.length) return null;
 
   return <>
-    {!checkoutOpen && <div ref={cartRef} className="fixed bottom-20 right-3 z-40 flex flex-col items-end sm:bottom-24 sm:right-6">
+    {!checkoutOpen && <div ref={cartRef} className={`fixed right-3 z-40 flex flex-col items-end transition-[bottom] duration-300 sm:bottom-24 sm:right-6 ${stickyCheckoutVisible ? "bottom-[15rem]" : "bottom-24"}`}>
       {open && <div className="mb-3 flex max-h-[66vh] w-[calc(100vw-1.5rem)] max-w-lg flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.24)] ring-1 ring-slate-900/5 sm:max-h-[70vh]">
         <header className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-white p-4 sm:p-5">
           <div className="flex items-center gap-3">

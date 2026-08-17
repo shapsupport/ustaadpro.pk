@@ -84,13 +84,13 @@ export function Navbar() {
               priority
               className="h-10 w-10 rounded-xl object-contain shadow-md shadow-primary/15"
             />
-            <span className="text-xl font-black tracking-tight text-slate-900">
+            <span className="hidden text-xl font-black tracking-tight text-slate-900 min-[360px]:inline">
               Ustaad<span className="font-bold text-primary">Pro</span>
             </span>
           </Link>
 
-          {/* Search bar — shows from md upwards */}
-          <div className="hidden min-w-0 flex-1 md:block xl:mx-4">
+          {/* Search bar — hero owns search below lg; navbar owns it from lg up. */}
+          <div className="hidden min-w-0 flex-1 lg:block xl:mx-4">
             <UniversalSearch key={searchScope} defaultScope={searchScope} />
           </div>
 
@@ -113,7 +113,7 @@ export function Navbar() {
           </div>
 
           {/* Right Side */}
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2">
             {/* Location — show from xl upwards to avoid crowding on 1024–1280px */}
             <button
               onClick={() => setShowPicker(true)}

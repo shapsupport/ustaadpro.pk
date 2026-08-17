@@ -15,7 +15,6 @@ import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import CartCheckoutModal from "@/components/store/CartCheckoutModal";
-import { UniversalSearch } from "@/components/search/UniversalSearch";
 
 function getIcon(iconName: string): LucideIcon {
   return (LucideIcons as unknown as Record<string, LucideIcon>)[iconName] || LucideIcons.FileText;
@@ -31,7 +30,6 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
   const { user, setAuthModalMode, logout } = useAuth();
   const { totalItems } = useCart();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const searchScope = pathname.startsWith("/store") ? "shop_product" : "service";
   const visibleNavItems = navItems.filter((item) => item.href !== "/track-booking" || Boolean(user));
 
   return (
@@ -61,9 +59,6 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
         </SheetHeader>
 
         <div className="flex h-[calc(100vh-80px)] flex-col overflow-y-auto px-4 py-6">
-          <div className="mb-6">
-            <UniversalSearch key={searchScope} mobile defaultScope={searchScope} onNavigate={onClose} />
-          </div>
           {/* User Profile / Auth */}
           {user ? (
             <div className="mb-6 flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50 p-4">

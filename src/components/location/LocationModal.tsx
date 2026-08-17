@@ -103,7 +103,7 @@ export function LocationModal() {
         role="dialog"
         aria-modal="true"
         aria-label="Select your location"
-        className="fixed inset-x-3 top-1/2 z-[70] mx-auto max-h-[calc(100dvh-1rem)] w-auto max-w-4xl -translate-y-1/2 overflow-visible rounded-2xl bg-white shadow-2xl sm:inset-x-6 sm:rounded-3xl"
+        className="fixed inset-x-3 top-1/2 z-[70] mx-auto max-h-[calc(100dvh-1rem)] w-auto max-w-4xl -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl bg-white shadow-2xl booking-modal-scrollbar sm:inset-x-6 sm:rounded-3xl md:overflow-visible"
       >
         {/* Header */}
         <div className="relative rounded-t-2xl bg-gradient-to-br from-primary to-emerald-700 p-4 text-white sm:rounded-t-3xl sm:p-5">

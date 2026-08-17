@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -181,20 +182,25 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
   return (
     <>
       <div className="min-h-screen bg-slate-50">
-        {/* Back bar */}
-        <div className="border-b border-slate-100 bg-white/90 px-4 py-3 backdrop-blur-md">
-          <div className="max-w-6xl mx-auto flex items-center gap-3">
+        {/* Breadcrumb and contextual back navigation */}
+        <div className="border-b border-slate-100 bg-white/90 px-4 py-2 backdrop-blur-md">
+          <div className="mx-auto max-w-6xl space-y-2">
+            <nav aria-label="Breadcrumb" className="flex w-fit max-w-full min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] text-slate-500 ring-1 ring-slate-100 sm:text-xs">
+              <Link href="/" className="font-semibold transition hover:text-emerald-700">Home</Link>
+              <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" />
+              <Link href="/services" className="font-semibold transition hover:text-emerald-700">Services</Link>
+              <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" />
+              <span className="min-w-0 truncate font-medium text-slate-700" title={service.title}>{service.title}</span>
+            </nav>
             <button
               type="button"
               onClick={() => router.back()}
-              className="flex shrink-0 items-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl px-1.5 sm:px-2 py-1 sm:py-1.5 text-sm sm:text-base font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-600 sm:text-lg"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100 sm:text-xs"
               aria-label="Go back to the previous page"
             >
-              <ArrowLeft className="h-5 w-5 sm:h-6 sm:w-6" />
-              Back
+              <ArrowLeft className="h-3 w-3" />
+              Back to services
             </button>
-            <ChevronRight className="h-5 w-5 shrink-0 text-slate-300" />
-            <span className="truncate text-base font-medium text-slate-500 sm:text-lg">{service.title}</span>
           </div>
         </div>
 

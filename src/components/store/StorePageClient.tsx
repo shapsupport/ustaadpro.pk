@@ -461,14 +461,15 @@ function ProductCard({ product }: { product: ApiProduct }) {
         onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch { } }}
         className="block flex-1"
       >
-        <div className="relative aspect-[4/3] overflow-hidden bg-white">
+        <div className="relative aspect-[4/3] overflow-hidden rounded-t-xl bg-white sm:rounded-t-2xl">
           {imageSrc ? (
             <Image
               src={imageSrc}
               alt={product.title}
               fill
-              className="object-contain p-1.5 transition-transform duration-500 group-hover:scale-[1.03] sm:p-3"
-              sizes="(max-width:640px) 50vw, (max-width:1024px) 50vw, 25vw"
+              className="rounded-lg object-contain p-2 [image-rendering:auto] transition-transform duration-500 group-hover:scale-[1.02] sm:rounded-xl sm:p-3"
+              sizes="(max-width:639px) 50vw, (max-width:1279px) 50vw, 25vw"
+              quality={88}
             />
           ) : (
             <div className="flex h-full items-center justify-center">

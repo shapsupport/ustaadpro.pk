@@ -81,7 +81,7 @@ export default function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
           {/* Dropdown Panel */}
           <div
             ref={dropdownRef}
-            className="absolute right-0 top-full z-40 mt-2 w-80 sm:w-96 rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200"
+            className="absolute right-0 top-full z-40 mt-2 w-[calc(100vw-1.5rem)] max-w-96 rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200"
             role="dialog"
             aria-label="Shopping cart"
           >
@@ -141,7 +141,7 @@ export default function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
                         className="flex items-center gap-3 px-4 py-3"
                       >
                         {/* Image */}
-                        <div className="h-12 w-12 shrink-0 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
                           {imgSrc ? (
                             <Image
                               src={imgSrc}
@@ -149,7 +149,7 @@ export default function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
                               width={48}
                               height={48}
 
-                              className="h-12 w-12 object-cover"
+                              className="h-12 w-12 rounded-lg object-contain p-1 [image-rendering:auto]"
                             />
                           ) : (
                             <Package className="h-6 w-6 text-slate-400" />

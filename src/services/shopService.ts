@@ -1,5 +1,6 @@
 import axios from "axios";
 import { ensureAddress } from "./addressService";
+import type { AuthUser } from "./authService";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:5000";
 
@@ -44,6 +45,9 @@ export interface ShopOrder {
   paymentMethod: string;
   address: string;
   createdAt: string;
+  rewardPointsEarned?: number;
+  rewardPointsRedeemed?: number;
+  rewardDiscount?: number;
   items?: {
     quantity: number;
     price: number;
@@ -60,7 +64,7 @@ export interface ShopOrder {
 export interface CheckoutShopResponse {
   message: string;
   order: ShopOrder;
-  user?: unknown;
+  user?: AuthUser;
 }
 
 export async function checkoutShopOrder(
@@ -79,6 +83,7 @@ export async function checkoutShopOrder(
       // checkout request even when a saved address ID is supplied.
       address: payload.address,
       deliveryAddress: payload.address,
+      useRewardPoints: Boolean(payload.useRewardPoints),
       paymentMethod: (payload.paymentMethod ?? "cod").toLowerCase().includes("cash")
         ? "cod"
         : payload.paymentMethod,

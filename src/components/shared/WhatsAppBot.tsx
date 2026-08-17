@@ -47,14 +47,14 @@ export function WhatsAppBot() {
     <Dialog onOpenChange={(open) => !open && setShowDesktopNumber(false)}>
       <DialogTrigger
         data-floating-book-now
-        className={`group fixed bottom-6 right-6 z-[80] flex items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_12px_35px_rgba(37,211,102,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_45px_rgba(18,140,126,0.4)] active:translate-y-0 ${
-          isShop ? "h-11 w-11 p-0 sm:h-12 sm:w-12" : "h-14 gap-2 px-3 sm:h-16 sm:px-4"
+        className={`group fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-[120] flex items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_12px_35px_rgba(37,211,102,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_45px_rgba(18,140,126,0.4)] active:translate-y-0 sm:bottom-6 sm:right-6 ${
+          isShop ? "h-11 w-11 p-0 sm:h-12 sm:w-12" : "h-14 w-14 gap-2 p-0 min-[360px]:w-auto min-[360px]:px-3 sm:h-16 sm:px-4"
         }`}
         aria-label={isShop ? "Contact us about this product" : "Book now: choose phone, WhatsApp call, or booking bot"}
       >
         <span className="pointer-events-none absolute inset-0 rounded-full bg-[#25D366] opacity-20 animate-ping" />
         <WhatsAppIcon className={isShop ? "relative h-6 w-6 sm:h-7 sm:w-7" : "relative h-8 w-8 sm:h-9 sm:w-9"} />
-        {!isShop && <strong className="relative whitespace-nowrap pr-1 text-sm sm:text-base">Book Now</strong>}
+        {!isShop && <strong className="relative hidden whitespace-nowrap pr-1 text-sm min-[360px]:block sm:text-base">Book Now</strong>}
       </DialogTrigger>
 
       <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-3xl border-0 p-4 shadow-2xl sm:max-w-xl sm:p-8">

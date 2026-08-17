@@ -32,6 +32,8 @@ export interface CreateBookingPayload {
   name: string;
   phone: string;
   address: string;
+  addressLat?: number;
+  addressLng?: number;
   date: string;
   time: string;
   requirements?: string;
@@ -41,15 +43,19 @@ export interface CreateBookingPayload {
   tax?: number;
   recurringOccurrences?: number;
   receiptDataUrl?: string;
-  addressId?: number;
-  addressLat?: number;
-  addressLng?: number;
   useRewardPoints?: boolean;
+  useWalletBalance?: boolean;      // ADD
+  loyaltyDiscount?: number;        // ADD
+  discount?: number;               // ADD
 }
 
 export interface BookingResponseOrder {
   id: string;
   total: number;
+  originalTotal?: number;          // ADD
+  walletUsed?: number;             // ADD
+  rewardDiscount?: number;         // ADD
+  loyaltyDiscount?: number;        // ADD
   status: string;
   bookedFor: string;
   paymentMethod: string;
