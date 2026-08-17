@@ -30,6 +30,7 @@ import { getProfile } from "@/services/authService";
 import { useRouter } from "next/navigation";
 import { useServiceCart } from "@/context/ServiceCartContext";
 import { bookingTimestamp, clampBookingLeadHours, earliestBookingTimestamp, nextAvailableBookingDate, pakistanDateAndTime } from "@/lib/booking-time";
+import { compressImage } from "@/lib/imageCompression";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 const BOOKING_DRAFT_KEY = "ustaadpro_booking_draft";
@@ -164,6 +165,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const [receiptDataUrl, setReceiptDataUrl] = useState("");
   const [receiptFileName, setReceiptFileName] = useState("");
   const [receiptValidationError, setReceiptValidationError] = useState(false);
+  const [receiptFileError, setReceiptFileError] = useState("");
   const [useRewardPoints, setUseRewardPoints] = useState(false);
   const [rewardPoints, setRewardPoints] = useState(0);
   const [rewardLoading, setRewardLoading] = useState(false);
@@ -298,30 +300,34 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const handleReceiptSelect = (file: File | null) => {
     setReceiptDataUrl("");
     setReceiptFileName(file?.name || "");
-    if (!file) return;
+    if (!file) {
+      setReceiptFileError("");
+      setReceiptValidationError(false);
+      return;
+    }
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       setReceiptFileName("");
       setReceiptValidationError(true);
-      setError("Please upload a JPG, PNG, or WebP receipt image.");
+      setReceiptFileError("Please upload a JPG, PNG, or WebP receipt image.");
       focusValidationCard("receipt");
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
       setReceiptFileName("");
       setReceiptValidationError(true);
-      setError("The receipt image must be 5 MB or smaller.");
+      setReceiptFileError("Image is too large. Please select an image under 5MB.");
       focusValidationCard("receipt");
       return;
     }
     setReceiptValidationError(false);
+    setReceiptFileError("");
     setError("");
-    const reader = new FileReader();
-    reader.onload = () => setReceiptDataUrl(String(reader.result || ""));
-    reader.onerror = () => {
-      setError("The selected receipt image could not be read.");
-      focusValidationCard("receipt");
-    };
-    reader.readAsDataURL(file);
+    compressImage(file)
+      .then((compressed) => setReceiptDataUrl(compressed))
+      .catch(() => {
+        setReceiptFileError("The selected receipt image could not be read.");
+        focusValidationCard("receipt");
+      });
   };
 
   if (!isOpen || (!pageMode && isOpen)) return null;
@@ -573,6 +579,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     setAddressTouched(false);
     setInvalidContact({});
     setReceiptValidationError(false);
+    setReceiptFileError("");
     setStep("details");
     onClose();
   };
@@ -609,6 +616,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     setStep("details");
     setError("");
     setReceiptValidationError(false);
+    setReceiptFileError("");
     setReceiptDataUrl("");
     setReceiptFileName("");
   };
@@ -943,16 +951,17 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               {(step === "payment" || pageMode) && <div className="min-w-0 lg:col-span-2">
                 <EasyPaisaPaymentSection
                   paymentMethod={paymentMethod}
-                  onPaymentMethodChange={(method) => { setPaymentMethod(method); setReceiptDataUrl(""); setReceiptFileName(""); setReceiptValidationError(false); }}
+                  onPaymentMethodChange={(method: string) => { setPaymentMethod(method as "Rs 200 Advance" | "Full Payment in Advance"); setReceiptDataUrl(""); setReceiptFileName(""); setReceiptValidationError(false); setReceiptFileError(""); }}
                   total={calculatedTotal}
                   receiptFileName={receiptFileName}
                   onReceiptSelect={handleReceiptSelect}
                   receiptError={receiptValidationError}
+                  fileError={receiptFileError}
                   receiptAreaRef={receiptAreaRef}
                   rewardEligible={rewardEligible}
                   rewardLoading={rewardLoading}
                   useRewardPoints={useRewardPoints && rewardEligible}
-                  onUseRewardPointsChange={(value) => { setUseRewardPoints(value); setReceiptDataUrl(""); setReceiptFileName(""); setReceiptValidationError(false); }}
+                  onUseRewardPointsChange={(value) => { setUseRewardPoints(value); setReceiptDataUrl(""); setReceiptFileName(""); setReceiptValidationError(false); setReceiptFileError(""); }}
                 />
               </div>}
 

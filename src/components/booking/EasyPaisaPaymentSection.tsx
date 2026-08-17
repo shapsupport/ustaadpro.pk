@@ -1,22 +1,26 @@
 "use client";
 
 import React, { useState, type RefObject } from "react";
-import { Check, Copy, CreditCard, Gift, ShieldCheck, Upload } from "lucide-react";
+import { AlertCircle, Check, Copy, CreditCard, Gift, ShieldCheck, Upload } from "lucide-react";
 
 const EASYPAISA_NUMBER = "03485838593";
 
 interface EasyPaisaPaymentSectionProps {
   paymentMethod: "Rs 200 Advance" | "Full Payment in Advance";
-  onPaymentMethodChange: (method: "Rs 200 Advance" | "Full Payment in Advance") => void;
+  onPaymentMethodChange: (method: any) => void;
   total: number;
   receiptFileName: string;
   onReceiptSelect: (file: File | null) => void;
   receiptError?: boolean;
+  fileError?: string;
   receiptAreaRef?: RefObject<HTMLDivElement | null>;
   rewardEligible?: boolean;
   rewardLoading?: boolean;
   useRewardPoints?: boolean;
   onUseRewardPointsChange?: (value: boolean) => void;
+  walletBalance?: number;
+  useWalletBalance?: boolean;
+  onUseWalletBalanceChange?: (value: boolean) => void;
 }
 
 export default function EasyPaisaPaymentSection({
@@ -26,11 +30,15 @@ export default function EasyPaisaPaymentSection({
   receiptFileName,
   onReceiptSelect,
   receiptError = false,
+  fileError = "",
   receiptAreaRef,
   rewardEligible = false,
   rewardLoading = false,
   useRewardPoints = false,
   onUseRewardPointsChange,
+  walletBalance,
+  useWalletBalance,
+  onUseWalletBalanceChange,
 }: EasyPaisaPaymentSectionProps) {
   const [copied, setCopied] = useState(false);
   const rewardDiscount = useRewardPoints ? Math.min(200, total) : 0;
@@ -111,12 +119,23 @@ export default function EasyPaisaPaymentSection({
           </div>
         </div>}
 
-      <div ref={receiptAreaRef} className="min-w-0 space-y-2">
-      {cashDue > 0 && <label className={`flex min-h-14 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed px-3 py-3 text-center text-sm font-bold transition-colors sm:px-4 ${receiptError ? "border-red-400 bg-white text-red-700 hover:bg-red-50" : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50"}`}>
-          <Upload className="h-5 w-5 shrink-0" />
-          <span className="min-w-0 truncate">{receiptFileName || <>Upload booking payment receipt <span className="text-red-500">*</span></>}</span>
-          <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => onReceiptSelect(event.target.files?.[0] ?? null)} />
-        </label>}
+      <div ref={receiptAreaRef} className="min-w-0 space-y-1">
+      {cashDue > 0 && (
+        <>
+          <label className={`flex min-h-14 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed px-3 py-3 text-center text-sm font-bold transition-colors sm:px-4 ${receiptError || fileError ? "border-red-400 bg-white text-red-700 hover:bg-red-50" : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50"}`}>
+            <Upload className="h-5 w-5 shrink-0" />
+            <span className="min-w-0 truncate">{receiptFileName || <>Upload booking payment receipt <span className="text-red-500">*</span></>}</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => onReceiptSelect(event.target.files?.[0] ?? null)} />
+          </label>
+          <p className="text-[11px] text-slate-400 mt-1">PNG, JPG or WEBP image up to 5MB</p>
+          {fileError && (
+            <p className="text-xs text-red-600 font-medium mt-1.5 flex items-center gap-1">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              {fileError}
+            </p>
+          )}
+        </>
+      )}
       </div>
     </div>
   );
