@@ -209,12 +209,31 @@ function normalizeStatus(booking: Booking) {
   const serverPending = Number(booking.pendingPayment || 0);
   const paymentRemaining = serverPending > 0 ? serverPending : Math.max(0, paymentTotal - paid);
   const isAdvance = booking.paymentMethod.toLowerCase().includes("200 advance");
+
+  // Statuses set by admin that represent real booking progress — always honour these.
+  // NOTE: "completed" and "confirmed" are included so admin-set status is never
+  //        overridden by payment-receipt logic once admin explicitly moves booking forward.
+  const adminProgressStatuses = ["confirmed", "assigned", "in_progress", "processing", "completed", "shipped", "delivered", "cancelled", "canceled", "refunded"];
+
   let normalized = rawStatus;
   if (booking.kind !== "shop") {
-    if (receiptStatus === "rejected") normalized = "payment_receipt_rejected";
-    else if (!latestReceipt || receiptStatus === "submitted" || receiptStatus === "pending") normalized = "payment_receipt_checking";
-    else if (isAdvance && paymentRemaining > 0) normalized = rawStatus === "completed" ? "payment_pending" : rawStatus;
-    else if (["placed", "pending", "confirmed"].includes(rawStatus)) normalized = receiptStatus === "verified" ? "confirmed" : "payment_receipt_checking";
+    if (adminProgressStatuses.includes(rawStatus)) {
+      // Admin has explicitly advanced the booking — respect it.
+      // Only override if advance-payment booking is completed but still owes money.
+      if (isAdvance && paymentRemaining > 0 && rawStatus === "completed") {
+        normalized = "payment_pending";
+      }
+      // else: keep rawStatus (assigned / in_progress / etc.)
+    } else if (receiptStatus === "rejected") {
+      normalized = "payment_receipt_rejected";
+    } else if (isAdvance && paymentRemaining > 0 && rawStatus === "completed") {
+      normalized = "payment_pending";
+    } else if (["placed", "pending", "confirmed"].includes(rawStatus)) {
+      // Still in initial phase — let receipt status drive display.
+      normalized = receiptStatus === "verified" ? "confirmed" : "payment_receipt_checking";
+    } else if (!latestReceipt || receiptStatus === "submitted" || receiptStatus === "pending") {
+      normalized = "payment_receipt_checking";
+    }
   }
   return { normalized, receipts, latestReceipt, receiptStatus, paid, paymentTotal, paymentRemaining };
 }
@@ -532,13 +551,19 @@ function BookingCard({
   const IconComponent = iconTheme.Icon;
 
   const steps = isShop ? shopStatusSteps : serviceStatusSteps;
+  // 4 dots: Receipt → Confirmed → In Progress → Completed
+  // (confirmed + assigned both fill dot 2; in_progress fills dot 3; completed fills dot 4)
   const stepLabels = isShop
     ? ["Placed", "Confirmed", "Shipped", "Delivered"]
-    : ["Payment", "Confirmed", "Scheduled", "Completed"];
+    : ["Receipt", "Confirmed", "In Progress", "Completed"];
   const activeStep = isCancelled ? -1 : (() => {
+    // Dot 1 — Receipt / payment checking
     if (normalized === "payment_receipt_checking" || normalized === "payment_receipt_rejected") return 0;
-    if (normalized === "confirmed" || normalized === "payment_pending") return 1;
-    if (normalized === "assigned" || normalized === "in_progress" || normalized === "processing") return 2;
+    // Dot 2 — Confirmed OR Assigned (both mean booking is accepted)
+    if (normalized === "confirmed" || normalized === "payment_pending" || normalized === "assigned") return 1;
+    // Dot 3 — In Progress
+    if (normalized === "in_progress" || normalized === "processing") return 2;
+    // Dot 4 — Completed
     if (normalized === "completed" || normalized === "delivered") return 3;
     const idx = steps.indexOf(normalized);
     return idx >= 0 ? idx : 0;
