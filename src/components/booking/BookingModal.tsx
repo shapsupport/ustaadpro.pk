@@ -30,6 +30,7 @@ import { getProfile } from "@/services/authService";
 import { useRouter } from "next/navigation";
 import { useServiceCart } from "@/context/ServiceCartContext";
 import { bookingTimestamp, clampBookingLeadHours, earliestBookingTimestamp, nextAvailableBookingDate, pakistanDateAndTime } from "@/lib/booking-time";
+import { calculateRewards } from "@/lib/rewards";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 const BOOKING_DRAFT_KEY = "ustaadpro_booking_draft";
@@ -88,7 +89,7 @@ function validateSpecificAddress(value: string, mapLocationSelected: boolean): s
 }
 
 export default function BookingModal({ isOpen, onClose, service, services, onBookingComplete, pageMode = false }: BookingModalProps) {
-  const { user, setAuthModalMode } = useAuth();
+  const { user, updateUser, setAuthModalMode } = useAuth();
   const router = useRouter();
   const { items: cartItems, addService, updateQuantity, removeService } = useServiceCart();
   const [step, setStep] = useState<"details" | "payment">("details");
@@ -125,6 +126,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const [minimumBookingLeadHours, setMinimumBookingLeadHours] = useState(0);
   const [inspectionFee, setInspectionFee] = useState(0);
   const [serviceTaxPercent, setServiceTaxPercent] = useState(0);
+  const [rewardSettings, setRewardSettings] = useState({ rewardEnabled: true, rewardPointValue: 25, rewardMinimumRedeem: 100, serviceRewardMaxDiscountPercent: 10 });
   const [scheduleError, setScheduleError] = useState("");
 
   useEffect(() => {
@@ -132,7 +134,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     const controller = new AbortController();
     fetch(`${API_BASE}/api/settings`, { signal: controller.signal })
       .then(async (response) => response.ok ? response.json() : Promise.reject(new Error("Settings unavailable")))
-      .then((settings: { minimumBookingLeadHours?: number; inspectionFee?: number; serviceTaxPercent?: number }) => {
+      .then((settings: { minimumBookingLeadHours?: number; inspectionFee?: number; serviceTaxPercent?: number; rewardEnabled?: boolean; rewardPointValue?: number; rewardMinimumRedeem?: number; serviceRewardMaxDiscountPercent?: number }) => {
         const leadHours = clampBookingLeadHours(settings.minimumBookingLeadHours);
         const minimumDate = nextAvailableBookingDate(leadHours);
         setMinimumBookingLeadHours(leadHours);
@@ -143,6 +145,12 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
         }
         setInspectionFee(Math.max(0, Number(settings.inspectionFee || 0)));
         setServiceTaxPercent(Math.max(0, Number(settings.serviceTaxPercent || 0)));
+        setRewardSettings({
+          rewardEnabled: settings.rewardEnabled !== false,
+          rewardPointValue: Math.max(1, Number(settings.rewardPointValue || 25)),
+          rewardMinimumRedeem: Math.max(0, Number(settings.rewardMinimumRedeem || 100)),
+          serviceRewardMaxDiscountPercent: Math.max(0, Number(settings.serviceRewardMaxDiscountPercent || 10)),
+        });
       })
       .catch(() => {});
     return () => controller.abort();
@@ -165,7 +173,9 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const [receiptFileName, setReceiptFileName] = useState("");
   const [receiptValidationError, setReceiptValidationError] = useState(false);
   const [useRewardPoints, setUseRewardPoints] = useState(false);
+  const [useWalletBalance, setUseWalletBalance] = useState(false);
   const [rewardPoints, setRewardPoints] = useState(0);
+  const [walletBalance, setWalletBalance] = useState(0);
   const [rewardLoading, setRewardLoading] = useState(false);
 
   // Submission State
@@ -214,14 +224,15 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   useEffect(() => {
     if (!isOpen || !user) {
       setUseRewardPoints(false);
+      setUseWalletBalance(false);
       return;
     }
     setRewardLoading(true);
     getProfile()
-      .then((profile) => setRewardPoints(Number(profile.rewardPoints || 0)))
-      .catch(() => setRewardPoints(Number(user.rewardPoints || 0)))
+      .then((profile) => { setRewardPoints(Number(profile.rewardPoints || 0)); setWalletBalance(Number(profile.walletBalance || 0)); updateUser(profile); })
+      .catch(() => { setRewardPoints(Number(user.rewardPoints || 0)); setWalletBalance(Number(user.walletBalance || 0)); })
       .finally(() => setRewardLoading(false));
-  }, [isOpen, user]);
+  }, [isOpen, updateUser, user]);
 
   // Derived Calculations
   const baseSelectedServices = services?.length ? services : [service];
@@ -242,10 +253,16 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   );
   const listedServicesTotal = selectedServices.reduce((sum, item) => sum + Number(item.price) * Math.max(1, Math.min(10, Number(item.quantity || 1))), 0);
   const serviceSubtotal = listedServicesTotal * daysCount;
-  const serviceTax = serviceSubtotal * serviceTaxPercent / 100;
-  const calculatedTotal = serviceSubtotal + inspectionFee + serviceTax;
-  const rewardEligible = rewardPoints >= 200;
-  const rewardDiscount = useRewardPoints && rewardEligible ? Math.min(200, calculatedTotal) : 0;
+  const reward = calculateRewards({ enabled: rewardSettings.rewardEnabled && Boolean(user), points: rewardPoints, pointValue: rewardSettings.rewardPointValue, minimumRedeem: rewardSettings.rewardMinimumRedeem, subtotal: serviceSubtotal, maxDiscountPercent: rewardSettings.serviceRewardMaxDiscountPercent });
+  const rewardEligible = reward.canRedeem;
+  const rewardDiscount = useRewardPoints && reward.canRedeem ? reward.redeemableValue : 0;
+  const afterRewardSubtotal = Math.max(0, serviceSubtotal - rewardDiscount);
+  const fullAdvanceDiscount = paymentMethod === "Full Payment in Advance" ? Math.round(afterRewardSubtotal * 0.05) : 0;
+  const taxableSubtotal = Math.max(0, afterRewardSubtotal - fullAdvanceDiscount);
+  const serviceTax = taxableSubtotal * serviceTaxPercent / 100;
+  const totalBeforeWallet = taxableSubtotal + inspectionFee + serviceTax;
+  const walletAdjustment = useWalletBalance ? Math.min(walletBalance, totalBeforeWallet) : 0;
+  const calculatedTotal = Math.max(0, totalBeforeWallet - walletAdjustment);
   const paymentNow = paymentMethod === "Rs 200 Advance"
     ? Math.max(0, Math.min(200, calculatedTotal) - rewardDiscount)
     : Math.max(0, calculatedTotal - rewardDiscount);
@@ -471,16 +488,18 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
         paymentMethod,
         recurringOccurrences: daysCount,
         useRewardPoints: useRewardPoints && rewardEligible,
+        useWalletBalance: useWalletBalance && walletBalance > 0,
         inspectionFee,
         tax: serviceTax,
       });
 
       if (response && response.order) {
+        if (response.user) updateUser(response.user);
         const orderId = response.order.id;
         const confirmedTotal = Number(response.order.total || calculatedTotal);
         const confirmedPaymentNow = paymentMethod === "Rs 200 Advance"
-          ? Math.max(0, Math.min(200, confirmedTotal) - rewardDiscount)
-          : Math.max(0, confirmedTotal - rewardDiscount);
+          ? Math.max(0, Math.min(200, confirmedTotal))
+          : Math.max(0, confirmedTotal);
         const confirmedCoveredAmount = paymentMethod === "Rs 200 Advance" ? Math.min(200, confirmedTotal) : confirmedTotal;
         let receiptUploaded = false;
         let receiptError = "";
@@ -766,8 +785,11 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 </div>
                 <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600">
                   <div className="flex justify-between"><span>Service subtotal</span><strong>Rs {serviceSubtotal.toLocaleString("en-PK")}</strong></div>
+                  {rewardDiscount > 0 && <div className="flex justify-between font-bold text-violet-700"><span>Reward discount ({reward.redeemablePoints} pts)</span><strong>- Rs {rewardDiscount.toLocaleString("en-PK")}</strong></div>}
+                  {fullAdvanceDiscount > 0 && <div className="flex justify-between font-bold text-emerald-700"><span>Full advance discount (5%)</span><strong>- Rs {fullAdvanceDiscount.toLocaleString("en-PK")}</strong></div>}
                   <div className="flex justify-between"><span>Inspection/service charge</span><strong>Rs {inspectionFee.toLocaleString("en-PK")}</strong></div>
                   <div className="flex justify-between"><span>Service tax ({serviceTaxPercent}%)</span><strong>Rs {serviceTax.toLocaleString("en-PK")}</strong></div>
+                  {walletAdjustment > 0 && <div className="flex justify-between font-bold text-emerald-700"><span>Wallet balance applied</span><strong>- Rs {walletAdjustment.toLocaleString("en-PK")}</strong></div>}
                   <div className="flex justify-between border-t border-slate-100 pt-2 text-sm text-slate-900"><span className="font-black">Final total</span><strong className="text-emerald-700">Rs {calculatedTotal.toLocaleString("en-PK")}</strong></div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -953,6 +975,15 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                   rewardLoading={rewardLoading}
                   useRewardPoints={useRewardPoints && rewardEligible}
                   onUseRewardPointsChange={(value) => { setUseRewardPoints(value); setReceiptDataUrl(""); setReceiptFileName(""); setReceiptValidationError(false); }}
+                  rewardPoints={reward.points}
+                  rewardBalanceValue={reward.balanceValue}
+                  rewardDiscount={rewardDiscount}
+                  rewardRedeemablePoints={reward.redeemablePoints}
+                  rewardHint={reward.canRedeem ? `Apply up to Rs ${reward.redeemableValue.toLocaleString("en-PK")} to this booking.` : reward.pointsNeeded > 0 ? `${reward.pointsNeeded} more point(s) needed to redeem rewards.` : `Reward discount is below the Rs ${reward.minimumRedeem.toLocaleString("en-PK")} minimum for this booking.`}
+                  walletBalance={walletBalance}
+                  walletAdjustment={walletAdjustment}
+                  useWalletBalance={useWalletBalance}
+                  onUseWalletBalanceChange={(value) => { setUseWalletBalance(value); setReceiptDataUrl(""); setReceiptFileName(""); setReceiptValidationError(false); }}
                 />
               </div>}
 
