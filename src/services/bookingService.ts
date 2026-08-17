@@ -49,6 +49,8 @@ export interface CreateBookingPayload {
   loyaltyDiscount?: number;
   discount?: number;
   walletUsed?: number;
+  rewardPointsEarned?: number;
+  rewardPointsRedeemed?: number;
   servicesSubtotal?: number;
   platformCharges?: number;
   amountPayable?: number;

@@ -37,6 +37,10 @@ export type BookingRecord = {
   discount?: number;
   loyaltyDiscount?: number;
   originalTotal?: number;
+  rewardPointsEarned?: number;
+  rewardPointsRedeemed?: number;
+  rewardDiscount?: number;
+  walletUsed?: number;
   paymentMethod: PaymentMethod;
   status: string;
   createdAt: string;

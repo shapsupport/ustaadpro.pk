@@ -14,6 +14,8 @@ interface PriceBreakdownProps {
   selectedAddress: string;
   isShop?: boolean;
   loyaltyDiscount?: number;
+  rewardPointsRedeemed?: number;
+  fullAdvanceDiscount?: number;
   walletBalance?: number;
   useWalletBalance?: boolean;
 }
@@ -33,11 +35,13 @@ export function PriceBreakdown({
   selectedAddress,
   isShop = false,
   loyaltyDiscount = 0,
+  rewardPointsRedeemed = 0,
+  fullAdvanceDiscount = 0,
   walletBalance = 0,
   useWalletBalance = false,
 }: PriceBreakdownProps) {
   const subtotal = servicePrice;
-  const discountedSubtotal = Math.max(0, subtotal - loyaltyDiscount);
+  const discountedSubtotal = Math.max(0, subtotal - loyaltyDiscount - fullAdvanceDiscount);
   const discountedTax = isShop ? 0 : discountedSubtotal * (settings.serviceTaxPercent / 100);
   const total = useMemo(
     () => discountedSubtotal + discountedTax + (isShop ? 0 : settings.inspectionFee) + (isShop ? settings.shippingCost : 0),
@@ -45,11 +49,6 @@ export function PriceBreakdown({
   );
   const walletApplied = !isShop && useWalletBalance ? Math.min(walletBalance, total) : 0;
   const amountPayable = Math.max(0, total - walletApplied);
-  const rewardPoints = useMemo(
-    () => Math.floor(subtotal / settings.rewardPointValue),
-    [subtotal, settings.rewardPointValue]
-  );
-
   const fmt = (n: number) => `${settings.currency} ${n.toLocaleString()}`;
 
   return (
@@ -72,7 +71,8 @@ export function PriceBreakdown({
         <div className="mt-3 space-y-2 text-slate-600">
           <Row label={isShop ? "Product subtotal" : "Service subtotal"} value={fmt(subtotal)} />
           {!isShop && <Row label="Inspection fee" value={fmt(settings.inspectionFee)} />}
-          {!isShop && loyaltyDiscount > 0 && <Row label="12-point reward" value={`- ${fmt(loyaltyDiscount)}`} />}
+          {loyaltyDiscount > 0 && <Row label={`Reward discount (${rewardPointsRedeemed} pts)`} value={`- ${fmt(loyaltyDiscount)}`} />}
+          {!isShop && fullAdvanceDiscount > 0 && <Row label="Full advance discount (5%)" value={`- ${fmt(fullAdvanceDiscount)}`} />}
           {walletApplied > 0 && <Row label="Wallet adjustment" value={`- ${fmt(walletApplied)}`} />}
           {!isShop && (
             <Row
@@ -111,11 +111,15 @@ export function PriceBreakdown({
         {selectedAddress && selectedAddress !== "No location selected yet" ? (
           <MetaRow label="Delivery address" value={selectedAddress} />
         ) : null}
-        {settings.rewardEnabled && rewardPoints > 0 ? (
+        {settings.rewardEnabled ? (
           <MetaRow
-            label="Reward points earned"
+            label="Rewards"
             value={
-              <span className="font-semibold text-emerald-600">+{rewardPoints} pts</span>
+              <span className="font-semibold text-emerald-600">
+                {isShop
+                  ? `${settings.shopRewardEarnPercent}% reward value after delivery`
+                  : `+${settings.serviceRewardPointsOnCompletion} pts after completion`}
+              </span>
             }
           />
         ) : null}
