@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { X, MapPin, Check, Loader2, Navigation } from "lucide-react";
 import dynamic from "next/dynamic";
-import { isInServiceArea } from "@/lib/location";
+import { isInServiceArea, reverseGeocode as reverseGeocodeLocation } from "@/lib/location";
 
 // Dynamically import Leaflet map components with ssr: false
 const LeafletMapComponent = dynamic(
@@ -50,26 +50,19 @@ export default function MapAddressPickerModal({
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [outOfBoundsError, setOutOfBoundsError] = useState(false);
 
-  // Reverse geocode lat/lng to human address via OpenStreetMap Nominatim API
+  // Convert coordinates into a concise area/city label. Coordinates remain
+  // available to the order payload but are never shown as the user's address.
   const reverseGeocode = async (lat: number, lng: number) => {
     setIsGeocoding(true);
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
+      const result = await reverseGeocodeLocation({ lat, lng });
+      setFormattedAddress(
+        result.label && result.label !== "Unknown Location"
+          ? result.label
+          : "Selected location, Rawalpindi / Islamabad",
       );
-      if (res.ok) {
-        const data = await res.json();
-        const display = data.display_name || "";
-        const parts = display.split(",").slice(0, 4).join(",").trim();
-        const addrString = parts
-          ? `${parts} · Latitude: ${lat.toFixed(6)} · Longitude: ${lng.toFixed(6)}`
-          : `Latitude: ${lat.toFixed(6)} · Longitude: ${lng.toFixed(6)}`;
-        setFormattedAddress(addrString);
-      } else {
-        setFormattedAddress(`Latitude: ${lat.toFixed(6)} · Longitude: ${lng.toFixed(6)}`);
-      }
     } catch {
-      setFormattedAddress(`Latitude: ${lat.toFixed(6)} · Longitude: ${lng.toFixed(6)}`);
+      setFormattedAddress("Selected location, Rawalpindi / Islamabad");
     } finally {
       setIsGeocoding(false);
     }
@@ -106,7 +99,7 @@ export default function MapAddressPickerModal({
     }
     const finalAddr =
       formattedAddress ||
-      `Latitude: ${position.lat.toFixed(6)} · Longitude: ${position.lng.toFixed(6)}`;
+      "Selected location, Rawalpindi / Islamabad";
     onSelectAddress(finalAddr, position.lat, position.lng);
     onClose();
   };

@@ -29,12 +29,35 @@ import { showSuccessToast } from "@/context/ToastContext";
 import { getProfile } from "@/services/authService";
 import { useRouter } from "next/navigation";
 import { useServiceCart } from "@/context/ServiceCartContext";
+import { useLocation } from "@/context/LocationContext";
 import { bookingTimestamp, clampBookingLeadHours, earliestBookingTimestamp, nextAvailableBookingDate, pakistanDateAndTime } from "@/lib/booking-time";
 import { calculateRewards } from "@/lib/rewards";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 const BOOKING_DRAFT_KEY = "ustaadpro_booking_draft";
 const CHECKOUT_SELECTION_KEY = "ustaadpro_service_checkout";
+const SAVED_CHECKOUT_ADDRESS_KEY = "ustaadpro_checkout_address_v1";
+const SAVED_CHECKOUT_ADDRESS_TTL = 30 * 24 * 60 * 60 * 1000;
+
+interface SavedCheckoutAddress {
+  selectedLocation: string;
+  specificAddress: string;
+  addressCoords: { lat: number; lng: number } | null;
+  expiresAt: number;
+}
+
+function readSavedCheckoutAddress(): SavedCheckoutAddress | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVED_CHECKOUT_ADDRESS_KEY) || "null") as SavedCheckoutAddress | null;
+    if (!saved || saved.expiresAt <= Date.now()) {
+      localStorage.removeItem(SAVED_CHECKOUT_ADDRESS_KEY);
+      return null;
+    }
+    return saved;
+  } catch {
+    return null;
+  }
+}
 
 // ── Service Area: Rawalpindi + Islamabad ────────────────────────────────
 const SERVICE_AREA = { south: 33.40, north: 33.80, west: 72.85, east: 73.30 };
@@ -78,9 +101,9 @@ function dateCardLabel(date: string, index: number) {
   };
 }
 
-function validateSpecificAddress(value: string, mapLocationSelected: boolean): string {
+function validateSpecificAddress(value: string): string {
   const address = value.trim();
-  if (!address) return mapLocationSelected ? "" : "Enter your house and street address, or select a precise map location.";
+  if (!address) return "House / Street Address is required, even when a map location is selected.";
   if (address.length < 8) return "Add a little more detail, including your house and street number.";
   if (!/\d/.test(address)) return "Include your house, building, or street number.";
   const words = address.match(/[a-zA-Z]{2,}/g) || [];
@@ -90,6 +113,7 @@ function validateSpecificAddress(value: string, mapLocationSelected: boolean): s
 
 export default function BookingModal({ isOpen, onClose, service, services, onBookingComplete, pageMode = false }: BookingModalProps) {
   const { user, updateUser, setAuthModalMode } = useAuth();
+  const { location, setManualLocation } = useLocation();
   const router = useRouter();
   const { items: cartItems, addService, updateQuantity, removeService } = useServiceCart();
   const [step, setStep] = useState<"details" | "payment">("details");
@@ -101,6 +125,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const scheduleCardRef = useRef<HTMLDivElement>(null);
   const receiptAreaRef = useRef<HTMLDivElement>(null);
   const errorAlertRef = useRef<HTMLDivElement>(null);
+  const loadedRewardsForUserRef = useRef("");
+  const addressInitializedRef = useRef(false);
   const [validationFocus, setValidationFocus] = useState<{ target: "contact" | "address" | "schedule" | "receipt"; attempt: number } | null>(null);
 
   useEffect(() => {
@@ -207,26 +233,65 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
         requirements?: string; selectedTime?: string; fromDate?: string; toDate?: string;
         isRecurring?: boolean; addressCoords?: { lat: number; lng: number } | null;
       };
-      if (!draft) return;
-      if (draft.name) setName(draft.name);
-      if (draft.phone) setPhone(draft.phone);
-      setSelectedLocation(draft.selectedLocation || "");
-      setSpecificAddress(draft.specificAddress || "");
-      setRequirements(draft.requirements || "");
-      setSelectedTime(draft.selectedTime || "");
-      if (draft.fromDate) setFromDate(draft.fromDate);
-      if (draft.toDate) setToDate(draft.toDate);
-      setIsRecurring(Boolean(draft.isRecurring));
-      setAddressCoords(draft.addressCoords || null);
+      if (draft) {
+        if (draft.name) setName(draft.name);
+        if (draft.phone) setPhone(draft.phone);
+        setRequirements(draft.requirements || "");
+        setSelectedTime(draft.selectedTime || "");
+        if (draft.fromDate) setFromDate(draft.fromDate);
+        if (draft.toDate) setToDate(draft.toDate);
+        setIsRecurring(Boolean(draft.isRecurring));
+      }
+
+      if (draft?.selectedLocation || draft?.specificAddress) {
+        setSelectedLocation(draft.selectedLocation || "");
+        setSpecificAddress(draft.specificAddress || "");
+        setAddressCoords(draft.addressCoords || null);
+        addressInitializedRef.current = true;
+        return;
+      }
+
+      const savedAddress = readSavedCheckoutAddress();
+      if (savedAddress) {
+        setSelectedLocation(savedAddress.selectedLocation || "");
+        setSpecificAddress(savedAddress.specificAddress || "");
+        setAddressCoords(savedAddress.addressCoords || null);
+        addressInitializedRef.current = true;
+      }
     } catch { /* Ignore an invalid saved draft. */ }
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen || addressInitializedRef.current || location.status !== "serviceable" || !location.label) return;
+    setSelectedLocation(location.label);
+    setAddressCoords(location.coords || null);
+    addressInitializedRef.current = true;
+  }, [isOpen, location.coords, location.label, location.status]);
+
+  useEffect(() => {
+    if (!isOpen || (!selectedLocation.trim() && !specificAddress.trim())) return;
+    const timer = window.setTimeout(() => {
+      const savedAddress: SavedCheckoutAddress = {
+        selectedLocation: selectedLocation.trim(),
+        specificAddress: specificAddress.trim(),
+        addressCoords,
+        expiresAt: Date.now() + SAVED_CHECKOUT_ADDRESS_TTL,
+      };
+      try { localStorage.setItem(SAVED_CHECKOUT_ADDRESS_KEY, JSON.stringify(savedAddress)); } catch {}
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [addressCoords, isOpen, selectedLocation, specificAddress]);
+
+  useEffect(() => {
     if (!isOpen || !user) {
+      loadedRewardsForUserRef.current = "";
       setUseRewardPoints(false);
       setUseWalletBalance(false);
       return;
     }
+    const userKey = String(user.id || user.email || user.phone || "signed-in-user");
+    if (loadedRewardsForUserRef.current === userKey) return;
+    loadedRewardsForUserRef.current = userKey;
     setRewardLoading(true);
     getProfile()
       .then((profile) => { setRewardPoints(Number(profile.rewardPoints || 0)); setWalletBalance(Number(profile.walletBalance || 0)); updateUser(profile); })
@@ -268,7 +333,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     : Math.max(0, calculatedTotal - rewardDiscount);
   const isInspectionService = selectedServices.some((item) => /visit|inspection/i.test(item.unitDescription || ""));
   const hasMapLocation = Boolean(selectedLocation.trim() && addressCoords);
-  const addressFieldError = validateSpecificAddress(specificAddress, hasMapLocation);
+  const addressFieldError = validateSpecificAddress(specificAddress);
   const minimumBookingDate = nextAvailableBookingDate(minimumBookingLeadHours);
   const quickBookingDates = useMemo(
     () => Array.from({ length: 5 }, (_, index) => addDays(minimumBookingDate, index)),
@@ -374,8 +439,9 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
     const hasSpecificAddress = !!specificAddress.trim();
 
-    if (!hasMapLocation && !hasSpecificAddress) {
+    if (!hasSpecificAddress) {
       setAddressTouched(true);
+      setError("Please enter your House / Street Address before continuing.");
       focusValidationCard("address");
       return;
     }
@@ -634,9 +700,9 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
   return (
     <>
-      <div className={pageMode ? "min-h-dvh bg-slate-50 px-3 py-3 sm:px-6 sm:py-8" : "fixed inset-0 z-50 flex touch-pan-y items-end justify-center overscroll-contain bg-slate-900/60 p-0 backdrop-blur-sm animate-in fade-in duration-200 sm:items-center sm:p-4"}>
+      <div className={pageMode ? "min-h-[100svh] bg-slate-50 px-3 py-3 sm:px-6 sm:py-8" : "fixed inset-0 z-50 flex touch-pan-y items-end justify-center overscroll-contain bg-slate-900/60 p-0 backdrop-blur-sm animate-in fade-in duration-200 sm:items-center sm:p-4"}>
         <div className={pageMode ? "relative mx-auto flex min-w-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-slate-200 bg-white shadow-sm sm:overflow-hidden sm:rounded-3xl" : "relative flex h-[100dvh] max-h-[100dvh] min-w-0 w-full max-w-4xl flex-col overflow-hidden rounded-none bg-white shadow-2xl sm:h-auto sm:max-h-[94dvh] sm:rounded-2xl"}>
-          <div className={`${pageMode ? "sticky top-0" : ""} z-20 flex shrink-0 items-center justify-between border-b border-slate-100 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 sm:py-5`}>
+          <div className={`${pageMode ? "sticky top-0 bg-white" : "bg-white/95 backdrop-blur"} z-20 flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-6 sm:py-5`}>
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               {pageMode && (
                 <button type="button" onClick={() => router.back()} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" aria-label="Go back">
@@ -849,7 +915,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 <h3 className="text-sm font-black text-slate-900">Where should we send the professional?</h3>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-600">
-                    Service Location (map){!specificAddress.trim() && <span className="text-red-500"> *</span>}
+                    Area / Map Location
                   </label>
                   <button
                     type="button"
@@ -866,7 +932,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                     type="text"
                     readOnly
                     value={selectedLocation}
-                    placeholder="Pick a location from the map"
+                    placeholder="Choose an area or location from the map"
                     className="w-full cursor-default rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-600"
                   />
                 </div>
@@ -880,11 +946,11 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
                 <div>
                   <label className="mb-1 block text-xs font-bold text-slate-600">
-                    House / Street Address{!hasMapLocation && <span className="text-red-500"> *</span>}
+                    House / Street Address <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
-                    required={!(selectedLocation.trim() && addressCoords)}
+                    required
                     value={specificAddress}
                     onChange={(e) => {
                       setSpecificAddress(e.target.value);
@@ -1040,13 +1106,20 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
       {/* Feature 3: Leaflet Map Modal */}
       <MapAddressPickerModal
+        key={isMapOpen ? `checkout-map-${addressCoords?.lat || location.coords?.lat || "default"}-${addressCoords?.lng || location.coords?.lng || "default"}` : "checkout-map-closed"}
         isOpen={isMapOpen}
         onClose={() => setIsMapOpen(false)}
         initialAddress={selectedLocation}
+        initialLat={addressCoords?.lat || location.coords?.lat}
+        initialLng={addressCoords?.lng || location.coords?.lng}
         onSelectAddress={(newAddress, lat, lng) => {
           setSelectedLocation(newAddress);
           if (lat !== undefined && lng !== undefined) {
-            setAddressCoords({ lat, lng });
+            const coords = { lat, lng };
+            setAddressCoords(coords);
+            const city = /islamabad/i.test(newAddress) ? "Islamabad" : /rawalpindi/i.test(newAddress) ? "Rawalpindi" : "Rawalpindi / Islamabad";
+            const area = newAddress.split(",")[0]?.trim() || undefined;
+            setManualLocation(coords, newAddress, city, area);
           }
         }}
       />
