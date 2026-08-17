@@ -31,6 +31,8 @@ import { useRouter } from "next/navigation";
 import { useServiceCart } from "@/context/ServiceCartContext";
 import { useLocation } from "@/context/LocationContext";
 import { bookingTimestamp, clampBookingLeadHours, earliestBookingTimestamp, nextAvailableBookingDate, pakistanDateAndTime } from "@/lib/booking-time";
+import { compressImage } from "@/lib/imageCompression";
+import { calculateRewards } from "@/lib/rewards";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 const BOOKING_DRAFT_KEY = "ustaadpro_booking_draft";

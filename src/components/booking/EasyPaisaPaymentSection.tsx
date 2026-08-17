@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useState, type RefObject } from "react";
-import { AlertCircle, Check, Copy, CreditCard, Gift, ShieldCheck, Upload } from "lucide-react";
-import { Check, Copy, CreditCard, Gift, ShieldCheck, Upload, WalletCards } from "lucide-react";
+import { AlertCircle, Check, Copy, CreditCard, Gift, ShieldCheck, Upload, WalletCards } from "lucide-react";
 
 const EASYPAISA_NUMBER = "03485838593";
 
@@ -19,9 +18,6 @@ interface EasyPaisaPaymentSectionProps {
   rewardLoading?: boolean;
   useRewardPoints?: boolean;
   onUseRewardPointsChange?: (value: boolean) => void;
-  walletBalance?: number;
-  useWalletBalance?: boolean;
-  onUseWalletBalanceChange?: (value: boolean) => void;
   rewardPoints?: number;
   rewardBalanceValue?: number;
   rewardDiscount?: number;
@@ -46,9 +42,6 @@ export default function EasyPaisaPaymentSection({
   rewardLoading = false,
   useRewardPoints = false,
   onUseRewardPointsChange,
-  walletBalance,
-  useWalletBalance,
-  onUseWalletBalanceChange,
   rewardPoints = 0,
   rewardBalanceValue = 0,
   rewardDiscount = 0,
