@@ -183,27 +183,26 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
   return (
     <>
       <div className="min-h-screen bg-slate-50">
-        {/* Breadcrumb and contextual back navigation */}
-        <div className="border-b border-slate-100 bg-white/90 px-4 py-2 backdrop-blur-md">
-          <div className="mx-auto max-w-6xl space-y-2">
-            <nav aria-label="Breadcrumb" className="flex w-fit max-w-full min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] text-slate-500 ring-1 ring-slate-100 sm:text-xs">
-              <Link href="/" className="font-semibold transition hover:text-emerald-700">Home</Link>
-              <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" />
-              <Link href="/services" className="font-semibold transition hover:text-emerald-700">Services</Link>
-              <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" />
-              <span className="min-w-0 truncate font-medium text-slate-700" title={service.title}>{service.title}</span>
-            </nav>
+        {/* Fixed breadcrumb matching category and subcategory pages */}
+        <div className="fixed inset-x-0 top-20 z-40 border-b border-slate-100 bg-white/95 shadow-sm backdrop-blur">
+          <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-4 sm:px-6 lg:px-8">
             <button
               type="button"
               onClick={() => router.back()}
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100 sm:text-xs"
+              className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-slate-700 transition hover:bg-slate-50 sm:w-10 sm:px-0"
               aria-label="Go back to the previous page"
             >
-              <ArrowLeft className="h-3 w-3" />
-              Back to services
+              <ArrowLeft className="h-5 w-5" />
+              <span className="text-sm font-bold sm:hidden">Back to services</span>
             </button>
+            <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1.5 whitespace-nowrap text-sm text-slate-500 sm:flex">
+              <Link href="/services" className="font-medium hover:text-emerald-600">Services</Link>
+              <ChevronRight className="h-4 w-4 shrink-0" />
+              <span className="font-bold text-slate-900" title={service.title}>{service.title}</span>
+            </nav>
           </div>
         </div>
+        <div className="h-[73px]" aria-hidden="true" />
 
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid lg:grid-cols-5 gap-8">
@@ -790,13 +789,25 @@ function ServiceReviews({
   const [sort, setSort] = useState<ReviewSort>("best");
 
   useEffect(() => {
+    if (!open || initialReviews.length > 0) return;
     const controller = new AbortController();
     async function loadReviews() {
       setLoading(true);
       setError("");
       try {
+        const cacheKey = `ustaadpro:service-reviews:${serviceId}`;
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached) as { expiresAt?: number; reviews?: ApiReview[] };
+          if (parsed.expiresAt && parsed.expiresAt > Date.now() && Array.isArray(parsed.reviews)) {
+            setReviews(parsed.reviews);
+            onReviewsLoaded(parsed.reviews);
+            return;
+          }
+          sessionStorage.removeItem(cacheKey);
+        }
         const response = await fetch(`${API_BASE.replace(/\/$/, "")}/api/services/${encodeURIComponent(serviceId)}/reviews`, {
-          cache: "no-store",
+          cache: "default",
           signal: controller.signal,
           headers: { Accept: "application/json" },
         });
@@ -806,6 +817,9 @@ function ServiceReviews({
         const normalized = (data as ApiReview[]).filter(
           (review) => Number(review.rating) >= 1 && Number(review.rating) <= 5 && String(review.comment || "").trim()
         );
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify({ expiresAt: Date.now() + 5 * 60 * 1000, reviews: normalized }));
+        } catch { /* Reviews remain usable when session storage is unavailable. */ }
         setReviews(normalized);
         onReviewsLoaded(normalized);
       } catch (loadError) {
@@ -816,7 +830,7 @@ function ServiceReviews({
     }
     void loadReviews();
     return () => controller.abort();
-  }, [onReviewsLoaded, serviceId]);
+  }, [initialReviews.length, onReviewsLoaded, open, serviceId]);
 
   const average = reviews.length ? reviews.reduce((sum, review) => sum + Number(review.rating), 0) / reviews.length : 0;
   const counts = useMemo(

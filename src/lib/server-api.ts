@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import type { ApiCategory, ApiCatalogCategory, ApiReview, ApiService, ApiSubcategory } from "@/lib/api-types";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk").replace(/\/$/, "");
@@ -52,26 +53,37 @@ async function fetchCollection<T>(path: string): Promise<T[]> {
   return [];
 }
 
-export const getServices = cache((categoryId?: string, subcategoryId?: string) => {
+const getServicesCached = unstable_cache(async (categoryId?: string, subcategoryId?: string) => {
   const params = new URLSearchParams();
   if (categoryId) params.append("categoryId", categoryId);
   if (subcategoryId) params.append("subcategoryId", subcategoryId);
   const queryStr = params.toString();
   const path = `/api/services${queryStr ? `?${queryStr}` : ""}`;
   return fetchCollection<ApiService>(path);
-});
+}, ["ustaadpro-services"], { revalidate: REVALIDATE_SECONDS, tags: ["services"] });
 
-export const getCategories = cache(() =>
-  fetchCollection<ApiCategory>("/api/categories"),
-);
+export const getServices = cache(getServicesCached);
 
-export const getSubcategories = cache((categoryId: string) =>
-  fetchCollection<ApiSubcategory>(`/api/categories/${encodeURIComponent(categoryId)}/subcategories`),
+const getCategoriesCached = unstable_cache(
+  () => fetchCollection<ApiCategory>("/api/categories"),
+  ["ustaadpro-categories"],
+  { revalidate: REVALIDATE_SECONDS, tags: ["categories"] },
 );
+export const getCategories = cache(getCategoriesCached);
 
-export const getCatalog = cache(() =>
-  fetchCollection<ApiCatalogCategory>("/api/catalog"),
+const getSubcategoriesCached = unstable_cache(
+  (categoryId: string) => fetchCollection<ApiSubcategory>(`/api/categories/${encodeURIComponent(categoryId)}/subcategories`),
+  ["ustaadpro-subcategories"],
+  { revalidate: REVALIDATE_SECONDS, tags: ["catalog"] },
 );
+export const getSubcategories = cache(getSubcategoriesCached);
+
+const getCatalogCached = unstable_cache(
+  () => fetchCollection<ApiCatalogCategory>("/api/catalog"),
+  ["ustaadpro-catalog"],
+  { revalidate: REVALIDATE_SECONDS, tags: ["catalog"] },
+);
+export const getCatalog = cache(getCatalogCached);
 
 // Find a single catalog entry by checking the category ID and common aliases
 export const getCatalogCategory = cache(async (categoryId: string): Promise<ApiCatalogCategory | null> => {
@@ -114,7 +126,7 @@ export const getCatalogCategory = cache(async (categoryId: string): Promise<ApiC
 
 // Get ALL catalog entries matching a category (including aliases), merged
 export const getMergedCatalogCategory = cache(async (categoryId: string): Promise<ApiCatalogCategory | null> => {
-  const catalog = await getCatalog();
+  const [catalog, services] = await Promise.all([getCatalog(), getServices()]);
 
   const ALIAS_GROUPS: string[][] = [
     ["home-services", "home-cleaning", "cleaning", "cleaning_service", "home_service", "home"],
@@ -132,25 +144,61 @@ export const getMergedCatalogCategory = cache(async (categoryId: string): Promis
   if (allEntries.length === 0) return null;
 
   const base = allEntries[0];
-  const mergedSubcategories = new Map<string, ApiSubcategory>();
+  const normalizeTitle = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const mergedSubcategories = new Map<string, {
+    subcategory: ApiSubcategory;
+    ids: Set<string>;
+    services: Map<string, ApiService>;
+  }>();
   const mergedDirectServices = new Map<string, ApiService>();
 
   for (const entry of allEntries) {
     // Skip purely-main or placeholder subcategories (id ends with "-main")
     const subs = (entry.subcategories || []).filter((sc) => !sc.id.endsWith("-main"));
-    subs.forEach((sc) => { if (!mergedSubcategories.has(sc.id)) mergedSubcategories.set(sc.id, sc); });
+    subs.forEach((subcategory) => {
+      const key = normalizeTitle(subcategory.title) || subcategory.id;
+      const bucket = mergedSubcategories.get(key) ?? {
+        subcategory,
+        ids: new Set<string>(),
+        services: new Map<string, ApiService>(),
+      };
+      bucket.ids.add(subcategory.id);
+      (subcategory.services ?? []).forEach((service) => bucket.services.set(service.id, service));
+      mergedSubcategories.set(key, bucket);
+    });
     (entry.directServices || entry.services || []).forEach((svc) => { if (!mergedDirectServices.has(svc.id)) mergedDirectServices.set(svc.id, svc); });
   }
 
+  // Some API responses keep the relationship only on the service record.
+  // Attach those services before deciding whether a subcategory is empty.
+  for (const service of services) {
+    const subcategoryId = service.subcategory_id || service.subcategoryId;
+    if (subcategoryId) {
+      for (const bucket of mergedSubcategories.values()) {
+        if (bucket.ids.has(subcategoryId)) bucket.services.set(service.id, service);
+      }
+    } else if (group.includes(service.category_id || service.categoryId || "")) {
+      mergedDirectServices.set(service.id, service);
+    }
+  }
+
+  const availableSubcategories = Array.from(mergedSubcategories.values())
+    .filter((bucket) => bucket.services.size > 0)
+    .map((bucket) => ({ ...bucket.subcategory, services: Array.from(bucket.services.values()) }));
+  const nestedServiceIds = new Set(availableSubcategories.flatMap((subcategory) =>
+    (subcategory.services ?? []).map((service) => service.id)
+  ));
+  nestedServiceIds.forEach((serviceId) => mergedDirectServices.delete(serviceId));
+
   return {
     ...base,
-    subcategories: Array.from(mergedSubcategories.values()),
+    subcategories: availableSubcategories,
     directServices: Array.from(mergedDirectServices.values()),
     services: Array.from(mergedDirectServices.values()),
   };
 });
 
-export const getServiceById = cache(async (id: string): Promise<ApiService | null> => {
+const getServiceByIdCached = unstable_cache(async (id: string): Promise<ApiService | null> => {
   if (!id) return null;
   try {
     const response = await fetch(apiUrl(`/api/services/${encodeURIComponent(id)}`), {
@@ -164,9 +212,10 @@ export const getServiceById = cache(async (id: string): Promise<ApiService | nul
   } catch {
     return null;
   }
-});
+}, ["ustaadpro-service-detail"], { revalidate: REVALIDATE_SECONDS, tags: ["services"] });
+export const getServiceById = cache(getServiceByIdCached);
 
-export const getReviewsForService = cache(async (serviceId: string) => {
+const getReviewsForServiceCached = unstable_cache(async (serviceId: string) => {
   try {
     const response = await fetch(apiUrl(`/api/services/${encodeURIComponent(serviceId)}/reviews`), {
       headers: { Accept: "application/json" },
@@ -179,7 +228,8 @@ export const getReviewsForService = cache(async (serviceId: string) => {
   } catch {
     return [];
   }
-});
+}, ["ustaadpro-service-reviews"], { revalidate: REVALIDATE_SECONDS, tags: ["reviews"] });
+export const getReviewsForService = cache(getReviewsForServiceCached);
 
 export const getServicesWithReviewStats = cache(async (services: ApiService[]) => {
   const reviewsByService = await Promise.all(services.map((service) => getReviewsForService(service.id)));

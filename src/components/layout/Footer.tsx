@@ -4,7 +4,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { footerLinks, socialLinks, siteConfig } from "@/lib/constants";
 import { Separator } from "@/components/ui/separator";
-import { NewsletterForm } from "@/components/shared/NewsletterForm";
 import { ArrowRight, Mail, MapPin, Phone } from "lucide-react";
 import { AppStoreButtons } from "@/components/shared/AppStoreButtons";
 
@@ -35,18 +34,6 @@ const socialIconMap: Record<string, React.ElementType> = {
 export function Footer() {
   return (
     <footer className="bg-slate-950 text-slate-300" role="contentinfo">
-      <div className="border-b border-white/10 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900">
-        <div className="container-wide flex flex-col gap-6 px-4 py-10 md:flex-row md:items-center md:justify-between md:px-6 lg:px-8">
-          <div>
-            <h3 className="text-xl font-bold text-white">Stay updated with home service tips</h3>
-            <p className="mt-1 text-sm text-slate-400">Get offers, maintenance guides, and booking reminders in your inbox.</p>
-          </div>
-          <div className="w-full max-w-md">
-            <NewsletterForm variant="inline" />
-          </div>
-        </div>
-      </div>
-
       <div className="container-wide grid gap-10 px-4 py-14 sm:grid-cols-2 md:px-6 lg:grid-cols-6 lg:gap-8 lg:px-8">
         <div className="lg:col-span-2">
           <Link href="/" aria-label="Ustaad Pro Home" className="inline-flex rounded-2xl bg-white p-2 shadow-lg shadow-black/20">

@@ -38,7 +38,7 @@ export const navItems = [
 export const quickAccessMenu = [
   { label: "My Profile", href: "/profile", icon: "User" },
   { label: "My Bookings", href: "/track-booking", icon: "Calendar" },
-  { label: "My Store Orders", href: "/store/orders", icon: "Package" },
+  { label: "My Store Orders", href: "/track-booking?tab=shop", icon: "Package" },
   { label: "Privacy Policy", href: "/privacy-policy", icon: "FileText" },
 ] as const;
 

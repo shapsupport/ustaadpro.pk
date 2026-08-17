@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
     root: process.cwd(),
   },
   images: {
-    qualities: [75, 85, 88],
+    qualities: [75, 85, 88, 100],
     // API-hosted images are delivered directly to the browser. Routing them
     // through the Next server makes a slow image host surface ETIMEDOUT logs
     // and delays the page behind a second network hop.

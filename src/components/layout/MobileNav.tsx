@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { navItems, quickAccessMenu } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { LogOut, LogIn, ShoppingCart, WalletCards } from "lucide-react";
+import { LogOut, LogIn, ShoppingCart, Wallet } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -64,21 +64,22 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
                 {user.name.charAt(0)}
               </div>
 
-              <div className="min-w-0 flex-1">
+              <Link href="/profile" onClick={onClose} className="min-w-0 flex-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                 <p className="truncate font-semibold text-slate-900">
                   {user.name}
                 </p>
                 <p className="truncate text-sm text-slate-500">
                   {user.email}
                 </p>
-              </div>
+                <span className="mt-1 block text-xs font-bold text-emerald-700">View profile</span>
+              </Link>
 
               <Link href="/wallet" onClick={onClose} aria-label="Open wallet and rewards" title="Wallet & Rewards" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 transition hover:bg-emerald-100">
-                <WalletCards className="h-5 w-5" />
+                <Wallet className="h-5 w-5" strokeWidth={2.25} />
               </Link>
 
               {/* Cart button */}
-              <button
+              {totalItems > 0 && <button
                 type="button"
                 onClick={() => {
                   onClose();
@@ -93,7 +94,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
                     {totalItems > 99 ? "99+" : totalItems}
                   </span>
                 )}
-              </button>
+              </button>}
             </div>
           ) : (
             <div className="mb-6 flex gap-2">
@@ -108,7 +109,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
                 Continue with account
               </button>
               <Link href="/wallet" onClick={onClose} aria-label="View wallet benefits" title="Wallet & Rewards" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700">
-                <WalletCards className="h-5 w-5" />
+                <Wallet className="h-5 w-5" strokeWidth={2.25} />
               </Link>
             </div>
           )}

@@ -1,6 +1,30 @@
 import type { ApiProduct, ApiService } from "@/lib/api-types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "";
+const SESSION_CACHE_TTL = 5 * 60 * 1000;
+
+function readSessionCache<T>(key: string): T | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(key) || "null") as { expiresAt?: number; value?: T } | null;
+    if (!cached?.expiresAt || cached.expiresAt <= Date.now()) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+    return cached.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionCache<T>(key: string, value: T) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ expiresAt: Date.now() + SESSION_CACHE_TTL, value }));
+  } catch {
+    // Search still works when storage is unavailable or full.
+  }
+}
 
 export type SearchResult = Partial<ApiService & ApiProduct> & {
   resultType: "service" | "shop_product";
@@ -78,13 +102,17 @@ export function getSearchVocabulary(scope: SearchResult["resultType"], signal?: 
 }
 
 async function getServices(signal?: AbortSignal) {
+  const cached = readSessionCache<DetailedService[]>("ustaadpro:search-services:v1");
+  if (cached) return cached;
   servicesPromise ??= fetch(`${API_BASE_URL}/api/services/`, {
     cache: "no-store",
     signal,
   }).then(async (response) => {
     if (!response.ok) throw new Error(`Services returned HTTP ${response.status}`);
     const services: DetailedService[] = await response.json();
-    return services.map((service) => ({ ...service, resultType: "service" as const }));
+    const normalized = services.map((service) => ({ ...service, resultType: "service" as const }));
+    writeSessionCache("ustaadpro:search-services:v1", normalized);
+    return normalized;
   }).catch((error) => {
     servicesPromise = null;
     throw error;

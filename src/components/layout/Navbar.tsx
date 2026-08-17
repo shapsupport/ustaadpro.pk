@@ -1,16 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { Menu, MapPin, ChevronDown, UserRound, ShoppingCart, WalletCards } from "lucide-react";
+import { Menu, MapPin, ChevronDown, UserRound, ShoppingCart, ShoppingBag, Wallet, Wrench } from "lucide-react";
 import { MobileNav } from "./MobileNav";
 import { useLocation } from "@/context/LocationContext";
 import { useAuth } from "@/context/AuthContext";
-import { UserProfileModal } from "@/components/auth/UserProfileModal";
 import { useCart } from "@/context/CartContext";
 import CartDropdown from "../store/CartDropdown";
 import { UniversalSearch } from "@/components/search/UniversalSearch";
@@ -19,51 +18,33 @@ import { UniversalSearch } from "@/components/search/UniversalSearch";
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [navHidden, setNavHidden] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
-  const lastScrollY = useRef(0);
   const { totalItems } = useCart();
 
   const pathname = usePathname();
   const { location, setShowPicker } = useLocation();
   const { user, setAuthModalMode } = useAuth();
-  const isDetailPage = /^\/(services|store)\/[^/]+$/.test(pathname);
-  const isMobileStorePage = pathname === "/store";
-  const autoHideNav = isDetailPage || isMobileStorePage;
   const searchScope = pathname.startsWith("/store") ? "shop_product" : "service";
   const visibleNavItems = navItems.filter((item) => item.href !== "/track-booking" || Boolean(user));
 
   useEffect(() => {
     const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-      setScrolled(currentScrollY > 10);
-
-      if (!autoHideNav || currentScrollY <= 80) {
-        setNavHidden(false);
-      } else if (Math.abs(currentScrollY - lastScrollY.current) > 8) {
-        setNavHidden(currentScrollY > lastScrollY.current);
-      }
-      lastScrollY.current = currentScrollY;
+      setScrolled(window.scrollY > 10);
     };
 
-    lastScrollY.current = window.scrollY;
     window.addEventListener("scroll", handleScroll, { passive: true });
 
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [autoHideNav]);
+  }, []);
 
   return (
     <>
       <header
         className={cn(
-          "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
-          autoHideNav && navHidden && !mobileOpen && !profileOpen
-            ? isMobileStorePage ? "-translate-y-full md:translate-y-0" : "-translate-y-full"
-            : "translate-y-0",
+          "fixed inset-x-0 top-0 z-50 py-2 transition-[background-color,border-color,box-shadow] duration-300",
           scrolled
-            ? "border-b border-slate-100 bg-white/95 shadow-sm backdrop-blur-md py-1"
-            : "bg-white/80 backdrop-blur-sm py-2"
+            ? "border-b border-slate-100 bg-white/95 shadow-sm backdrop-blur-md"
+            : "bg-white/80 backdrop-blur-sm"
         )}
       >
         <nav
@@ -84,7 +65,7 @@ export function Navbar() {
               priority
               className="h-10 w-10 rounded-xl object-contain shadow-md shadow-primary/15"
             />
-            <span className="hidden text-xl font-black tracking-tight text-slate-900 min-[360px]:inline">
+            <span className="hidden text-xl font-black tracking-tight text-slate-900 min-[480px]:inline">
               Ustaad<span className="font-bold text-primary">Pro</span>
             </span>
           </Link>
@@ -114,6 +95,42 @@ export function Navbar() {
 
           {/* Right Side */}
           <div className="flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2">
+            {/* Mobile quick destinations — icons on narrow phones, labels when space allows. */}
+            <Link
+              href="/services"
+              aria-label="Browse services"
+              title="Services"
+              className={cn(
+                "group relative flex h-10 items-center justify-center gap-1.5 rounded-xl border px-2.5 text-xs font-bold shadow-sm transition sm:px-3 lg:hidden",
+                pathname.startsWith("/services")
+                  ? "border-emerald-500 bg-emerald-600 text-white"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+              )}
+            >
+              <Wrench className="h-4.5 w-4.5 shrink-0" />
+              <span className="hidden sm:inline">Services</span>
+              <span className="pointer-events-none absolute left-1/2 top-full z-[60] mt-2 -translate-x-1/2 rounded-lg bg-slate-950 px-2.5 py-1.5 text-[10px] font-bold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 sm:hidden">
+                Services
+              </span>
+            </Link>
+            <Link
+              href="/store"
+              aria-label="Browse shop products"
+              title="Shop"
+              className={cn(
+                "group relative flex h-10 items-center justify-center gap-1.5 rounded-xl border px-2.5 text-xs font-bold shadow-sm transition sm:px-3 lg:hidden",
+                pathname.startsWith("/store")
+                  ? "border-slate-950 bg-slate-950 text-lime-300"
+                  : "border-slate-300 bg-white text-slate-800 hover:border-lime-400 hover:bg-lime-50"
+              )}
+            >
+              <ShoppingBag className="h-4.5 w-4.5 shrink-0" />
+              <span className="hidden sm:inline">Shop</span>
+              <span className="pointer-events-none absolute left-1/2 top-full z-[60] mt-2 -translate-x-1/2 rounded-lg bg-slate-950 px-2.5 py-1.5 text-[10px] font-bold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 sm:hidden">
+                Shop
+              </span>
+            </Link>
+
             {/* Location — show from xl upwards to avoid crowding on 1024–1280px */}
             <button
               onClick={() => setShowPicker(true)}
@@ -133,19 +150,19 @@ export function Navbar() {
               title="Wallet & Rewards"
               className="hidden h-10 w-10 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-100 lg:flex"
             >
-              <WalletCards className="h-5 w-5" />
+              <Wallet className="h-5 w-5" strokeWidth={2.25} />
             </Link>
             {user ? (
-              <button
-                onClick={() => setProfileOpen(true)}
-                aria-label="Open account menu"
+              <Link
+                href="/profile"
+                aria-label="Open my profile"
                 title="My account"
                 className="hidden h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-gradient-to-br from-primary to-emerald-700 text-white shadow-md shadow-primary/10 transition-all hover:opacity-90 lg:flex"
               >
                 <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20">
                   <UserRound className="h-4 w-4" />
                 </div>
-              </button>
+              </Link>
             ) : (
               <button
                 onClick={() => setAuthModalMode("login")}
@@ -165,8 +182,8 @@ export function Navbar() {
               <Menu className="h-5 w-5" />
             </button>
 
-            {/* Cart — always visible */}
-            <div className="relative">
+            {/* Store cart appears only after a product has been added. */}
+            {totalItems > 0 && <div className="relative">
               <button
                 type="button"
                 onClick={() => setCartOpen((prev) => !prev)}
@@ -174,18 +191,13 @@ export function Navbar() {
                 className="relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-lime-400 hover:text-lime-600"
               >
                 <ShoppingCart className="h-5 w-5" />
-                {totalItems > 0 && <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-lime-500 text-[10px] font-black text-white shadow">{totalItems > 99 ? "99+" : totalItems}</span>}
+                <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-lime-500 text-[10px] font-black text-white shadow">{totalItems > 99 ? "99+" : totalItems}</span>
               </button>
               <CartDropdown isOpen={cartOpen} onClose={() => setCartOpen(false)} />
-            </div>
+            </div>}
           </div>
         </nav>
       </header>
-
-      <UserProfileModal
-        open={profileOpen}
-        onClose={() => setProfileOpen(false)}
-      />
 
       <MobileNav
         open={mobileOpen}

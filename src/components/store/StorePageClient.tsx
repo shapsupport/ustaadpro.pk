@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,28 +12,44 @@ import type { ApiProduct, ApiShopResponse } from "@/lib/api-types";
 import { searchApi } from "@/lib/search";
 import {
   Check,
+  ArrowRight,
+  Grid2X2,
+  Headphones,
+  List,
   Minus,
   Package,
   Plus,
   ShoppingBag,
-  ShoppingCart,
+  ShoppingBasket,
   SlidersHorizontal,
+  Truck,
+  ShieldCheck,
 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { UniversalSearch } from "@/components/search/UniversalSearch";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "";
-const CATALOG_CACHE_MS = 60_000;
+const CATALOG_CACHE_MS = 5 * 60_000;
 type ShopCatalogResponse = ApiShopResponse & { products?: ApiProduct[]; data?: ApiProduct[] };
 const catalogCache = new Map<string, { expiresAt: number; data: ShopCatalogResponse }>();
 
 async function fetchCatalog(url: string): Promise<ShopCatalogResponse> {
   const cached = catalogCache.get(url);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
-  const response = await fetch(url);
+  const storageKey = `ustaadpro:shop-catalog:${url}`;
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(storageKey) || "null") as { expiresAt?: number; data?: ShopCatalogResponse } | null;
+    if (stored?.expiresAt && stored.expiresAt > Date.now() && stored.data) {
+      catalogCache.set(url, { expiresAt: stored.expiresAt, data: stored.data });
+      return stored.data;
+    }
+  } catch { /* Continue with the network when storage is unavailable. */ }
+  const response = await fetch(url, { cache: "default", headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error("Unable to load products");
   const data = await response.json() as ShopCatalogResponse;
-  catalogCache.set(url, { expiresAt: Date.now() + CATALOG_CACHE_MS, data });
+  const expiresAt = Date.now() + CATALOG_CACHE_MS;
+  catalogCache.set(url, { expiresAt, data });
+  try { sessionStorage.setItem(storageKey, JSON.stringify({ expiresAt, data })); } catch { /* Memory cache still applies. */ }
   return data;
 }
 
@@ -127,24 +144,11 @@ export default function StorePageClient() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [mobileNavVisible, setMobileNavVisible] = useState(true);
-  const pageSize = 16;
+  const [sortBy, setSortBy] = useState<"popular" | "price-low" | "price-high" | "newest">("popular");
+  const [view, setView] = useState<"grid" | "list">("grid");
+  const pageSize = 15;
   const resultsRef = useRef<HTMLDivElement>(null);
   const catalogRequestRef = useRef(0);
-  const lastMobileScrollY = useRef(0);
-
-  useEffect(() => {
-    const handleMobileScroll = () => {
-      if (window.innerWidth >= 768) return;
-      const current = window.scrollY;
-      if (current <= 80) setMobileNavVisible(true);
-      else if (Math.abs(current - lastMobileScrollY.current) > 8) setMobileNavVisible(current < lastMobileScrollY.current);
-      lastMobileScrollY.current = current;
-    };
-    lastMobileScrollY.current = window.scrollY;
-    window.addEventListener("scroll", handleMobileScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleMobileScroll);
-  }, []);
 
   useEffect(() => {
     let shouldReturnToTop = false;
@@ -173,12 +177,16 @@ export default function StorePageClient() {
 
   const loadProducts = useCallback(async () => {
     const requestId = ++catalogRequestRef.current;
-    const requestKey = selectedCategory;
+    const requestKey = `${selectedCategory}:${sortBy}:${page}`;
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: String(pageSize), offset: String((page - 1) * pageSize) });
       if (selectedCategory !== "all") params.set("category", selectedCategory);
-      const firstPage = await fetchCatalog(`${API_BASE_URL}/api/shop/products?${params}`);
+      if (sortBy === "price-low") { params.set("sortBy", "price"); params.set("sortOrder", "asc"); }
+      if (sortBy === "price-high") { params.set("sortBy", "price"); params.set("sortOrder", "desc"); }
+      if (sortBy === "newest") { params.set("sortBy", "createdAt"); params.set("sortOrder", "desc"); }
+      if (sortBy === "popular") { params.set("sortBy", "popular"); params.set("sortOrder", "desc"); }
+      const firstPage = await fetchCatalog(`/api/shop/catalog?${params}`);
       const catalogTotal = Number(firstPage?.total || 0);
       const allProducts = Array.isArray(firstPage?.products)
         ? firstPage.products
@@ -186,9 +194,10 @@ export default function StorePageClient() {
           ? firstPage.data
           : [];
 
-      const normalizedProducts = uniqueProducts(allProducts.filter((product: ApiProduct) => product?.id));
+      // Respect the page boundary even if an API version returns more than requested.
+      const normalizedProducts = uniqueProducts(allProducts.filter((product: ApiProduct) => product?.id)).slice(0, pageSize);
       if (requestId !== catalogRequestRef.current) return;
-      setProducts(diversifyProducts(normalizedProducts, getShopShuffleSeed() + page));
+      setProducts(sortBy === "popular" ? diversifyProducts(normalizedProducts, getShopShuffleSeed() + page) : normalizedProducts);
       setCategories(Array.isArray(firstPage?.categories) ? firstPage.categories : []);
       setTotal(catalogTotal || normalizedProducts.length);
     } catch {
@@ -202,7 +211,7 @@ export default function StorePageClient() {
         setLoading(false);
       }
     }
-  }, [page, selectedCategory]);
+  }, [page, selectedCategory, sortBy]);
 
   useEffect(() => {
     if (debouncedSearch) return;
@@ -244,15 +253,24 @@ export default function StorePageClient() {
     setSearch("");
     setDebouncedSearch("");
     setPage(1);
+    setSortBy("popular");
+    setView("grid");
     window.dispatchEvent(new Event("ustaadpro:shop-search-reset"));
   }, []);
 
-  const activeFilters = selectedCategory !== "all" || Boolean(debouncedSearch);
+  const activeFilters = selectedCategory !== "all" || Boolean(debouncedSearch) || sortBy !== "popular";
   const visibleTotal = debouncedSearch ? searchResults.length : total;
   const pageCount = Math.max(1, Math.ceil(visibleTotal / pageSize));
   const visibleProducts = debouncedSearch ? searchResults.slice((page - 1) * pageSize, page * pageSize) : products;
-  const catalogLoading = loading || (!debouncedSearch && loadedCatalogKey !== selectedCategory);
-  const skeletonCount = 12;
+  const displayedProducts = useMemo(() => {
+    const sorted = [...visibleProducts];
+    if (sortBy === "price-low") sorted.sort((a, b) => Number(a.price) - Number(b.price));
+    if (sortBy === "price-high") sorted.sort((a, b) => Number(b.price) - Number(a.price));
+    if (sortBy === "newest") sorted.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    return sorted;
+  }, [sortBy, visibleProducts]);
+  const catalogLoading = loading || (!debouncedSearch && loadedCatalogKey !== `${selectedCategory}:${sortBy}:${page}`);
+  const skeletonCount = 8;
   const handleSearchChange = useCallback((value: string) => {
     const isStartingSearch = !search.trim() && Boolean(value.trim());
     setSearch(value);
@@ -302,9 +320,10 @@ export default function StorePageClient() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <section className="border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <section className="relative overflow-hidden border-b border-emerald-100 bg-[radial-gradient(circle_at_80%_20%,#d1fae5_0,transparent_35%),linear-gradient(110deg,#fff_0%,#f0fdf4_100%)]">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full border-[35px] border-emerald-200/40" />
+        <div className="relative mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-10 lg:px-8">
+          <div className="relative z-10 sm:max-w-[58%] lg:max-w-[55%]">
             <div className="max-w-2xl">
               <Badge className="mb-2 border-lime-400/20 bg-lime-500/10 text-xs text-lime-700 sm:mb-3 sm:text-sm">
                 <ShoppingBag className="mr-1.5 h-3.5 w-3.5" />
@@ -317,21 +336,31 @@ export default function StorePageClient() {
                 Browse the latest products from the live API, filter instantly, and place your order with a few simple steps.
               </p>
             </div>
-            <div className="hidden flex-wrap items-center gap-3 sm:flex">
-              <div className="rounded-full border border-lime-200 bg-lime-50 px-3 py-2 text-sm font-semibold text-lime-700">
-                {total} products available
-              </div>
-              <div className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600">
-                Fast delivery • Verified stock
-              </div>
+            <div className="mt-4 grid grid-cols-3 gap-2 sm:mt-5">
+              <div className="rounded-xl border border-emerald-200 bg-white/90 p-2.5 text-center text-[10px] font-bold text-emerald-800 shadow-sm sm:text-xs"><ShoppingBag className="mx-auto mb-1 h-4 w-4" />{total} products</div>
+              <div className="rounded-xl border border-emerald-200 bg-white/90 p-2.5 text-center text-[10px] font-bold text-emerald-800 shadow-sm sm:text-xs"><Truck className="mx-auto mb-1 h-4 w-4" />Fast delivery</div>
+              <div className="rounded-xl border border-emerald-200 bg-white/90 p-2.5 text-center text-[10px] font-bold text-emerald-800 shadow-sm sm:text-xs"><ShieldCheck className="mx-auto mb-1 h-4 w-4" />Verified stock</div>
             </div>
+            <div className="relative mt-3 h-36 w-full sm:hidden">
+              <Image src="/store/tools-bucket-hero-v1.webp" alt="Home improvement tools arranged in a green tool bucket" fill priority className="object-contain object-bottom" sizes="100vw" />
+            </div>
+          </div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[43%] sm:block lg:w-[46%]">
+            <Image
+              src="/store/tools-bucket-hero-v1.webp"
+              alt="Home improvement tools arranged in a green tool bucket"
+              fill
+              priority
+              className="object-contain object-bottom"
+              sizes="(max-width: 1023px) 43vw, 46vw"
+            />
           </div>
         </div>
       </section>
 
       <div className="mx-auto max-w-[1536px] px-3 py-3 sm:px-6 sm:py-6 lg:px-8">
         <div className="grid gap-3 sm:gap-6 lg:grid-cols-[230px_minmax(0,1fr)]">
-          <aside className={`sticky z-30 w-full min-w-0 self-start rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-md backdrop-blur transition-[top] duration-300 sm:rounded-3xl sm:p-4 sm:shadow-xl lg:top-24 ${mobileNavVisible ? "top-20" : "top-2"}`}>
+          <aside className="sticky top-20 z-30 w-full min-w-0 self-start rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-md backdrop-blur sm:rounded-3xl sm:p-4 sm:shadow-xl lg:top-24">
             <div className="flex items-center gap-2">
               <SlidersHorizontal className="h-4 w-4 text-lime-600" />
               <h2 className="text-sm font-semibold text-slate-900 sm:text-lg">Browse products</h2>
@@ -376,30 +405,63 @@ export default function StorePageClient() {
                   Clear filters
                 </Button>
               ) : null}
+
+              <div className="flex items-center gap-2 lg:hidden">
+                <label className="sr-only" htmlFor="store-sort-mobile">Sort products</label>
+                <select id="store-sort-mobile" value={sortBy} onChange={(event) => { setSortBy(event.target.value as typeof sortBy); setPage(1); }} className="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500">
+                  <option value="popular">Sort: Popular</option>
+                  <option value="newest">Sort: Newest</option>
+                  <option value="price-low">Price: Low to High</option>
+                  <option value="price-high">Price: High to Low</option>
+                </select>
+                <div className="flex shrink-0 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                  <button type="button" onClick={() => setView("grid")} aria-label="Grid view" aria-pressed={view === "grid"} className={`grid h-8 w-8 place-items-center rounded-lg ${view === "grid" ? "bg-emerald-600 text-white shadow" : "text-slate-500"}`}><Grid2X2 className="h-4 w-4" /></button>
+                  <button type="button" onClick={() => setView("list")} aria-label="List view" aria-pressed={view === "list"} className={`grid h-8 w-8 place-items-center rounded-lg ${view === "list" ? "bg-emerald-600 text-white shadow" : "text-slate-500"}`}><List className="h-4 w-4" /></button>
+                </div>
+                <span className="shrink-0 rounded-lg bg-slate-100 px-2 py-2 text-[10px] font-bold text-slate-600">{page}/{pageCount}</span>
+              </div>
+
+              <div className="hidden rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-center lg:block">
+                <Headphones className="mx-auto h-6 w-6 text-emerald-700" />
+                <p className="mt-2 text-xs font-black text-emerald-900">Need help finding a product?</p>
+                <Link href="/contact" className="mt-3 flex h-10 items-center justify-center rounded-xl border border-emerald-200 bg-white text-xs font-bold text-emerald-700 shadow-sm hover:bg-emerald-100">Contact Us</Link>
+              </div>
             </div>
           </aside>
 
           <div ref={resultsRef} className="min-h-screen scroll-mt-28 space-y-6">
-            <div className="hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:block">
+            <div className="sticky top-24 z-20 hidden rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur lg:block lg:rounded-3xl lg:p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-[0.25em] text-lime-600">Catalog</p>
                   <h2 className="mt-1 text-xl font-semibold text-slate-900">Find the right product faster</h2>
                 </div>
-                <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">
-                  Page {page} of {pageCount}
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="sr-only" htmlFor="store-sort">Sort products</label>
+                  <select id="store-sort" value={sortBy} onChange={(event) => { setSortBy(event.target.value as typeof sortBy); setPage(1); }} className="h-10 max-w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500">
+                    <option value="popular">Sort: Popular</option>
+                    <option value="newest">Sort: Newest</option>
+                    <option value="price-low">Price: Low to High</option>
+                    <option value="price-high">Price: High to Low</option>
+                  </select>
+                  <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                    <button type="button" onClick={() => setView("grid")} aria-label="Grid view" aria-pressed={view === "grid"} className={`grid h-8 w-8 place-items-center rounded-lg ${view === "grid" ? "bg-emerald-600 text-white shadow" : "text-slate-500"}`}><Grid2X2 className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => setView("list")} aria-label="List view" aria-pressed={view === "list"} className={`grid h-8 w-8 place-items-center rounded-lg ${view === "list" ? "bg-emerald-600 text-white shadow" : "text-slate-500"}`}><List className="h-4 w-4" /></button>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">Page {page} of {pageCount}</div>
                 </div>
               </div>
             </div>
 
             {catalogLoading || searching ? (
               <ProductGridSkeleton count={skeletonCount} />
-            ) : visibleProducts.length > 0 ? (
-              <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
-                {visibleProducts.map((product) => (
+            ) : displayedProducts.length > 0 ? (
+              <div className={view === "grid" ? "grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4" : "grid grid-cols-2 gap-2.5 sm:grid-cols-1 sm:gap-4"}>
+                {displayedProducts.map((product) => (
                   <ProductCard
                     key={product.id}
                     product={product}
+                    list={view === "list"}
                   />
                 ))}
               </div>
@@ -432,7 +494,8 @@ function Pagination({ page, pageCount, onPage }: { page: number; pageCount: numb
   </nav>;
 }
 
-function ProductCard({ product }: { product: ApiProduct }) {
+function ProductCard({ product, list = false }: { product: ApiProduct; list?: boolean }) {
+  const router = useRouter();
   const { addItem } = useCart();
   const [added, setAdded] = useState(false);
   const [quantity, setQuantity] = useState(1);
@@ -453,15 +516,21 @@ function ProductCard({ product }: { product: ApiProduct }) {
     setQuantity(Math.min(Math.max(1, Number.isFinite(value) ? Math.floor(value) : 1), Math.max(1, product.stock)));
   };
 
+  const handleBuyNow = () => {
+    if (isOutOfStock) return;
+    addItem(product, quantity);
+    router.push("/shop-checkout");
+  };
+
   return (
-    <Card className="group flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 transition-all hover:-translate-y-1 hover:border-lime-200 hover:shadow-xl sm:rounded-2xl">
+    <Card className={`group flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 transition-all hover:-translate-y-1 hover:border-lime-200 hover:shadow-xl sm:rounded-2xl ${list ? "sm:flex-row" : ""}`}>
       {/* Clickable image + info area */}
       <Link
         href={`/store/${product.id}`}
         onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch { } }}
-        className="block flex-1"
+        className={`block flex-1 ${list ? "sm:grid sm:grid-cols-[190px_minmax(0,1fr)]" : ""}`}
       >
-        <div className="relative aspect-[4/3] overflow-hidden rounded-t-xl bg-white sm:rounded-t-2xl">
+        <div className={`relative aspect-[4/3] overflow-hidden rounded-t-xl bg-white sm:rounded-t-2xl ${list ? "sm:aspect-auto sm:min-h-48 sm:rounded-l-2xl sm:rounded-tr-none" : ""}`}>
           {imageSrc ? (
             <Image
               src={imageSrc}
@@ -489,6 +558,10 @@ function ProductCard({ product }: { product: ApiProduct }) {
           <h3 className="mt-1 line-clamp-2 min-h-9 text-xs font-bold leading-[1.125rem] text-slate-900 transition-colors group-hover:text-lime-700 sm:mt-1.5 sm:min-h-0 sm:text-base sm:leading-snug">
             {product.title}
           </h3>
+          <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 group-hover:underline sm:text-xs">
+            <span className="sm:hidden">Details</span><span className="hidden sm:inline">View details</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </span>
 
           <div className="mt-1 hidden items-center gap-2 text-xs text-slate-500 sm:mt-2 sm:flex">
             <span>{product.stock > 0 ? "Available to order" : "Currently unavailable"}</span>
@@ -504,7 +577,7 @@ function ProductCard({ product }: { product: ApiProduct }) {
       </Link>
 
       {/* Action buttons */}
-      <div className="p-2 pt-1 sm:p-3 sm:pt-1">
+      <div className={`p-2 pt-1 sm:p-3 sm:pt-1 ${list ? "sm:w-72 sm:shrink-0 sm:self-center" : ""}`}>
         <div className="mb-1.5 flex items-center justify-end gap-2 sm:mb-2 sm:justify-between">
           <span className="hidden text-xs font-bold text-slate-600 sm:inline">Quantity</span>
           <div className="flex h-8 items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 sm:h-9 sm:rounded-xl">
@@ -522,32 +595,33 @@ function ProductCard({ product }: { product: ApiProduct }) {
             <button type="button" onClick={() => setSafeQuantity(quantity + 1)} disabled={quantity >= product.stock || isOutOfStock} className="flex h-full w-8 items-center justify-center text-slate-600 hover:bg-slate-200 disabled:opacity-35" aria-label="Increase quantity"><Plus className="h-3.5 w-3.5" /></button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/store/${product.id}`}
-            onClick={() => { try { sessionStorage.setItem(`ustaadpro_product_${product.id}`, JSON.stringify(product)); } catch { } }}
-            className="flex h-9 flex-1 items-center justify-center rounded-lg bg-lime-500 px-1 text-[10px] font-bold text-white transition hover:bg-lime-600 sm:h-10 sm:rounded-xl sm:text-xs"
-          >
-            View details
-          </Link>
+        <div className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-2 sm:grid-cols-[3.5rem_minmax(0,1fr)]">
           <button
             type="button"
             onClick={handleAddToCart}
             disabled={isOutOfStock}
             aria-label={added ? "Added to cart" : "Add to cart"}
-            className={`flex h-9 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-bold transition cursor-pointer sm:h-10 sm:rounded-xl sm:px-3 ${isOutOfStock
+            className={`relative flex h-11 items-center justify-center rounded-xl border-2 text-xs font-bold shadow-sm transition active:scale-95 sm:h-12 ${isOutOfStock
               ? "cursor-not-allowed border-slate-200 text-slate-400 bg-slate-50"
               : added
                 ? "border-emerald-600 bg-emerald-600 text-white"
-                : "border-emerald-500 bg-white text-emerald-600 hover:bg-emerald-50"
+                : "cursor-pointer border-emerald-300 bg-emerald-50 text-emerald-700 hover:border-emerald-500 hover:bg-emerald-100"
               }`}
           >
             {added ? (
               <Check className="h-4 w-4" />
             ) : (
-              <ShoppingCart className="h-4 w-4" />
+              <ShoppingBasket className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2.25} />
             )}
-            <span className="hidden sm:inline">{added ? "Added" : "Add"}</span>
+            {!isOutOfStock && <span className={`absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full text-[11px] font-black leading-none shadow ${added ? "bg-white text-emerald-700" : "bg-emerald-600 text-white"}`}>{added ? "✓" : "+"}</span>}
+          </button>
+          <button
+            type="button"
+            onClick={handleBuyNow}
+            disabled={isOutOfStock}
+            className="flex h-11 min-w-0 items-center justify-center gap-1 rounded-xl bg-emerald-600 px-2 text-xs font-black text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none sm:h-12 sm:gap-1.5 sm:text-sm"
+          >
+            {isOutOfStock ? "Unavailable" : "Buy Now"} {!isOutOfStock && <ArrowRight className="h-4 w-4 shrink-0" />}
           </button>
         </div>
       </div>

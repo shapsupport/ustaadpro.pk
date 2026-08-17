@@ -250,6 +250,14 @@ export default function TrackBookingPage() {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const requestedTab = new URLSearchParams(window.location.search).get("tab");
+      if (requestedTab === "shop") setActiveTab("shop");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const loadInFlight = useRef(false);
   const load = useCallback(async () => {
     if (!user?.email) return;

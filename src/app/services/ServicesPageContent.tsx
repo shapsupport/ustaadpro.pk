@@ -26,7 +26,7 @@ import {
   CheckCircle2,
   Minus,
   Plus,
-  ShoppingCart,
+  ShoppingBasket,
 } from "lucide-react";
 import type { ApiCategory, ApiCatalogCategory, ApiService, ApiSubcategory } from "@/lib/api-types";
 import { orderServices } from "@/lib/service-order";
@@ -51,6 +51,7 @@ function SafeImage({ src, alt, fallback, className }: { src: string; alt: string
       alt={alt}
       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
       className={`${className ?? "object-cover"} block`}
+      quality={100}
       fallback={fallback}
     />
   );
@@ -180,13 +181,6 @@ export function ServicesPageContent({
   }
 
   // Step 1 → Step 2: select main category, show subcategories
-  function selectCategory(catId: string) {
-    setActiveCategory(catId);
-    setActiveSubcategory(null);
-    setStep("subcategory");
-    scrollToStep();
-  }
-
   // Step 2 → Step 3: select sub-category, show services
   function selectSubcategory(sub: SubcatItem) {
     setActiveSubcategory(sub);
@@ -537,10 +531,9 @@ export function ServicesPageContent({
                 const imageUrl = imgSrc(webImgPath);
 
                 return (
-                  <button
+                  <Link
                     key={category.id}
-                    type="button"
-                    onClick={() => selectCategory(category.id)}
+                    href={`/services/${encodeURIComponent(category.id)}`}
                     className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md transition-all duration-300 hover:-translate-y-1 hover:border-emerald-300 hover:shadow-xl sm:rounded-3xl"
                   >
                     {/* Image / Gradient banner */}
@@ -549,7 +542,7 @@ export function ServicesPageContent({
                         <SafeImage
                           src={imageUrl}
                           alt={category.title}
-                            className="rounded-xl object-contain p-2 sm:rounded-2xl sm:p-3"
+                            className="rounded-xl object-cover sm:rounded-2xl"
                           fallback={
                             <div className="flex h-full w-full items-center justify-center">
                               <IconComponent className="h-10 w-10 text-white/80 sm:h-14 sm:w-14" />
@@ -570,7 +563,7 @@ export function ServicesPageContent({
                         View sub-services <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </span>
                     </div>
-                  </button>
+                  </Link>
                 );
               })}
             </div>
@@ -580,8 +573,8 @@ export function ServicesPageContent({
         {/* ── STEP 2: SELECT SUB-SERVICE ── */}
         {!isSearchMode && step === "subcategory" && (
           <div>
-            <div className="mb-4 space-y-2.5">
-              <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap text-xs text-slate-500">
+            <div className="sticky top-20 z-40 -mx-4 mb-4 space-y-2.5 border-b border-slate-100 bg-white/95 px-4 py-2 shadow-sm backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+              <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1.5 whitespace-nowrap text-xs text-slate-500 sm:flex">
                 <button type="button" onClick={backToCategories} className="font-semibold text-emerald-700 transition hover:underline">{activeCategoryObj?.title}</button>
                 <span aria-hidden="true">›</span>
                 <span className="font-medium text-slate-600">Select sub-service</span>
@@ -635,7 +628,7 @@ export function ServicesPageContent({
                           <SafeImage
                             src={subImgSrc}
                             alt={subCat.title}
-                            className="rounded-xl object-contain p-2 sm:rounded-2xl sm:p-3"
+                            className="rounded-xl object-cover sm:rounded-2xl"
                             fallback={
                               <div className="flex h-full w-full items-center justify-center">
                                 <IconComponent className="h-9 w-9 text-emerald-300 sm:h-12 sm:w-12" />
@@ -672,8 +665,8 @@ export function ServicesPageContent({
         {/* ── STEP 3: VIEW & BOOK SERVICES ── */}
         {!isSearchMode && step === "services" && activeSubcategory && (
           <div>
-            <div className="mb-4 space-y-2.5">
-              <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap text-xs text-slate-500">
+            <div className="sticky top-20 z-40 -mx-4 mb-4 space-y-2.5 border-b border-slate-100 bg-white/95 px-4 py-2 shadow-sm backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+              <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1.5 whitespace-nowrap text-xs text-slate-500 sm:flex">
                 <button type="button" onClick={backToCategories} className="font-semibold text-emerald-700 hover:underline">{activeCategoryObj?.title}</button>
                 <span aria-hidden="true">›</span>
                 <button type="button" onClick={backToSubcategories} className="font-semibold text-emerald-700 hover:underline">{activeSubcategory.title}</button>
@@ -798,13 +791,14 @@ export function ServiceCard({ service, onBook }: { service: ApiService; onBook?:
   return (
     <div className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl sm:rounded-3xl">
       <div className="relative m-1.5 aspect-[4/3] w-[calc(100%-0.75rem)] shrink-0 overflow-hidden rounded-xl border border-slate-100 bg-white max-sm:has-[[data-service-image-fallback]]:hidden sm:m-2 sm:w-[calc(100%-1rem)] sm:rounded-2xl">
+        <Link href={`/services/${encodeURIComponent(service.id)}`} className="absolute inset-0 z-[1]" aria-label={`View ${service.title}`} />
         {src ? (
           <ResilientImage
             src={src}
             alt={service.title}
-            className="rounded-lg object-contain p-1.5 [image-rendering:auto] sm:rounded-2xl sm:p-2"
+            className="rounded-lg object-cover sm:rounded-2xl"
             sizes="(max-width:639px) 50vw, (max-width:1023px) 50vw, (max-width:1279px) 33vw, 25vw"
-            quality={88}
+            quality={100}
             fallback={<div data-service-image-fallback className="flex h-full w-full items-center justify-center bg-gradient-to-br from-emerald-50 via-teal-50 to-lime-100"><Wrench className="h-14 w-14 text-emerald-500" /></div>}
           />
         ) : (
@@ -812,7 +806,7 @@ export function ServiceCard({ service, onBook }: { service: ApiService; onBook?:
             <Layers className="h-14 w-14 text-slate-300" />
           </div>
         )}
-        <div className="absolute left-2 top-2 flex flex-wrap gap-1 sm:left-4 sm:top-4 sm:gap-2">
+        <div className="pointer-events-none absolute left-2 top-2 z-[2] flex flex-wrap gap-1 sm:left-4 sm:top-4 sm:gap-2">
           {service.badge ? (
             <span className="rounded-full bg-emerald-600 px-2 py-1 text-[8px] font-bold text-white shadow sm:px-3 sm:py-1.5 sm:text-xs">{service.badge}</span>
           ) : null}
@@ -831,6 +825,15 @@ export function ServiceCard({ service, onBook }: { service: ApiService; onBook?:
       <div className="flex flex-1 flex-col p-2.5 sm:p-5">
         <Link href={`/services/${service.id}`} prefetch={false} className="group-hover:text-emerald-600">
           <h3 className="line-clamp-2 min-h-9 text-xs font-black leading-[1.125rem] text-slate-900 transition-colors sm:min-h-12 sm:text-base sm:leading-6">{service.title}</h3>
+        </Link>
+        <Link
+          href={`/services/${encodeURIComponent(service.id)}`}
+          prefetch={false}
+          className="mt-1 inline-flex w-fit items-center gap-1 text-[10px] font-bold text-emerald-700 transition hover:text-emerald-900 hover:underline sm:text-xs"
+          aria-label={`View details for ${service.title}`}
+        >
+          <span className="sm:hidden">Details</span><span className="hidden sm:inline">View details</span>
+          <ArrowRight className="h-3.5 w-3.5" />
         </Link>
         <p className="mt-2 hidden line-clamp-2 text-xs leading-5 text-slate-500 sm:block">
           {service.detailDescription || service.detail_description || service.description}
@@ -857,7 +860,7 @@ export function ServiceCard({ service, onBook }: { service: ApiService; onBook?:
           </div>
           </div>
           <div className="mt-3 grid grid-cols-[2.5rem_minmax(0,1fr)] gap-1.5 sm:grid-cols-[3.25rem_minmax(0,1fr)] sm:gap-2">
-          <button type="button" onClick={addToCart} aria-label={inCart ? `Add another ${service.title} to cart` : `Add ${service.title} to cart`} title={inCart ? "Add another to cart" : "Add to cart"} className={`relative grid min-h-12 place-items-center rounded-2xl border transition ${inCart ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"}`}><ShoppingCart className="h-5 w-5" /><span className="absolute right-1.5 top-1.5 grid h-4 w-4 place-items-center rounded-full bg-emerald-600 text-[11px] font-black leading-none text-white">+</span></button>
+          <button type="button" onClick={addToCart} aria-label={inCart ? `Add another ${service.title} to cart` : `Add ${service.title} to cart`} title={inCart ? "Add another to cart" : "Add to cart"} className={`relative grid min-h-12 place-items-center rounded-2xl border-2 shadow-sm transition active:scale-95 ${inCart ? "border-emerald-500 bg-emerald-600 text-white" : "border-emerald-300 bg-emerald-50 text-emerald-700 hover:border-emerald-500 hover:bg-emerald-100"}`}><ShoppingBasket className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2.25} /><span className={`absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full text-[11px] font-black leading-none shadow ${inCart ? "bg-white text-emerald-700" : "bg-emerald-600 text-white"}`}>+</span></button>
           {onBook ? <button
             type="button"
             onClick={() => onBook(quantity)}

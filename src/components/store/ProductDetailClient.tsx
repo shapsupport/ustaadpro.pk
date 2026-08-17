@@ -108,22 +108,24 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
     <>
       <div className="min-h-screen bg-slate-50 px-4 pb-32 pt-10 sm:px-6 sm:pb-10 lg:px-8">
         <div className="mx-auto max-w-7xl">
-          <nav aria-label="Breadcrumb" className="mb-2 flex w-fit max-w-full min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-lg bg-white px-2.5 py-1.5 text-[11px] text-slate-500 ring-1 ring-slate-200 sm:text-xs">
-            <Link href="/" className="font-semibold transition hover:text-emerald-700">Home</Link>
-            <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" />
-            <Link href="/store" className="font-semibold transition hover:text-emerald-700">Shop</Link>
-            <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" />
-            <span className="min-w-0 truncate font-medium text-slate-700" title={product.title}>{product.title}</span>
-          </nav>
-          <button
-            type="button"
-            onClick={handleBack}
-            className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100 sm:text-xs"
-            aria-label="Go back to the previous page"
-          >
-            <ArrowLeft className="h-3 w-3" />
-            Back to products
-          </button>
+          <div className="sticky top-20 z-40 -mx-4 mb-2 border-b border-slate-200 bg-slate-50/95 px-4 py-2 shadow-sm backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+            <nav aria-label="Breadcrumb" className="mb-2 hidden w-fit max-w-full min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-lg bg-white px-2.5 py-1.5 text-xs text-slate-500 ring-1 ring-slate-200 sm:flex">
+              <Link href="/" className="font-semibold transition hover:text-emerald-700">Home</Link>
+              <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" />
+              <Link href="/store" className="font-semibold transition hover:text-emerald-700">Shop</Link>
+              <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" />
+              <span className="min-w-0 truncate font-medium text-slate-700" title={product.title}>{product.title}</span>
+            </nav>
+            <button
+              type="button"
+              onClick={handleBack}
+              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100 sm:text-xs"
+              aria-label="Go back to the previous page"
+            >
+              <ArrowLeft className="h-3 w-3" />
+              Back to products
+            </button>
+          </div>
 
           <div className="mt-8 grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
             <Card className="overflow-hidden border-slate-200 bg-white p-0 shadow-sm">

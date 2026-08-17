@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { ServicesPageContent } from "./ServicesPageContent";
-import { getCategories, getCatalog, getServices } from "@/lib/server-api";
+import { ServicesLandingClient } from "./ServicesLandingClient";
+import { getCategories, getCatalog } from "@/lib/server-api";
 
 export const metadata: Metadata = {
   title: "Services | Ustaad Pro",
@@ -14,14 +14,12 @@ export default async function ServicesPage({
   searchParams: Promise<{ search?: string }>;
 }) {
   const { search = "" } = await searchParams;
-  const [services, categories, catalog] = await Promise.all([
-    getServices(),
+  const [categories, catalog] = await Promise.all([
     getCategories(),
     getCatalog(),
   ]);
   return (
-    <ServicesPageContent
-      initialServices={services}
+    <ServicesLandingClient
       initialCategories={categories}
       initialCatalog={catalog}
       initialSearch={search}

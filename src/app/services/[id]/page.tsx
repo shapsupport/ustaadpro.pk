@@ -10,21 +10,7 @@ import {
   getCatalog,
 } from "@/lib/server-api";
 
-// All category IDs that should render the sub-category view
-const CATALOG_CATEGORY_IDS = new Set([
-  "ac-services", "hvac",
-  "electrician",
-  "plumber", "plumbers",
-  "home-services", "home-cleaning", "cleaning", "cleaning_service", "home_service", "home",
-  "painter", "painters",
-  "carpenter",
-  "cctv",
-  "welder", "welder-fabricator",
-  "subscriptions", "office-maintenance",
-  "dry-cleaning",
-]);
-
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 export async function generateStaticParams() {
   const [services, catalog] = await Promise.all([getServices(), getCatalog()]);
@@ -36,11 +22,15 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
 
-  if (CATALOG_CATEGORY_IDS.has(id)) {
-    const cat = await getMergedCatalogCategory(id);
+  const cat = await getMergedCatalogCategory(id);
+  if (cat) {
+    const title = `${cat.title} Services in Rawalpindi & Islamabad | Ustaad Pro`;
+    const description = cat.subtitle ?? `Browse ${cat.title} services and book verified professionals in Rawalpindi and Islamabad.`;
     return {
-      title: cat ? `${cat.title} Services | Ustaad Pro` : "Services | Ustaad Pro",
-      description: cat?.subtitle ?? `Browse ${cat?.title ?? ""} services and book verified professionals in Pakistan.`,
+      title,
+      description,
+      alternates: { canonical: `/services/${encodeURIComponent(id)}` },
+      openGraph: { title, description, type: "website" },
     };
   }
 
@@ -58,10 +48,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function ServiceOrCategoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  // Check if this is a known catalog category (Level 2 view)
-  if (CATALOG_CATEGORY_IDS.has(id)) {
-    const catalogCategory = await getMergedCatalogCategory(id);
-    if (!catalogCategory) notFound();
+  // Catalog entries have dedicated, crawlable category pages.
+  const catalogCategory = await getMergedCatalogCategory(id);
+  if (catalogCategory) {
     return <CategoryPageClient catalogCategory={catalogCategory} />;
   }
 

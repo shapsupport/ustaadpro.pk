@@ -134,12 +134,14 @@ interface CartCheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   pageMode?: boolean;
+  onOrderSuccess?: (productIds: string[]) => void;
 }
 
 export default function CartCheckoutModal({
   isOpen,
   onClose,
   pageMode = false,
+  onOrderSuccess,
 }: CartCheckoutModalProps) {
   const { user, setAuthModalMode } = useAuth();
   const { items, subtotal, clearCart, hydrated } = useCart();
@@ -356,6 +358,7 @@ export default function CartCheckoutModal({
           itemCount: items.reduce((count, item) => count + item.quantity, 0),
         });
         showSuccessToast(`${purchasedProducts} ${items.length === 1 ? "has" : "have"} been bought successfully.`);
+        onOrderSuccess?.(items.map((item) => item.product.id));
         clearCart();
       } else {
         throw new Error("Failed to receive order confirmation.");

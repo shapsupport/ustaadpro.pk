@@ -1,7 +1,8 @@
 "use client";
 
-import { Mail, Phone, MapPin, Send, LoaderCircle, AlertCircle } from "lucide-react";
+import { Mail, Phone, MapPin, Send, LoaderCircle, AlertCircle, MessageCircle, PhoneCall } from "lucide-react";
 import { useState } from "react";
+import { siteConfig, whatsappCallUrl, whatsappUrl } from "@/lib/constants";
 
 export default function ContactPage() {
   const [name, setName] = useState("");
@@ -63,6 +64,29 @@ export default function ContactPage() {
           </p>
         </div>
 
+        <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+          <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="group flex min-h-28 flex-col items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-center shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-100">
+            <MessageCircle className="h-6 w-6 text-emerald-700" />
+            <strong className="mt-2 text-sm text-slate-900">Text on WhatsApp</strong>
+            <span className="mt-1 text-[10px] text-slate-500">Start a quick chat</span>
+          </a>
+          <a href={`tel:${siteConfig.phone.replace(/\s/g, "")}`} className="group flex min-h-28 flex-col items-center justify-center rounded-2xl border border-blue-200 bg-blue-50 p-3 text-center shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-100">
+            <Phone className="h-6 w-6 text-blue-700" />
+            <strong className="mt-2 text-sm text-slate-900">Call by Phone</strong>
+            <span className="mt-1 text-[10px] text-slate-500">{siteConfig.phone}</span>
+          </a>
+          <a href={whatsappCallUrl} target="_blank" rel="noopener noreferrer" className="group flex min-h-28 flex-col items-center justify-center rounded-2xl border border-lime-200 bg-lime-50 p-3 text-center shadow-sm transition hover:-translate-y-0.5 hover:bg-lime-100">
+            <PhoneCall className="h-6 w-6 text-lime-700" />
+            <strong className="mt-2 text-sm text-slate-900">WhatsApp Call</strong>
+            <span className="mt-1 text-[10px] text-slate-500">Request a call</span>
+          </a>
+          <a href={`mailto:${siteConfig.email}?subject=Ustaad%20Pro%20Support`} className="group flex min-h-28 flex-col items-center justify-center rounded-2xl border border-violet-200 bg-violet-50 p-3 text-center shadow-sm transition hover:-translate-y-0.5 hover:bg-violet-100">
+            <Mail className="h-6 w-6 text-violet-700" />
+            <strong className="mt-2 text-sm text-slate-900">Send an Email</strong>
+            <span className="mt-1 max-w-full truncate text-[10px] text-slate-500">{siteConfig.email}</span>
+          </a>
+        </div>
+
         <div className="grid md:grid-cols-5 gap-8 items-start">
           {/* Info Side (2 cols) */}
           <div className="md:col-span-2 space-y-6">
@@ -73,7 +97,7 @@ export default function ContactPage() {
               </div>
               <div>
                 <h3 className="font-bold text-slate-900 mb-1">Call / WhatsApp</h3>
-                <a href="tel:+923719201273" className="text-slate-600 text-sm font-medium transition hover:text-primary">+92 371 9201273</a>
+                <a href={`tel:${siteConfig.phone.replace(/\s/g, "")}`} className="text-slate-600 text-sm font-medium transition hover:text-primary">{siteConfig.phone}</a>
                 <p className="text-xs text-slate-400 mt-1">Mon-Sun: 9:00 AM - 9:00 PM</p>
               </div>
             </div>
@@ -85,7 +109,7 @@ export default function ContactPage() {
               </div>
               <div className="min-w-0">
                 <h3 className="font-bold text-slate-900 mb-1">Email Address</h3>
-                <a href="mailto:ustaadpro.official26@gmail.com" className="block truncate text-sm font-medium text-slate-600 transition hover:text-primary">ustaadpro.official26@gmail.com</a>
+                <a href={`mailto:${siteConfig.email}`} className="block truncate text-sm font-medium text-slate-600 transition hover:text-primary">{siteConfig.email}</a>
                 <p className="text-xs text-slate-400 mt-1">Average response time: 2 hours</p>
               </div>
             </div>
@@ -97,7 +121,7 @@ export default function ContactPage() {
               </div>
               <div>
                 <h3 className="font-bold text-slate-900 mb-1">Office Location</h3>
-                <a href="https://maps.app.goo.gl/N7Hn1o8pupSz3iQ69" target="_blank" rel="noopener noreferrer" className="text-slate-600 text-sm font-medium transition hover:text-primary">Sharplogicians Agile Center, Building # 153-M, Office # 32, 4th Floor, D-Block Civic Center, Phase 4, Bahria Town, Islamabad 46220, Pakistan</a>
+                <a href={siteConfig.mapsUrl} target="_blank" rel="noopener noreferrer" className="text-slate-600 text-sm font-medium transition hover:text-primary">{siteConfig.address}</a>
                 <p className="text-xs text-slate-400 mt-1">View our office on Google Maps</p>
               </div>
             </div>

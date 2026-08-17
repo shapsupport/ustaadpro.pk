@@ -1,8 +1,7 @@
 "use client";
 
-import { MapPin, Bell, Clock, ArrowRight } from "lucide-react";
+import { MapPin, Clock, ArrowRight } from "lucide-react";
 import { useLocation } from "@/context/LocationContext";
-import { NewsletterForm } from "@/components/shared/NewsletterForm";
 
 export function LocationGate({ children }: { children: React.ReactNode }) {
   const { location, setShowPicker } = useLocation();
@@ -58,15 +57,6 @@ function ComingSoonCity({ city, onChangeLocation }: { city: string; onChangeLoca
             <span className="font-semibold text-slate-700 text-sm">{f.label}</span>
           </div>
         ))}
-      </div>
-
-      {/* Notify form */}
-      <div className="w-full max-w-sm mb-8">
-        <p className="text-slate-500 text-sm mb-3 flex items-center gap-1.5 justify-center">
-          <Bell className="h-4 w-4 text-primary" />
-          Get notified when we launch in {city}
-        </p>
-        <NewsletterForm />
       </div>
 
       <button
