@@ -20,7 +20,6 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { StickyCheckoutBar } from "@/components/shared/StickyCheckoutBar";
 import { useCart } from "@/context/CartContext";
-import CartCheckoutModal from "@/components/store/CartCheckoutModal";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "";
 
@@ -41,7 +40,6 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
   const [showStickyCheckout, setShowStickyCheckout] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [cartAdded, setCartAdded] = useState(false);
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const purchaseActionsRef = useRef<HTMLDivElement>(null);
   const imageSrc = buildImageUrl(product.imageUrl);
   const hasDiscount = Boolean(
@@ -64,7 +62,7 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
   const handleBuyNow = () => {
     if (maxQuantity === 0) return;
     addItem(product, quantity);
-    setCheckoutOpen(true);
+    router.push("/shop-checkout");
   };
 
   const handleBack = () => {
@@ -288,11 +286,6 @@ export default function ProductDetailClient({ product }: { product: ApiProduct }
         />
       </div>
 
-      {/* Checkout Modal */}
-      <CartCheckoutModal
-        isOpen={checkoutOpen}
-        onClose={() => setCheckoutOpen(false)}
-      />
     </>
   );
 }

@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -14,7 +13,6 @@ import * as LucideIcons from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
-import CartCheckoutModal from "@/components/store/CartCheckoutModal";
 
 function getIcon(iconName: string): LucideIcon {
   return (LucideIcons as unknown as Record<string, LucideIcon>)[iconName] || LucideIcons.FileText;
@@ -27,9 +25,9 @@ interface MobileNavProps {
 
 export function MobileNav({ open, onClose }: MobileNavProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, setAuthModalMode, logout } = useAuth();
   const { totalItems } = useCart();
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const visibleNavItems = navItems.filter((item) => item.href !== "/track-booking" || Boolean(user));
 
   return (
@@ -84,7 +82,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
                 type="button"
                 onClick={() => {
                   onClose();
-                  setCheckoutOpen(true);
+                  router.push("/shop-checkout");
                 }}
                 className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-lime-400 hover:text-lime-600 transition"
                 aria-label={`Cart, ${totalItems} items`}
@@ -219,11 +217,6 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
       </SheetContent>
     </Sheet>
 
-    {/* Mobile Cart Checkout Modal */}
-    <CartCheckoutModal
-      isOpen={checkoutOpen}
-      onClose={() => setCheckoutOpen(false)}
-    />
   </>
   );
 }

@@ -8,7 +8,8 @@ import { WhatsAppBot } from "@/components/shared/WhatsAppBot";
 
 export function SiteChrome({ position }: { position: "top" | "bottom" }) {
   const pathname = usePathname();
-  if (pathname === "/service-checkout") return null;
+  const isCheckoutRoute = pathname === "/checkout" || pathname === "/service-checkout" || pathname === "/shop-checkout";
+  if (isCheckoutRoute) return null;
 
   return position === "top" ? (
     <Navbar />

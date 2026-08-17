@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 export function MainWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const isCheckoutRoute = pathname === "/checkout" || pathname === "/service-checkout" || pathname === "/shop-checkout";
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -15,7 +16,7 @@ export function MainWrapper({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   return (
-    <main className={pathname === "/service-checkout" ? "min-h-dvh min-w-0 w-full flex-1 overflow-x-hidden" : "min-h-[calc(100dvh-5rem)] min-w-0 w-full flex-1 overflow-x-hidden pt-20"}>
+    <main className={isCheckoutRoute ? "min-h-dvh min-w-0 w-full flex-1 overflow-x-hidden" : "min-h-[calc(100dvh-5rem)] min-w-0 w-full flex-1 overflow-x-hidden pt-20"}>
       {children}
     </main>
   );

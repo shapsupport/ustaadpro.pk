@@ -923,7 +923,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                     className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline"
                   >
                     <MapIcon className="h-3.5 w-3.5" />
-                    Pick from Map
+                    Pick from Map <span className="font-normal text-slate-400">(optional)</span>
                   </button>
                 </div>
                 <div className="relative">

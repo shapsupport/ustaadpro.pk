@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   ShoppingCart,
@@ -12,7 +13,6 @@ import {
   ShoppingBag,
 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
-import CartCheckoutModal from "./CartCheckoutModal";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "";
 
@@ -32,8 +32,8 @@ interface CartDropdownProps {
 }
 
 export default function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
+  const router = useRouter();
   const { items, subtotal, removeItem, updateQuantity, clearCart } = useCart();
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click (only when dropdown is open)
@@ -63,7 +63,7 @@ export default function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
 
   const handleCheckout = () => {
     onClose();
-    window.setTimeout(() => setCheckoutOpen(true), 200);
+    router.push("/shop-checkout");
   };
 
   return (
@@ -236,11 +236,6 @@ export default function CartDropdown({ isOpen, onClose }: CartDropdownProps) {
         </>
       )}
 
-      {/* ── Checkout Modal ── */}
-      <CartCheckoutModal
-        isOpen={checkoutOpen}
-        onClose={() => setCheckoutOpen(false)}
-      />
     </>
   );
 }
