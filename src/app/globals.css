@@ -111,11 +111,27 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply min-h-dvh min-w-0 w-full bg-background text-foreground antialiased;
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
   }
 
   html {
     @apply font-sans;
+    width: 100%;
+    max-width: 100%;
+    min-height: 100%;
+    overflow-x: hidden;
+    scroll-behavior: auto;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  img,
+  video,
+  canvas,
+  svg {
+    max-width: 100%;
   }
 }
 
@@ -272,7 +288,13 @@ body:has([data-sticky-checkout-visible="true"]) [data-floating-book-now] {
 }
 
 .container-wide {
-  @apply mx-auto max-w-7xl;
+  @apply mx-auto w-full max-w-7xl;
+}
+
+@media (max-width: 639px) {
+  .section-padding {
+    @apply px-4 py-12;
+  }
 }
 
 .hide-scrollbar {

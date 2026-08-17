@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, ArrowRight, BadgeCheck, CalendarCheck, Camera, CheckCircle2, ChevronDown,
+  ArrowLeft, ArrowRight, CalendarCheck, Camera, CheckCircle2, ChevronDown,
   Clock3, Flame, Hammer, Layers3, MapPin,
   Paintbrush, ShieldCheck, Shirt, Snowflake, Sparkles, Star,
   Timer, UserCheck, WalletCards, Wrench, Zap, type LucideIcon,
@@ -13,6 +13,9 @@ import type { ApiCatalogCategory, ApiCategory, ApiReview, ApiService, ApiSubcate
 import { useLocation } from "@/context/LocationContext";
 import { orderCategories, orderServices } from "@/lib/service-order";
 import { AppStoreButtons } from "@/components/shared/AppStoreButtons";
+import { ResilientImage } from "@/components/shared/ResilientImage";
+import { UniversalSearch } from "@/components/search/UniversalSearch";
+import { ServiceCard as ServicesPageCard } from "@/app/services/ServicesPageContent";
 
 // Always use the live public API origin for images so relative paths
 // like /uploads/... resolve correctly in all environments.
@@ -45,22 +48,14 @@ const trustItems = [
 
 /** Image chip for the "Browse by category" grid. */
 function CatImage({ src, alt, priority, className }: { src: string; alt: string; priority: boolean; className?: string }) {
-  const [error, setError] = useState(false);
-  if (error) return (
-    <div className={`flex items-center justify-center bg-emerald-50 ${className ?? "h-full w-full"}`}>
-      <Wrench className="h-10 w-10 text-emerald-300" />
-    </div>
-  );
   return (
-    <Image
+    <ResilientImage
       src={src}
       alt={alt}
-      fill
-      sizes="(max-width:640px) 50vw, 33vw"
-      className="object-cover"
+      sizes="(max-width:640px) 100vw, 33vw"
+      className={className ?? "rounded-xl object-contain p-2 sm:rounded-2xl sm:p-3"}
       priority={priority}
-      onError={() => setError(true)}
-
+      fallback={<div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-emerald-50 via-teal-50 to-lime-100"><Wrench className="h-12 w-12 text-emerald-500" /></div>}
     />
   );
 }
@@ -195,23 +190,27 @@ export function AppLayout({ initialServices, categories, catalog, reviews }: App
 
   return (
     <div className="bg-white text-slate-900">
-      <section className="relative overflow-hidden border-b border-emerald-100 bg-[radial-gradient(circle_at_70%_25%,#d1fae5_0,transparent_32%),linear-gradient(110deg,#fff_0%,#f8fffc_56%,#059669_56%,#047857_100%)]">
+      <section className="relative overflow-visible border-b border-emerald-100 bg-[radial-gradient(circle_at_85%_10%,#d1fae5_0,transparent_42%),linear-gradient(180deg,#fff_0%,#f0fdf4_100%)] lg:overflow-hidden lg:bg-[radial-gradient(circle_at_70%_25%,#d1fae5_0,transparent_32%),linear-gradient(110deg,#fff_0%,#f8fffc_56%,#059669_56%,#047857_100%)]">
         <div className="absolute right-0 top-0 hidden h-full w-[44%] opacity-25 lg:block" style={{ backgroundImage: "radial-gradient(#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }} />
-        <div className="container-wide relative grid min-h-[590px] px-4 pt-9 sm:px-6 lg:grid-cols-[1.02fr_.98fr] lg:px-8 lg:pt-12">
-          <div className="relative z-20 flex flex-col justify-center pb-12 lg:pb-20">
+        <div className="container-wide relative grid min-h-0 px-4 pt-8 sm:min-h-[590px] sm:px-6 sm:pt-9 lg:grid-cols-[1.02fr_.98fr] lg:px-8 lg:pt-12">
+          <div className="relative z-20 flex min-w-0 flex-col justify-center pb-10 sm:pb-12 lg:pb-20">
             <button type="button" onClick={() => setShowPicker(true)} className="mb-5 flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-100">
               <MapPin className="h-4 w-4" />
               <span className="max-w-52 truncate">{location.shortLabel || location.label || "Rawalpindi & Islamabad"}</span>
               <ChevronDown className="h-3.5 w-3.5" />
             </button>
 
-            <h1 className="max-w-xl text-4xl font-black leading-[1.06] tracking-tight text-slate-950 sm:text-5xl xl:text-6xl">
+            <h1 className="max-w-xl text-[2.25rem] font-black leading-[1.08] tracking-tight text-slate-950 min-[420px]:text-4xl sm:text-5xl xl:text-6xl">
               Expert home services,
               <span className="mt-2 block text-emerald-600">at your doorstep</span>
             </h1>
             <p className="mt-5 max-w-lg text-base leading-7 text-slate-600 sm:text-lg">
               Book skilled electricians, plumbers, AC technicians and more services across Rawalpindi and Islamabad.
             </p>
+
+            <div data-hero-search className="mt-6 block w-full max-w-xl lg:hidden">
+              <UniversalSearch mobile defaultScope="service" />
+            </div>
 
             <div className="mt-7 grid max-w-xl grid-cols-2 gap-2 sm:grid-cols-4">
               {[
@@ -241,19 +240,39 @@ export function AppLayout({ initialServices, categories, catalog, reviews }: App
         <div className="container-wide px-4 sm:px-6 lg:px-8">
 
           {/* Section header */}
-          <div className="mb-6 flex items-end justify-between gap-4 sm:mb-8">
+          <div className="mb-6 flex min-w-0 items-end justify-between gap-3 sm:mb-8 sm:gap-4">
             <div>
               {activeCategory !== "all" && (
-                <button
-                  type="button"
-                  onClick={() => activeSubcategory ? setActiveSubcategory(null) : showCategory("all")}
-                  className="mb-4 inline-flex min-h-12 items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-base font-black text-emerald-800 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-100 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-emerald-700 shadow-sm">
-                    <ArrowLeft className="h-4 w-4" />
-                  </span>
-                  {activeSubcategory ? "Back to sub-services" : "Back to categories"}
-                </button>
+                <div className="mb-4 space-y-2.5">
+                  <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap text-xs text-slate-500">
+                    <button type="button" onClick={() => showCategory("all")} className="font-semibold text-emerald-700 transition hover:underline">
+                      {findCategory(categories, activeCategory)?.title || "Category"}
+                    </button>
+                    <span aria-hidden="true">›</span>
+                    {activeSubcategory ? <>
+                      <button type="button" onClick={() => setActiveSubcategory(null)} className="font-semibold text-emerald-700 transition hover:underline">{activeSubcategory.title}</button>
+                      <span aria-hidden="true">›</span>
+                      <span className="font-medium text-slate-600">Services</span>
+                    </> : <span className="font-medium text-slate-600">Select sub-service</span>}
+                  </nav>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => activeSubcategory ? setActiveSubcategory(null) : showCategory("all")}
+                      className={`inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold shadow-sm transition ${activeSubcategory ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100" : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"}`}
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      {activeSubcategory ? "Back to sub-services" : "Back to categories"}
+                    </button>
+                    {activeSubcategory && <button
+                      type="button"
+                      onClick={() => showCategory("all")}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-700"
+                    >
+                      <Layers3 className="h-3.5 w-3.5" /> Categories
+                    </button>}
+                  </div>
+                </div>
               )}
               <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{activeSubcategory?.title || (activeCategory === "all" ? "Browse by category" : findCategory(categories, activeCategory)?.title || "Choose a sub-service")}</h2>
               <p className="mt-1 text-sm text-slate-500">{activeCategory === "all" ? "Choose a service to get started" : activeSubcategory ? `${selectedServices.length} services available` : activeSubcategories.length > 0 ? "Choose the exact type of work you need" : `${activeCategoryServices.length} service${activeCategoryServices.length === 1 ? "" : "s"} available`}</p>
@@ -264,7 +283,7 @@ export function AppLayout({ initialServices, categories, catalog, reviews }: App
           </div>
 
           {activeCategory !== "all" && !activeSubcategory && activeSubcategories.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:gap-5 lg:grid-cols-4">
               {activeSubcategories.map((subcategory) => {
                 const subcategoryImage = imgSrc(subcategory.imageUrl || subcategory.image_url || subcategory.imageurl);
                 const subcategoryServices = (subcategory.services ?? []).map((service) => servicesById.get(service.id) ?? service);
@@ -274,12 +293,12 @@ export function AppLayout({ initialServices, categories, catalog, reviews }: App
               })}
             </div>
           ) : activeCategory !== "all" && !activeSubcategory ? (
-            activeCategoryServices.length ? <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">{activeCategoryServices.map((service) => <ServiceCard key={service.id} service={service} />)}</div> : <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center text-slate-500">No services are available in this category yet.</div>
+            activeCategoryServices.length ? <div className="grid grid-cols-2 gap-2 sm:gap-6 lg:grid-cols-4">{activeCategoryServices.map((service) => <ServicesPageCard key={service.id} service={service} />)}</div> : <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-500 sm:p-12">No services are available in this category yet.</div>
           ) : activeSubcategory ? (
-            selectedServices.length ? <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">{selectedServices.map((service) => <ServiceCard key={service.id} service={service} />)}</div> : <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center text-slate-500">No services are available in this sub-service yet.</div>
+            selectedServices.length ? <div className="grid grid-cols-2 gap-2 sm:gap-6 lg:grid-cols-4">{selectedServices.map((service) => <ServicesPageCard key={service.id} service={service} />)}</div> : <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-500 sm:p-12">No services are available in this sub-service yet.</div>
           ) : (
-          /* Two columns on phones, scaling to four across larger screens. */
-          <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+          /* One column on very narrow phones, scaling to four across larger screens. */
+          <div className="grid grid-cols-2 gap-2 sm:gap-5 lg:grid-cols-4">
             {categoryList.slice(0, 9).map((category, index) => {
               const Icon = CAT_ICONS[category.id] || Wrench;
               const imageUrl = imgSrc(
@@ -293,12 +312,12 @@ export function AppLayout({ initialServices, categories, catalog, reviews }: App
                   key={category.id}
                   type="button"
                   onClick={() => showCategory(category.id)}
-                  className={`group min-w-0 overflow-hidden rounded-2xl border bg-white text-left shadow-[0_8px_30px_rgba(15,23,42,0.07)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl sm:rounded-3xl ${
+                  className={`group flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-white text-left shadow-[0_8px_30px_rgba(15,23,42,0.07)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl sm:rounded-[2rem] ${
                     isActive ? "border-emerald-500 ring-2 ring-emerald-200" : "border-slate-200 hover:border-emerald-300"
                   }`}
                 >
                   {/* Image area */}
-                  <div className="relative h-36 w-full overflow-hidden bg-slate-100 sm:h-48 lg:h-52">
+                  <div className="relative m-2 mb-0 h-28 w-[calc(100%-1rem)] overflow-hidden rounded-xl bg-white sm:m-4 sm:mb-0 sm:h-44 sm:w-[calc(100%-2rem)] sm:rounded-2xl lg:h-40">
                     {imageUrl ? (
                       <CatImage src={imageUrl} alt={category.title} priority={index < 4} />
                     ) : (
@@ -312,25 +331,23 @@ export function AppLayout({ initialServices, categories, catalog, reviews }: App
                         Selected
                       </span>
                     )}
-                    <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/45 to-transparent" />
                   </div>
 
                   {/* Title area */}
-                  <div className="flex items-center gap-3 p-4 sm:p-5">
-                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isActive ? "bg-emerald-600 text-white" : "bg-emerald-50 text-emerald-600"}`}>
-                      <Icon className="h-5 w-5" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                    <h3 className={`text-base font-black leading-tight ${
+                  <div className="flex flex-1 flex-col px-3 pb-4 pt-4 sm:px-5 sm:pb-6 sm:pt-6">
+                    <div className="min-w-0 text-center">
+                    <h3 className={`line-clamp-2 text-sm font-black leading-tight sm:text-xl ${
                       isActive ? "text-emerald-700" : "text-slate-900 group-hover:text-emerald-700"
                     }`}>
                       {category.title}
                     </h3>
-                    {category.subtitle && (
-                      <p className="mt-0.5 truncate text-xs text-slate-500">{category.subtitle}</p>
-                    )}
+                    <p className="mt-2 line-clamp-2 text-[10px] leading-4 text-slate-500 sm:text-sm sm:leading-5">
+                      {category.subtitle || `Professional ${category.title} services`}
+                    </p>
                     </div>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-emerald-600 transition-transform group-hover:translate-x-1" />
+                    <span className="mt-4 flex items-center gap-1.5 text-[11px] font-black text-emerald-700 sm:mt-6 sm:text-sm">
+                      View sub-services <ArrowRight className="h-3.5 w-3.5 shrink-0 transition-transform group-hover:translate-x-1 sm:h-4 sm:w-4" />
+                    </span>
                   </div>
                 </button>
               );
@@ -366,7 +383,7 @@ export function AppLayout({ initialServices, categories, catalog, reviews }: App
             <Link href="/services" className="hidden items-center gap-1 rounded-full border border-slate-700 px-4 py-2 text-sm font-bold text-emerald-300 transition hover:border-emerald-500 hover:bg-emerald-500/10 sm:flex">View all services <ArrowRight className="h-4 w-4" /></Link>
           </div>
           {popular.length ? (
-            <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">{popular.map((service) => <ServiceCard key={service.id} service={service} />)}</div>
+            <div className="grid grid-cols-2 gap-2 sm:gap-5 lg:grid-cols-4">{popular.map((service) => <ServicesPageCard key={service.id} service={service} />)}</div>
           ) : (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center">
               <h3 className="font-bold text-slate-900">No services found</h3><p className="mt-1 text-sm text-slate-500">Try another search or category.</p>
@@ -416,13 +433,13 @@ export function AppLayout({ initialServices, categories, catalog, reviews }: App
         <div className="container-wide px-4 sm:px-6 lg:px-8">
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-950 via-emerald-800 to-emerald-600 text-white">
             <div className="absolute inset-0 opacity-15" style={{ backgroundImage: "radial-gradient(#fff 1px,transparent 1px)", backgroundSize: "20px 20px" }} />
-            <div className="relative grid min-h-[410px] items-center md:grid-cols-[.9fr_1.1fr]">
+            <div className="relative grid min-h-0 items-center md:min-h-[410px] md:grid-cols-[.9fr_1.1fr]">
               <div className="relative hidden h-full min-h-[410px] md:block">
                 <Image src="/home/app-spokesperson-branded-v2.png" alt="Ustaad Pro app customer holding a smartphone displaying the Ustaad Pro logo" fill sizes="45vw" className="object-contain object-bottom" />
               </div>
-              <div className="relative px-6 py-12 sm:px-10 md:px-8 lg:px-14">
+              <div className="relative min-w-0 px-5 py-10 sm:px-10 sm:py-12 md:px-8 lg:px-14">
                 <span className="inline-flex rounded-full border border-lime-300/25 bg-lime-300/10 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-lime-300">Ustaad Pro mobile app</span>
-                <h2 className="mt-5 max-w-xl text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">Your home services, right in your pocket.</h2>
+                <h2 className="mt-5 max-w-xl text-2xl font-black tracking-tight min-[380px]:text-3xl sm:text-4xl lg:text-5xl">Your home services, right in your pocket.</h2>
                 <p className="mt-4 max-w-lg leading-7 text-emerald-50/80">Discover services, make bookings, follow updates, and manage your Ustaad Pro experience from your phone.</p>
                 <div className="mt-7"><AppStoreButtons /></div>
                 <div className="relative mx-auto mt-8 h-64 w-full max-w-xs md:hidden">
@@ -450,24 +467,8 @@ export function AppLayout({ initialServices, categories, catalog, reviews }: App
 function FeaturedCard({ service }: { service: ApiService }) {
   return (
     <div className="absolute right-0 top-24 z-20 w-72 overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-2xl backdrop-blur xl:w-80">
-      {imgSrc(service.image_url || service.imageUrl) && <div className="relative h-28"><Image src={imgSrc(service.image_url || service.imageUrl)!} alt="" fill className="object-cover" sizes="320px" /></div>}
+      {imgSrc(service.image_url || service.imageUrl) && <div className="relative h-28 bg-white"><Image src={imgSrc(service.image_url || service.imageUrl)!} alt="" fill className="rounded-xl object-contain p-2 [image-rendering:auto]" sizes="320px" quality={88} /></div>}
       <div className="p-5"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">Featured service</span><h2 className="mt-3 line-clamp-1 text-lg font-black">{service.title}</h2><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-4 flex items-end justify-between"><div><span className="block text-[10px] text-slate-400">Starting from</span><strong className="text-xl">Rs {service.price.toLocaleString()}</strong></div><Link href={`/services/${service.id}`} prefetch={false} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div><div className="mt-4 flex items-center gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span className="flex items-center gap-1"><Star className={`h-3.5 w-3.5 ${Number(service.reviews || 0) > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {Number(service.reviews || 0) > 0 ? `${Number(service.rating || 0).toFixed(1)} (${service.reviews})` : "0.0 · No reviews"}</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div></div>
     </div>
-  );
-}
-
-function ServiceCard({ service }: { service: ApiService }) {
-  const source = imgSrc(service.image_url || service.imageUrl);
-  const original = Number(service.original_price || service.originalPrice || 0);
-  const discount = original > service.price ? Math.round(((original - service.price) / original) * 100) : 0;
-  return (
-    <article className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-white text-slate-900 shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(0,0,0,0.28)] sm:rounded-3xl">
-      <Link href={`/services/${service.id}`} prefetch={false} className="relative block h-36 overflow-hidden border-b border-slate-100 bg-white sm:h-48">
-        {source ? <Image src={source} alt={service.title} fill className="object-contain p-3 transition duration-500 group-hover:scale-[1.03]" sizes="(max-width:640px) 100vw,(max-width:1024px) 50vw,25vw" /> : <div className="flex h-full items-center justify-center"><Wrench className="h-10 w-10 text-slate-300" /></div>}
-        <div className="absolute left-2 top-2 flex gap-1 sm:left-3 sm:top-3 sm:gap-2">{service.badge && <span className="rounded-full bg-emerald-600 px-2 py-1 text-[8px] font-bold text-white sm:px-2.5 sm:text-[10px]">{service.badge}</span>}{discount > 0 && <span className="rounded-full bg-rose-500 px-2 py-1 text-[8px] font-bold text-white sm:px-2.5 sm:text-[10px]">{discount}% OFF</span>}</div>
-        <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[8px] font-bold sm:bottom-3 sm:right-3 sm:text-[10px]"><Star className={`h-3 w-3 ${Number(service.reviews || 0) > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {Number(service.reviews || 0) > 0 ? `${Number(service.rating || 0).toFixed(1)} (${service.reviews})` : "No reviews"}</span>
-      </Link>
-      <div className="flex flex-1 flex-col p-3 sm:p-5"><Link href={`/services/${service.id}`} prefetch={false}><h3 className="line-clamp-2 min-h-10 text-sm font-black leading-5 group-hover:text-emerald-700 sm:min-h-12 sm:text-base sm:leading-6">{service.title}</h3></Link><p className="mt-1 hidden line-clamp-2 min-h-10 text-xs leading-5 text-slate-500 sm:block">{service.description}</p><div className="mt-2 flex flex-wrap items-center gap-1 text-[9px] font-medium text-slate-500 sm:mt-3 sm:gap-3 sm:text-[10px]"><span className="flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-1 font-bold text-emerald-700 sm:px-2"><BadgeCheck className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> Verified</span>{service.duration && <span className="hidden items-center gap-1 sm:flex"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div><div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 sm:mt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-4"><div className="min-w-0"><span className="block text-[8px] font-bold uppercase tracking-wide text-slate-400 sm:text-[9px]">Starts from</span><strong className="block truncate text-sm text-slate-950 sm:text-lg">Rs {service.price.toLocaleString()}</strong>{discount > 0 && <span className="hidden text-[10px] text-slate-400 line-through sm:inline">Rs {original.toLocaleString()}</span>}</div><Link href={`/services/${service.id}`} prefetch={false} className="flex h-9 w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 text-[10px] font-black text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700 sm:h-10 sm:w-auto sm:rounded-xl sm:px-4 sm:text-xs">Book now <ArrowRight className="h-3 w-3 sm:h-3.5 sm:w-3.5" /></Link></div></div>
-    </article>
   );
 }
