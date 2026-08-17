@@ -615,8 +615,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
   return (
     <>
-      <div className={pageMode ? "min-h-screen bg-slate-50 px-3 py-5 sm:px-6 sm:py-8" : "fixed inset-0 z-50 flex touch-pan-y items-end justify-center overscroll-contain bg-slate-900/60 p-0 backdrop-blur-sm animate-in fade-in duration-200 sm:items-center sm:p-4"}>
-        <div className={pageMode ? "relative mx-auto flex min-w-0 w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:rounded-3xl" : "relative flex max-h-[90dvh] min-w-0 w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl"}>
+      <div className={pageMode ? "min-h-dvh bg-slate-50 px-3 py-3 sm:px-6 sm:py-8" : "fixed inset-0 z-50 flex touch-pan-y items-end justify-center overscroll-contain bg-slate-900/60 p-0 backdrop-blur-sm animate-in fade-in duration-200 sm:items-center sm:p-4"}>
+        <div className={pageMode ? "relative mx-auto flex min-w-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-slate-200 bg-white shadow-sm sm:overflow-hidden sm:rounded-3xl" : "relative flex h-[100dvh] max-h-[100dvh] min-w-0 w-full max-w-4xl flex-col overflow-hidden rounded-none bg-white shadow-2xl sm:h-auto sm:max-h-[94dvh] sm:rounded-2xl"}>
           <div className={`${pageMode ? "sticky top-0" : ""} z-20 flex shrink-0 items-center justify-between border-b border-slate-100 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 sm:py-5`}>
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               {pageMode && (
@@ -645,7 +645,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
           </div>
 
           {/* Modal Body */}
-          <div ref={modalBodyRef} className={pageMode ? "min-w-0 overflow-x-hidden" : "min-w-0 max-h-[calc(100dvh-4.25rem)] overflow-x-hidden overflow-y-auto overscroll-contain touch-pan-y [overflow-anchor:none] booking-modal-scrollbar sm:max-h-[calc(94dvh-4.5rem)]"}>
+          <div ref={modalBodyRef} className={pageMode ? "min-w-0 overflow-x-hidden" : "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain touch-pan-y [overflow-anchor:none] booking-modal-scrollbar"}>
           {bookingSuccess ? (
             <div className="p-6 sm:p-8 text-center space-y-4">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-lg shadow-emerald-600/10">
@@ -655,11 +655,11 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               <p className="text-sm text-slate-600 max-w-md mx-auto">
                 Your booking has been received. Track its status anytime from Track Booking while our team verifies the payment and assigns a professional.
               </p>
-              <div className="mx-auto flex max-w-lg items-center justify-center gap-2 text-[11px] font-bold text-slate-500 sm:text-xs">
+              <div className="mx-auto grid max-w-lg grid-cols-1 gap-2 text-[11px] font-bold text-slate-500 min-[380px]:flex min-[380px]:items-center min-[380px]:justify-center sm:text-xs">
                 <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-emerald-700">1. Order placed</span>
-                <span aria-hidden="true">→</span>
+                <span className="hidden min-[380px]:inline" aria-hidden="true">→</span>
                 <span className="rounded-full bg-amber-100 px-3 py-1.5 text-amber-700">2. Verification</span>
-                <span aria-hidden="true">→</span>
+                <span className="hidden min-[380px]:inline" aria-hidden="true">→</span>
                 <span className="rounded-full bg-slate-100 px-3 py-1.5">3. Professional assigned</span>
               </div>
 
@@ -667,7 +667,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               <div className="my-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-1">
                 <p className="text-xs uppercase font-bold tracking-wider text-slate-400">Booking Reference ID</p>
                 <p className="text-2xl font-black text-emerald-700">{bookingSuccess.orderId}</p>
-                <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-white p-3 text-xs">
+                <div className="mt-3 grid grid-cols-1 gap-2 rounded-xl bg-white p-3 text-xs min-[380px]:grid-cols-3">
                   <div><p className="text-slate-400">Listed total</p><p className="font-black text-slate-800">Rs {bookingSuccess.total.toLocaleString("en-PK")}</p></div>
                   <div><p className="text-slate-400">Paid</p><p className="font-black text-emerald-700">Rs {bookingSuccess.paidAmount.toLocaleString("en-PK")}</p></div>
                   <div><p className="text-slate-400">Pay professional</p><p className="font-black text-slate-800">Rs {bookingSuccess.remainingAmount.toLocaleString("en-PK")}</p></div>
@@ -745,8 +745,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                     const key = `${item.id}:${item.selectedWorkPriceId || "service"}`;
                     const cartItem = cartItems.find((entry) => entry.key === key);
                     return <article key={key} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 text-sm">
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 sm:gap-4">
-                        <p className="min-w-0 break-words text-xs font-black leading-4 text-slate-900 sm:text-sm">{item.selectedWorkTitle || item.title}</p>
+                      <div className="grid grid-cols-2 items-center gap-2 min-[380px]:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-4">
+                        <p className="col-span-2 min-w-0 break-words text-xs font-black leading-4 text-slate-900 min-[380px]:col-span-1 sm:text-sm">{item.selectedWorkTitle || item.title}</p>
                         <div className="min-w-16 text-right sm:min-w-24"><p className="text-[8px] font-bold uppercase tracking-wide text-slate-400 sm:text-[9px]">Unit price</p><p className="whitespace-nowrap text-[11px] font-semibold text-slate-600 sm:text-xs">Rs {Number(item.price).toLocaleString("en-PK")} each</p></div>
                         <div className="min-w-14 text-right sm:min-w-20"><p className="text-[8px] font-bold uppercase tracking-wide text-slate-400 sm:text-[9px]">Total</p><p className="whitespace-nowrap text-xs font-black text-emerald-700 sm:text-sm">Rs {(item.price * itemQuantity).toLocaleString("en-PK")}</p></div>
                       </div>

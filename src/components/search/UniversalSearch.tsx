@@ -106,13 +106,13 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
   const mobileStoreSearch = mobile && pathname.startsWith("/store") && scope === "shop_product";
 
   useEffect(() => {
-    if (!open || mobile) return;
-    const close = (event: MouseEvent) => {
+    if (!open) return;
+    const close = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [mobile, open]);
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [open]);
 
   useEffect(() => {
     // Building the typo-correction vocabulary is relatively expensive. Do it only
@@ -165,6 +165,7 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
       setQuery("");
       setCategory("all");
       setResults([]);
+      setOpen(false);
     };
     window.addEventListener("ustaadpro:shop-search-reset", reset);
     return () => window.removeEventListener("ustaadpro:shop-search-reset", reset);
@@ -236,15 +237,15 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
     <div className={cn(
       "border border-slate-200 bg-white text-left shadow-2xl",
       mobile
-        ? "fixed inset-x-3 bottom-3 z-[110] isolate max-h-[55dvh] overflow-hidden rounded-[24px] [clip-path:inset(0_round_24px)]"
+        ? "absolute inset-x-0 top-full z-[120] mt-2 isolate max-h-[min(60dvh,30rem)] w-full overflow-hidden rounded-2xl"
         : "fixed left-1/2 top-24 z-[100] isolate w-[min(1120px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-[28px] [clip-path:inset(0_round_28px)]",
     )}>
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-        <div className="flex rounded-xl bg-slate-100 p-1">
-          <button type="button" onClick={() => selectScope("service")} className={cn("flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black transition", scope === "service" ? "bg-emerald-600 text-white shadow-sm" : "text-slate-600")}><Wrench className="h-4 w-4" />Services</button>
-          <button type="button" onClick={() => selectScope("shop_product")} className={cn("flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black transition", scope === "shop_product" ? "bg-blue-600 text-white shadow-sm" : "text-slate-600")}><ShoppingBag className="h-4 w-4" />Shop</button>
+      <div className="flex min-w-0 items-center justify-between gap-2 border-b border-slate-100 px-3 py-3 sm:px-4">
+        <div className="flex min-w-0 flex-1 rounded-xl bg-slate-100 p-1 sm:flex-none">
+          <button type="button" onClick={() => selectScope("service")} className={cn("flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-black transition sm:flex-none sm:gap-2 sm:px-4", scope === "service" ? "bg-emerald-600 text-white shadow-sm" : "text-slate-600")}><Wrench className="h-4 w-4" />Services</button>
+          <button type="button" onClick={() => selectScope("shop_product")} className={cn("flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-black transition sm:flex-none sm:gap-2 sm:px-4", scope === "shop_product" ? "bg-blue-600 text-white shadow-sm" : "text-slate-600")}><ShoppingBag className="h-4 w-4" />Shop</button>
         </div>
-        <button type="button" onClick={() => setOpen(false)} className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close search"><X className="h-4 w-4" /></button>
+        <button type="button" onClick={() => setOpen(false)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-100 hover:text-slate-800" aria-label="Close search results"><X className="h-4 w-4" /></button>
       </div>
 
       {correction ? (
@@ -266,9 +267,9 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
         </div>
       ) : <div className={cn(
         "search-results-scrollbar grid gap-0 overflow-y-auto overscroll-contain",
-        mobile ? "max-h-[65vh] grid-cols-1" : "max-h-[calc(100vh-11rem)] grid-cols-[280px_1fr]",
+        mobile ? "max-h-[calc(min(60dvh,30rem)-4.5rem)] grid-cols-1" : "max-h-[calc(100vh-11rem)] grid-cols-[280px_1fr]",
       )}>
-        <aside className="border-b border-slate-100 bg-slate-50/70 p-4 md:border-b-0 md:border-r">
+        <aside className={cn("border-b border-slate-100 bg-slate-50/70 p-4 md:border-b-0 md:border-r", mobile && "hidden")}>
           <SearchGroup icon={Sparkles} title="Popular searches">
             <div className="flex flex-wrap gap-2">{popular.map((item) => <button key={item} type="button" onClick={() => runPopularSearch(item)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-emerald-300 hover:text-emerald-700">{item}</button>)}</div>
           </SearchGroup>
@@ -287,12 +288,13 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
             <div><p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">{scope === "service" ? "Services" : "Shop products"}</p><h3 className="mt-1 font-black text-slate-900">{query.trim() ? `Results for “${query.trim()}”` : "Start typing to search"}</h3></div>
             {query.trim() ? <span className="text-xs font-bold text-slate-400">{loading ? "Searching…" : `${visibleResults.length} shown`}</span> : null}
           </div>
-          {loading ? <ResultSkeleton /> : visibleResults.length ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {loading ? <ResultSkeleton textOnly={mobile} /> : visibleResults.length ? (
+            <div className={mobile ? "divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200" : "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"}>
               {visibleResults.map((result) => {
                 const isService = result.resultType === "service";
                 const href = isService ? `/services/${result.id}` : `/store/${result.id}`;
                 const image = imageUrl(result);
+                if (mobile) return <Link key={result.suggestionId || `${scope}-${result.id}`} href={href} prefetch={false} onClick={() => { cacheSelectedProduct(result); remember(query); setOpen(false); onNavigate?.(); }} className="flex min-w-0 items-center justify-between gap-3 bg-white px-4 py-3.5 transition hover:bg-emerald-50"><span className="min-w-0"><span className="block truncate text-sm font-black text-slate-900">{result.title || "Untitled result"}</span><span className="mt-1 block text-xs font-bold text-emerald-700">Rs {Number(result.price || 0).toLocaleString("en-PK")}</span></span><span className="shrink-0 text-xs font-black text-emerald-600">View</span></Link>;
                 return <Link key={result.suggestionId || `${scope}-${result.id}`} href={href} prefetch={false} onClick={() => { cacheSelectedProduct(result); remember(query); setOpen(false); onNavigate?.(); }} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg">
                   <div className="relative aspect-[4/3] bg-slate-100">{image ? <Image src={image} alt={result.title || "Search result"} fill sizes="220px" className="object-cover transition group-hover:scale-105" /> : <Search className="absolute inset-0 m-auto h-7 w-7 text-slate-300" />}</div>
                   <div className="p-3"><p className="line-clamp-2 text-sm font-black text-slate-900">{result.title || "Untitled result"}</p><p className="mt-2 text-sm font-black text-emerald-700">Rs {Number(result.price || 0).toLocaleString("en-PK")}</p></div>
@@ -306,10 +308,10 @@ export function UniversalSearch({ mobile = false, onNavigate, defaultScope = "se
   ) : null;
 
   return (
-    <div ref={rootRef} className={cn("relative", mobile ? "w-full" : "hidden min-w-0 flex-1 lg:block")}>
+    <div ref={rootRef} className={cn("relative z-30", mobile ? "w-full" : "min-w-0 flex-1")}>
       <form onSubmit={(event) => { event.preventDefault(); submitSearch(); }} className="flex h-11 items-center rounded-2xl border border-slate-200 bg-white px-3 shadow-sm transition focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100">
         <Search className="h-4 w-4 shrink-0 text-slate-400" />
-        <input value={query} onFocus={() => setOpen(true)} onChange={(event) => { const value = event.target.value; setQuery(value); setOpen(true); setCategory("all"); if (!value.trim()) { setResults([]); setLoading(false); } }} placeholder={`Search ${scope === "service" ? "services" : "shop"}…`} className="h-full min-w-0 flex-1 bg-transparent px-2 text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400" aria-label="Search Ustaad Pro" />
+        <input value={query} onFocus={() => { if (query.trim()) setOpen(true); }} onChange={(event) => { const value = event.target.value; setQuery(value); setCategory("all"); if (!value.trim()) { setResults([]); setLoading(false); setOpen(false); } else { setOpen(true); } }} placeholder={`Search ${scope === "service" ? "services" : "shop"}…`} className="h-full min-w-0 flex-1 bg-transparent px-2 text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400" aria-label="Search Ustaad Pro" />
         <button type="button" onClick={() => selectScope(scope === "service" ? "shop_product" : "service")} className="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-black text-slate-600">{scope === "service" ? "Services" : "Shop"}</button>
       </form>
       {panel}
@@ -321,6 +323,7 @@ function SearchGroup({ icon: Icon, title, children }: { icon: typeof Search; tit
   return <div className="mb-5 last:mb-0"><h3 className="mb-2.5 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-slate-500"><Icon className="h-3.5 w-3.5 text-emerald-600" />{title}</h3>{children}</div>;
 }
 
-function ResultSkeleton() {
+function ResultSkeleton({ textOnly = false }: { textOnly?: boolean }) {
+  if (textOnly) return <div className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200" role="status" aria-label="Searching"><span className="sr-only">Searching…</span>{Array.from({ length: 5 }).map((_, index) => <div key={index} className="space-y-2 bg-white px-4 py-3.5"><Skeleton className="h-4 w-4/5" /><Skeleton className="h-3 w-24" /></div>)}</div>;
   return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-label="Searching"><span className="sr-only">Searching…</span>{Array.from({ length: 6 }).map((_, index) => <div key={index} className="overflow-hidden rounded-2xl border border-slate-200"><Skeleton className="aspect-[4/3] rounded-none" /><div className="space-y-2 p-3"><Skeleton className="h-4 w-4/5" /><Skeleton className="h-5 w-24" /></div></div>)}</div>;
 }

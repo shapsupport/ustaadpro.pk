@@ -78,7 +78,7 @@ export function CategoryPageClient({ catalogCategory }: CategoryPageClientProps)
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <nav className="flex items-center gap-1.5 text-sm text-slate-500">
+            <nav className="flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap text-sm text-slate-500">
               <Link href="/services" className="font-medium hover:text-emerald-600">Services</Link>
               <ChevronRight className="h-4 w-4" />
               <button
@@ -155,7 +155,7 @@ export function CategoryPageClient({ catalogCategory }: CategoryPageClientProps)
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <nav className="flex items-center gap-1.5 text-sm text-slate-500">
+          <nav className="flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap text-sm text-slate-500">
             <Link href="/" className="flex items-center gap-1 font-medium hover:text-emerald-600">
               <Home className="h-3.5 w-3.5" /> Home
             </Link>
@@ -183,7 +183,7 @@ export function CategoryPageClient({ catalogCategory }: CategoryPageClientProps)
           <span className="inline-flex items-center gap-2 rounded-full bg-emerald-500/20 px-3 py-1.5 text-xs font-bold text-emerald-300">
             <BadgeCheck className="h-3.5 w-3.5" /> Verified Professionals
           </span>
-          <h1 className="mt-4 text-4xl font-black text-white sm:text-5xl">{catalogCategory.title}</h1>
+          <h1 className="mt-4 break-words text-3xl font-black text-white sm:text-5xl">{catalogCategory.title}</h1>
           {catalogCategory.subtitle && (
             <p className="mt-3 text-lg text-slate-300">{catalogCategory.subtitle}</p>
           )}
@@ -285,7 +285,7 @@ function SubcategoryCard({
             alt={subcat.title}
             fill
 
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
+            className="rounded-xl object-contain p-2 [image-rendering:auto] transition-transform duration-500 group-hover:scale-[1.02] sm:rounded-2xl sm:p-3"
             sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
           />
         ) : (
@@ -293,7 +293,6 @@ function SubcategoryCard({
             <Wrench className="h-12 w-12 text-emerald-300" />
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
         {serviceCount > 0 && (
           <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow">
             <BadgeCheck className="h-3.5 w-3.5" />
@@ -349,7 +348,7 @@ function ServiceCard({
             alt={service.title}
             fill
 
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
+            className="rounded-xl object-contain p-2 [image-rendering:auto] transition-transform duration-500 group-hover:scale-[1.02] sm:rounded-2xl sm:p-3"
             sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
           />
         ) : (
@@ -357,7 +356,6 @@ function ServiceCard({
             <Layers className="h-12 w-12 text-slate-300" />
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/35 to-transparent" />
         <div className="absolute left-3 top-3 flex flex-wrap gap-2">
           {discount > 0 && (
             <span className="rounded-full bg-red-500 px-2.5 py-1 text-xs font-bold text-white shadow">

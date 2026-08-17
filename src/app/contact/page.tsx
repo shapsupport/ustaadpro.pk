@@ -48,10 +48,10 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pt-28 pb-16">
+    <div className="min-h-screen bg-slate-50 pb-12 pt-12 sm:pb-16 sm:pt-20">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center max-w-2xl mx-auto mb-16 space-y-4">
+        <div className="mx-auto mb-10 max-w-2xl space-y-4 text-center sm:mb-16">
           <span className="inline-block bg-primary/10 text-primary text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
             Contact Us
           </span>
@@ -104,7 +104,7 @@ export default function ContactPage() {
           </div>
 
           {/* Form Side (3 cols) */}
-          <div className="md:col-span-3 bg-white rounded-3xl border border-slate-100 p-8 shadow-sm">
+          <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-8 md:col-span-3">
             <h2 className="text-xl font-bold text-slate-900 mb-2">Send us a message</h2>
             <p className="text-slate-400 text-sm mb-6">Fill out the form below and our team will get back to you shortly.</p>
 
