@@ -1,16 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, CheckCircle2, Coins, CreditCard, Gift, History, LockKeyhole, RefreshCw, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { getProfile, type AuthUser } from "@/services/authService";
 import { Button } from "@/components/ui/button";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
-const ORDERS_PER_REWARD = 8;
-const VALUE_PER_ORDER = 25;
-const REWARD_VALUE = 200;
+type RewardSettings = {
+  rewardEnabled: boolean;
+  rewardPointValue: number;
+  rewardMinimumRedeem: number;
+  serviceRewardPointsOnCompletion: number;
+  shopRewardEarnPercent: number;
+};
+
+const DEFAULT_REWARDS: RewardSettings = {
+  rewardEnabled: true,
+  rewardPointValue: 25,
+  rewardMinimumRedeem: 100,
+  serviceRewardPointsOnCompletion: 1,
+  shopRewardEarnPercent: 0.5,
+};
 
 type PaymentActivity = {
   id: string;
@@ -23,6 +35,10 @@ type PaymentActivity = {
   payable: number;
   paymentMethod: string;
   receiptStatus?: string;
+  rewardPointsEarned: number;
+  rewardPointsRedeemed: number;
+  rewardDiscount: number;
+  walletUsed: number;
 };
 
 function getToken() {
@@ -67,19 +83,24 @@ function paymentActivities(payload: unknown, kind: "service" | "shop"): PaymentA
       payable: serverPending > 0 ? serverPending : Math.max(0, total - paid),
       paymentMethod,
       receiptStatus: receipt.status ? String(receipt.status) : undefined,
+      rewardPointsEarned: Number(row.rewardPointsEarned || row.reward_points_earned || 0),
+      rewardPointsRedeemed: Number(row.rewardPointsRedeemed || row.reward_points_redeemed || 0),
+      rewardDiscount: Number(row.rewardDiscount || row.reward_discount || 0),
+      walletUsed: Number(row.walletUsed || row.wallet_used || 0),
     };
   }).filter((item) => item.id);
 }
 
 export default function WalletPage() {
-  const { user, setAuthModalMode } = useAuth();
+  const { user, updateUser, setAuthModalMode } = useAuth();
   const [profile, setProfile] = useState<AuthUser | null>(user);
   const [activity, setActivity] = useState<PaymentActivity[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [settings, setSettings] = useState<RewardSettings>(DEFAULT_REWARDS);
   const loadInFlight = useRef(false);
 
-  async function loadWallet() {
+  const loadWallet = useCallback(async () => {
     if (!user) return;
     if (loadInFlight.current) return;
     loadInFlight.current = true;
@@ -88,12 +109,15 @@ export default function WalletPage() {
       const token = getToken();
       if (!token) throw new Error("Please sign in again to refresh your wallet.");
       const headers = { Authorization: `Bearer ${token}` };
-      const [freshProfile, serviceResponse, shopResponse] = await Promise.all([
+      const [freshProfile, serviceResponse, shopResponse, settingsResponse] = await Promise.all([
         getProfile(),
         fetch(`${API_BASE}/api/orders?limit=50&offset=0`, { headers, cache: "no-store" }),
         fetch(`${API_BASE}/api/shop/orders`, { headers, cache: "no-store" }),
+        fetch(`${API_BASE}/api/settings`, { cache: "no-store" }),
       ]);
       setProfile(freshProfile);
+      updateUser(freshProfile);
+      if (settingsResponse.ok) setSettings({ ...DEFAULT_REWARDS, ...await settingsResponse.json() });
       const services = serviceResponse.ok ? paymentActivities(await serviceResponse.json(), "service") : [];
       const shop = shopResponse.ok ? paymentActivities(await shopResponse.json(), "shop") : [];
       setActivity([...services, ...shop].sort((a, b) => Date.parse(b.date) - Date.parse(a.date)));
@@ -101,22 +125,18 @@ export default function WalletPage() {
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Wallet details could not be loaded.");
     } finally { setLoading(false); loadInFlight.current = false; }
-  }
+  }, [updateUser, user]);
 
   useEffect(() => {
     if (!user) return;
     const timer = window.setTimeout(() => { void loadWallet(); }, 0);
     return () => window.clearTimeout(timer);
-  }, [user]);
+  }, [loadWallet, user]);
 
-  const eligibleOrders = useMemo(() => activity.filter((item) => {
-    const confirmedOrFinal = /^(confirmed|assigned|in[_ ]?progress|completed|delivered)$/i.test(item.status);
-    const receiptCleared = item.kind === "shop" || item.receiptStatus === "verified";
-    return confirmedOrFinal && item.payable === 0 && receiptCleared;
-  }).length, [activity]);
-  const progressOrders = eligibleOrders % ORDERS_PER_REWARD;
-  const completedCycles = Math.floor(eligibleOrders / ORDERS_PER_REWARD);
-  const loyaltyEarned = eligibleOrders * VALUE_PER_ORDER;
+  const rewardPoints = Number(profile?.rewardPoints || 0);
+  const rewardValue = rewardPoints * Math.max(1, settings.rewardPointValue);
+  const rewardProgress = settings.rewardMinimumRedeem > 0 ? Math.min(100, (rewardValue / settings.rewardMinimumRedeem) * 100) : 100;
+  const pointsNeeded = Math.max(0, Math.ceil((settings.rewardMinimumRedeem - rewardValue) / Math.max(1, settings.rewardPointValue)));
   const paidTotal = activity.reduce((sum, item) => sum + item.paid, 0);
   const payableTotal = activity.reduce((sum, item) => sum + item.payable, 0);
 
@@ -124,7 +144,7 @@ export default function WalletPage() {
     <section className="border-b border-emerald-900/10 bg-gradient-to-br from-emerald-950 via-emerald-900 to-slate-950 text-white">
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
         <div className="flex max-w-3xl items-center gap-3"><div className="rounded-2xl bg-lime-300/10 p-3 ring-1 ring-lime-300/20"><WalletCards className="h-7 w-7 text-lime-300" /></div><div><p className="text-xs font-bold uppercase tracking-[.22em] text-lime-300">UstaadPro Wallet</p><h1 className="mt-1 text-3xl font-black sm:text-4xl">Payments and rewards, made simple</h1></div></div>
-        <p className="mt-4 max-w-2xl text-sm leading-6 text-emerald-100 sm:text-base">See wallet refunds, booking payments, outstanding listed charges, and your progress toward the eight-order loyalty reward.</p>
+        <p className="mt-4 max-w-2xl text-sm leading-6 text-emerald-100 sm:text-base">See wallet refunds, reward points, booking payments, and the rewards earned or redeemed on each order.</p>
       </div>
     </section>
 
@@ -134,15 +154,15 @@ export default function WalletPage() {
         <MetricCard icon={<WalletCards />} label="Wallet balance" value={`PKR ${Number(profile?.walletBalance || 0).toLocaleString("en-PK")}`} help="Verified eligible cancellation refunds" color="emerald" />
         <MetricCard icon={<CreditCard />} label="Payments submitted" value={`PKR ${paidTotal.toLocaleString("en-PK")}`} help="Across your loaded orders" color="blue" />
         <MetricCard icon={<History />} label="Listed amount payable" value={`PKR ${payableTotal.toLocaleString("en-PK")}`} help="Excludes later on-site quotes" color="amber" />
-        <MetricCard icon={<Coins />} label="Loyalty value earned" value={`PKR ${loyaltyEarned.toLocaleString("en-PK")}`} help={`${eligibleOrders} confirmed, fully paid order${eligibleOrders === 1 ? "" : "s"} × PKR 25`} color="violet" />
+        <MetricCard icon={<Coins />} label="Reward points" value={`${rewardPoints.toLocaleString("en-PK")} pts`} help={`Worth PKR ${rewardValue.toLocaleString("en-PK")}`} color="violet" />
       </div>
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1fr_320px] lg:items-center">
-          <div><div className="flex items-center gap-2"><Gift className="h-5 w-5 text-emerald-600" /><h2 className="text-xl font-black text-slate-900">Eight-order loyalty reward</h2></div><p className="mt-2 text-sm leading-6 text-slate-600">Each admin-confirmed order with zero payment remaining adds PKR 25 in loyalty value. Orders with pending or unverified payments do not count. The value remains locked until a complete set of eight eligible orders is reached; a PKR 200 refund-wallet balance by itself does not unlock this discount.</p>
-            <div className="mt-5"><div className="flex justify-between text-xs font-bold"><span className="text-slate-600">{progressOrders} of {ORDERS_PER_REWARD} orders toward the next reward</span><span className="text-emerald-700">PKR {progressOrders * VALUE_PER_ORDER} / PKR {REWARD_VALUE}</span></div><div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-lime-400 transition-all" style={{ width: `${(progressOrders / ORDERS_PER_REWARD) * 100}%` }} /></div><div className="mt-3 grid grid-cols-8 gap-1">{Array.from({ length: 8 }).map((_, index) => <div key={index} className={`grid h-8 place-items-center rounded-lg text-xs font-black ${index < progressOrders ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{index + 1}</div>)}</div></div>
+          <div><div className="flex items-center gap-2"><Gift className="h-5 w-5 text-emerald-600" /><h2 className="text-xl font-black text-slate-900">Reward points</h2></div><p className="mt-2 text-sm leading-6 text-slate-600">One point is worth PKR {settings.rewardPointValue.toLocaleString("en-PK")}. Earn {settings.serviceRewardPointsOnCompletion} point(s) after a completed service and reward value equal to {settings.shopRewardEarnPercent}% of a delivered shop product subtotal. Wallet refunds and reward points remain separate.</p>
+            <div className="mt-5"><div className="flex justify-between text-xs font-bold"><span className="text-slate-600">Progress toward minimum redemption</span><span className="text-emerald-700">PKR {rewardValue.toLocaleString("en-PK")} / PKR {settings.rewardMinimumRedeem.toLocaleString("en-PK")}</span></div><div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-400 transition-all" style={{ width: `${rewardProgress}%` }} /></div></div>
           </div>
-          <div className={`rounded-2xl p-5 text-center ${completedCycles > 0 ? "bg-emerald-50 text-emerald-900" : "bg-slate-100 text-slate-700"}`}>{completedCycles > 0 ? <CheckCircle2 className="mx-auto h-9 w-9 text-emerald-600" /> : <LockKeyhole className="mx-auto h-9 w-9 text-slate-400" />}<p className="mt-3 text-sm font-bold">{completedCycles > 0 ? `${completedCycles} reward${completedCycles > 1 ? "s" : ""} unlocked` : `${ORDERS_PER_REWARD - progressOrders} more order${ORDERS_PER_REWARD - progressOrders === 1 ? "" : "s"} to unlock`}</p><p className="mt-1 text-2xl font-black">PKR {(completedCycles * REWARD_VALUE).toLocaleString("en-PK")}</p><p className="mt-1 text-xs opacity-70">Eligible discount value</p></div>
+          <div className={`rounded-2xl p-5 text-center ${settings.rewardEnabled && pointsNeeded === 0 ? "bg-emerald-50 text-emerald-900" : "bg-slate-100 text-slate-700"}`}>{settings.rewardEnabled && pointsNeeded === 0 ? <CheckCircle2 className="mx-auto h-9 w-9 text-emerald-600" /> : <LockKeyhole className="mx-auto h-9 w-9 text-slate-400" />}<p className="mt-3 text-sm font-bold">{!settings.rewardEnabled ? "Rewards are currently paused" : pointsNeeded === 0 ? "Minimum redemption reached" : `${pointsNeeded} more point(s) needed`}</p><p className="mt-1 text-2xl font-black">{rewardPoints} pts</p><p className="mt-1 text-xs opacity-70">Available reward balance</p></div>
         </div>
       </section>
 
@@ -155,7 +175,7 @@ export default function WalletPage() {
 }
 
 function GuestWallet({ onLogin }: { onLogin: () => void }) {
-  return <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8"><div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]"><section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"><Sparkles className="h-9 w-9 text-emerald-600" /><h2 className="mt-4 text-2xl font-black text-slate-900">Earn PKR 25 with every eligible order</h2><p className="mt-3 leading-7 text-slate-600">Complete eight eligible orders to unlock a PKR 200 loyalty discount. Loyalty value cannot be redeemed early—even when your separate refund wallet balance is PKR 200 or more.</p><div className="mt-6 grid grid-cols-8 gap-1">{Array.from({ length: 8 }).map((_, index) => <div key={index} className="grid h-10 place-items-center rounded-xl bg-emerald-50 text-sm font-black text-emerald-700">{index + 1}</div>)}</div><div className="mt-3 flex justify-between text-xs font-bold text-slate-500"><span>PKR 25 per order</span><span>8 orders = PKR 200</span></div><Button className="mt-7 w-full sm:w-auto" onClick={onLogin}>Sign in to see my wallet</Button></section><section className="rounded-3xl bg-slate-900 p-6 text-white sm:p-8"><h2 className="text-xl font-black">What signed-in users can see</h2><ul className="mt-5 space-y-4">{["Live wallet refund balance", "Payments submitted for bookings", "Remaining listed amounts payable", "Receipt verification status", "Eight-order loyalty progress", "A simple payment history for every order"].map((benefit) => <li key={benefit} className="flex gap-3 text-sm text-slate-200"><CheckCircle2 className="h-5 w-5 shrink-0 text-lime-300" />{benefit}</li>)}</ul><div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs leading-5 text-slate-300"><ShieldCheck className="mb-2 h-5 w-5 text-lime-300" />Wallet refunds are credited only after eligible cancellation and admin verification. Customers cannot manually credit a wallet.</div></section></div></main>;
+  return <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8"><div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]"><section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"><Sparkles className="h-9 w-9 text-emerald-600" /><h2 className="mt-4 text-2xl font-black text-slate-900">Earn points on completed orders</h2><p className="mt-3 leading-7 text-slate-600">Service points are added after completion and shop points after delivery. Use eligible points as a discount on a future order while keeping refund wallet credit separate.</p><Button className="mt-7 w-full sm:w-auto" onClick={onLogin}>Sign in to see my wallet</Button></section><section className="rounded-3xl bg-slate-900 p-6 text-white sm:p-8"><h2 className="text-xl font-black">What signed-in users can see</h2><ul className="mt-5 space-y-4">{["Live wallet refund balance", "Current reward points and PKR value", "Minimum-redemption progress", "Points earned and redeemed per order", "Wallet credit used on bookings", "Payment and receipt status"].map((benefit) => <li key={benefit} className="flex gap-3 text-sm text-slate-200"><CheckCircle2 className="h-5 w-5 shrink-0 text-lime-300" />{benefit}</li>)}</ul><div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs leading-5 text-slate-300"><ShieldCheck className="mb-2 h-5 w-5 text-lime-300" />Wallet refunds are credited only after eligible cancellation and admin verification. Customers cannot manually credit a wallet.</div></section></div></main>;
 }
 
 function MetricCard({ icon, label, value, help, color }: { icon: React.ReactNode; label: string; value: string; help: string; color: "emerald" | "blue" | "amber" | "violet" }) {
@@ -164,5 +184,5 @@ function MetricCard({ icon, label, value, help, color }: { icon: React.ReactNode
 }
 
 function PaymentRow({ item }: { item: PaymentActivity }) {
-  return <div className="p-4 sm:p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center"><div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${item.kind === "shop" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"}`}>{item.kind === "shop" ? <CreditCard className="h-5 w-5" /> : <WalletCards className="h-5 w-5" />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-bold text-slate-900">{item.title}</p><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold capitalize text-slate-600">{item.status.replaceAll("_", " ")}</span>{item.receiptStatus && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold capitalize text-amber-700">Receipt {item.receiptStatus}</span>}</div><p className="mt-1 text-xs text-slate-500">#{item.id} · {new Date(item.date).toLocaleDateString("en-PK", { dateStyle: "medium" })} · {item.paymentMethod}</p></div><div className="grid grid-cols-3 gap-4 text-right text-xs sm:min-w-[310px]"><div><p className="text-slate-400">Total</p><p className="font-black text-slate-800">PKR {item.total.toLocaleString("en-PK")}</p></div><div><p className="text-slate-400">Paid</p><p className="font-black text-emerald-700">PKR {item.paid.toLocaleString("en-PK")}</p></div><div><p className="text-slate-400">Payable</p><p className="font-black text-slate-800">PKR {item.payable.toLocaleString("en-PK")}</p></div></div></div></div>;
+  return <div className="p-4 sm:p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center"><div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${item.kind === "shop" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"}`}>{item.kind === "shop" ? <CreditCard className="h-5 w-5" /> : <WalletCards className="h-5 w-5" />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-bold text-slate-900">{item.title}</p><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold capitalize text-slate-600">{item.status.replaceAll("_", " ")}</span>{item.receiptStatus && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold capitalize text-amber-700">Receipt {item.receiptStatus}</span>}</div><p className="mt-1 text-xs text-slate-500">#{item.id} · {new Date(item.date).toLocaleDateString("en-PK", { dateStyle: "medium" })} · {item.paymentMethod}</p><div className="mt-2 flex flex-wrap gap-2 text-[11px] font-semibold">{item.rewardPointsEarned > 0 && <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">+{item.rewardPointsEarned} pts earned</span>}{item.rewardPointsRedeemed > 0 && <span className="rounded-full bg-violet-50 px-2 py-1 text-violet-700">{item.rewardPointsRedeemed} pts used · PKR {item.rewardDiscount.toLocaleString("en-PK")} off</span>}{item.walletUsed > 0 && <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">PKR {item.walletUsed.toLocaleString("en-PK")} wallet used</span>}</div></div><div className="grid grid-cols-3 gap-4 text-right text-xs sm:min-w-[310px]"><div><p className="text-slate-400">Total</p><p className="font-black text-slate-800">PKR {item.total.toLocaleString("en-PK")}</p></div><div><p className="text-slate-400">Paid</p><p className="font-black text-emerald-700">PKR {item.paid.toLocaleString("en-PK")}</p></div><div><p className="text-slate-400">Payable</p><p className="font-black text-slate-800">PKR {item.payable.toLocaleString("en-PK")}</p></div></div></div></div>;
 }

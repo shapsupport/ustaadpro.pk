@@ -47,6 +47,7 @@ export interface OtpModalState {
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
+  updateUser: (user: AuthUser) => void;
 
   // ── Modal routing ──────────────────────────────────────────────────────
   /** null = closed, "login" | "signup" | "forgot" = open */
@@ -273,6 +274,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const updateUser = useCallback((updatedUser: AuthUser) => {
+    setUser(updatedUser);
+    try {
+      localStorage.setItem("ustaadpro_user", JSON.stringify(updatedUser));
+    } catch { }
+  }, []);
+
   // ── Delete Account ───────────────────────────────────────────────────────
   const deleteAccount = useCallback(async () => {
     setIsLoading(true);
@@ -299,6 +307,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isLoading,
+        updateUser,
         authModalMode,
         setAuthModalMode,
         otpModal,

@@ -20,10 +20,11 @@ import type {
 } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
 import { clampBookingLeadHours } from "@/lib/booking-time";
+import { calculateRewards } from "@/lib/rewards";
 
 export default function CheckoutPageClient() {
   const searchParams = useSearchParams();
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const { location } = useLocation();
 
   const serviceTitle = searchParams.get("serviceTitle") || "Selected service";
@@ -47,7 +48,6 @@ export default function CheckoutPageClient() {
   const [booking, setBooking] = useState<BookingRecord | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
-  const [rewardEligible, setRewardEligible] = useState(false);
   const [useRewardPoints, setUseRewardPoints] = useState(false);
   const [useWalletBalance, setUseWalletBalance] = useState(false);
   const walletBalance = Number(user?.walletBalance || 0);
@@ -68,33 +68,6 @@ export default function CheckoutPageClient() {
     return () => { alive = false; };
   }, [API_BASE_URL]);
 
-  useEffect(() => {
-    if (isShop || !user) {
-      return;
-    }
-    const token = localStorage.getItem("ustaadpro_token");
-    if (!token) return;
-    let alive = true;
-    const headers = { Authorization: `Bearer ${token}` };
-    fetch(`${API_BASE_URL}/api/orders/loyalty-status`, { headers, cache: "no-store" })
-      .then(async (response) => {
-        if (response.ok) return response.json() as Promise<{ eligible?: boolean }>;
-        const fallback = await fetch(`${API_BASE_URL}/api/orders`, { headers, cache: "no-store" });
-        if (!fallback.ok) throw new Error("Orders unavailable");
-        const orders = await fallback.json() as Array<{ status?: string; rewardDiscount?: number; rewarddiscount?: number }>;
-        const pendingReward = orders.some((order) =>
-          String(order.status || "").toLowerCase() === "checking_receipt" && Number(order.rewardDiscount || order.rewarddiscount || 0) > 0
-        );
-        return { eligible: Number(user.rewardPoints || 0) >= 12 && !pendingReward };
-      })
-      .then((payload: { eligible?: boolean }) => {
-        if (!alive) return;
-        setRewardEligible(Boolean(payload.eligible));
-      })
-      .catch(() => { if (alive) setRewardEligible(false); })
-    return () => { alive = false; };
-  }, [API_BASE_URL, checkoutPrice, isShop, user]);
-
   // ── Derived values ──────────────────────────────────────────────────────
   const selectedAddress = useMemo(
     () => {
@@ -112,8 +85,20 @@ export default function CheckoutPageClient() {
   const [livePaymentMethod, setLivePaymentMethod] = useState<PaymentMethod>(isShop ? "cod" : "Rs 200 Advance");
 
   const subtotal = isShop ? productPrice * quantity : servicePrice;
-  const selectedRewardDiscount = !isShop && rewardEligible && useRewardPoints ? Math.min(300, subtotal) : 0;
-  const taxableSubtotal = Math.max(0, subtotal - selectedRewardDiscount);
+  const reward = calculateRewards({
+    enabled: settings.rewardEnabled !== false && Boolean(user),
+    points: Number(user?.rewardPoints || 0),
+    pointValue: settings.rewardPointValue,
+    minimumRedeem: settings.rewardMinimumRedeem,
+    subtotal,
+    maxDiscountPercent: isShop ? settings.shopRewardMaxDiscountPercent : settings.serviceRewardMaxDiscountPercent,
+  });
+  const selectedRewardDiscount = useRewardPoints && reward.canRedeem ? reward.redeemableValue : 0;
+  const afterRewardSubtotal = Math.max(0, subtotal - selectedRewardDiscount);
+  const fullAdvanceDiscount = !isShop && livePaymentMethod === "Full Payment in Advance"
+    ? Math.round(afterRewardSubtotal * 0.05)
+    : 0;
+  const taxableSubtotal = Math.max(0, afterRewardSubtotal - fullAdvanceDiscount);
   const taxAmount = isShop ? 0 : taxableSubtotal * (settings.serviceTaxPercent / 100);
   const inspectionFee = isShop ? 0 : settings.inspectionFee;
   const shippingCost = isShop ? settings.shippingCost : 0;
@@ -153,8 +138,13 @@ export default function CheckoutPageClient() {
             addressLat: location.coords?.lat,
             addressLng: location.coords?.lng,
             paymentMethod,
+            useRewardPoints: useRewardPoints && reward.canRedeem,
           });
           orderId = data.order?.id || `BK-${Date.now()}`;
+          confirmedTotal = Number(data.order?.total ?? totalPayable);
+          confirmedDiscount = Number(data.order?.rewardDiscount ?? selectedRewardDiscount);
+          confirmedOriginalTotal = subtotal + shippingCost;
+          if (data.user) updateUser(data.user);
         } else {
           const resData = await createBooking({
             name: formData.fullName,
@@ -180,7 +170,7 @@ export default function CheckoutPageClient() {
             tax: taxAmount,
             loyaltyDiscount: selectedRewardDiscount,
             discount: selectedRewardDiscount,
-            useRewardPoints,
+            useRewardPoints: useRewardPoints && reward.canRedeem,
             useWalletBalance: applyWallet,
           });
           orderId = resData.order?.id || `BK-${Date.now()}`;
@@ -190,6 +180,7 @@ export default function CheckoutPageClient() {
           confirmedDiscount = Number(resData.order?.rewardDiscount ?? selectedRewardDiscount);
           confirmedLoyaltyDiscount = Number(resData.order?.loyaltyDiscount ?? selectedRewardDiscount);
           confirmedOriginalTotal = Number(resData.order?.originalTotal ?? (confirmedTotal + confirmedDiscount));
+          if (resData.user) updateUser(resData.user);
         }
 
         const record: BookingRecord = {
@@ -236,7 +227,7 @@ export default function CheckoutPageClient() {
         setIsSubmitting(false);
       }
     },
-    [selectedAddress, serviceTitle, workTitle, servicePrice, user, serviceId, workPriceId, settings, isShop, productId, productTitle, productPrice, productImage, quantity, checkoutTitle, checkoutPrice, taxAmount, selectedRewardDiscount, useRewardPoints, totalPayable, inspectionFee, location.coords]
+    [selectedAddress, serviceTitle, workTitle, servicePrice, user, serviceId, workPriceId, settings, isShop, productId, productTitle, productPrice, productImage, quantity, checkoutTitle, checkoutPrice, taxAmount, selectedRewardDiscount, useRewardPoints, reward.canRedeem, totalPayable, inspectionFee, shippingCost, subtotal, location.coords, updateUser]
   );
 
 
@@ -288,7 +279,7 @@ export default function CheckoutPageClient() {
           {/* ── Right: Sticky summary ─────────────────────────── */}
           <aside className="hidden lg:block">
             <div className="sticky top-6">
-              {rewardEligible && <button type="button" onClick={() => setUseRewardPoints((value) => !value)} className={`mb-4 w-full rounded-2xl border p-4 text-left ${useRewardPoints ? "border-violet-500 bg-violet-50" : "border-violet-200 bg-white"}`}><strong className="block text-sm text-slate-900">Redeem 12 points for PKR 300</strong><span className="text-xs text-slate-500">Deducted before tax</span></button>}
+              {settings.rewardEnabled && user && <RewardSelector reward={reward} selected={useRewardPoints} onChange={setUseRewardPoints} isShop={isShop} currency={settings.currency} />}
               <div className="mb-4">
                 <h2 className="text-base font-bold text-slate-800">Order summary</h2>
                 <p className="text-xs text-slate-500">
@@ -304,6 +295,8 @@ export default function CheckoutPageClient() {
                 selectedAddress={selectedAddress}
                 isShop={isShop}
                 loyaltyDiscount={selectedRewardDiscount}
+                rewardPointsRedeemed={useRewardPoints ? reward.redeemablePoints : 0}
+                fullAdvanceDiscount={fullAdvanceDiscount}
                 walletBalance={walletBalance}
                 useWalletBalance={useWalletBalance}
               />
@@ -313,12 +306,13 @@ export default function CheckoutPageClient() {
 
         {/* ── Mobile: Summary shown above form ─────────────────── */}
         <div className="mt-6 block lg:hidden">
+          {settings.rewardEnabled && user && <RewardSelector reward={reward} selected={useRewardPoints} onChange={setUseRewardPoints} isShop={isShop} currency={settings.currency} />}
           <details className="rounded-3xl border border-slate-100 bg-white shadow-sm">
             <summary className="flex cursor-pointer items-center justify-between px-5 py-4 text-sm font-bold text-slate-800">
               View order summary
               <span className="text-emerald-600 font-black text-base">
                 {settings.currency}{" "}
-                {totalPayable.toLocaleString()}
+                {Math.max(0, totalPayable - (!isShop && useWalletBalance ? Math.min(walletBalance, totalPayable) : 0)).toLocaleString()}
               </span>
             </summary>
             <div className="border-t border-slate-100 p-5">
@@ -330,6 +324,11 @@ export default function CheckoutPageClient() {
                 paymentMethod={livePaymentMethod}
                 selectedAddress={selectedAddress}
                 isShop={isShop}
+                loyaltyDiscount={selectedRewardDiscount}
+                rewardPointsRedeemed={useRewardPoints ? reward.redeemablePoints : 0}
+                fullAdvanceDiscount={fullAdvanceDiscount}
+                walletBalance={walletBalance}
+                useWalletBalance={useWalletBalance}
               />
             </div>
           </details>
@@ -337,4 +336,23 @@ export default function CheckoutPageClient() {
       </div>
     </div>
   );
+}
+
+function RewardSelector({ reward, selected, onChange, isShop, currency }: {
+  reward: ReturnType<typeof calculateRewards>;
+  selected: boolean;
+  onChange: (value: boolean) => void;
+  isShop: boolean;
+  currency: string;
+}) {
+  const reason = reward.canRedeem
+    ? `Use ${reward.redeemablePoints} point${reward.redeemablePoints === 1 ? "" : "s"} for ${currency} ${reward.redeemableValue.toLocaleString("en-PK")} off.`
+    : reward.pointsNeeded > 0
+      ? `${reward.pointsNeeded} more point(s) needed to reach the ${currency} ${reward.minimumRedeem.toLocaleString("en-PK")} minimum.`
+      : `The ${isShop ? "shop" : "service"} discount cap is below the minimum redemption for this order.`;
+  return <button type="button" disabled={!reward.canRedeem} onClick={() => onChange(!selected)} className={`mb-4 w-full rounded-2xl border p-4 text-left transition ${selected ? "border-violet-500 bg-violet-50 ring-1 ring-violet-300" : "border-violet-200 bg-white"} disabled:cursor-not-allowed disabled:opacity-60`}>
+    <strong className="block text-sm text-slate-900">Reward points: {reward.points} pts</strong>
+    <span className="mt-1 block text-xs text-slate-500">Worth {currency} {reward.balanceValue.toLocaleString("en-PK")}. {reason}</span>
+    <span className="mt-1 block text-[11px] font-semibold text-violet-700">Applies only to the {isShop ? "product" : "service"} subtotal.</span>
+  </button>;
 }
