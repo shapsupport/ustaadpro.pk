@@ -276,7 +276,6 @@ export default function TrackBookingPage() {
     if (selectedBooking?.id === id) setSelectedBooking((curr) => curr ? { ...curr, ...updates } : curr);
   };
 
-  const visibleBookings = bookings;
   const filtered = bookings.filter((b) => {
     const { normalized } = normalizeStatus(b);
     const isCompleted = normalized === "completed" || normalized === "delivered";
@@ -292,6 +291,7 @@ export default function TrackBookingPage() {
     }
     return true;
   });
+  const visibleBookings = filtered;
 
   return (
     <main className="min-h-[calc(100dvh-5rem)] bg-slate-100 pb-32 sm:pb-24">
@@ -396,12 +396,36 @@ export default function TrackBookingPage() {
               </button>
             ))}
           </div>
+          <div className="flex items-center gap-2 pb-3 sm:pb-2">
+            <label className="relative min-w-0 flex-1 sm:w-72">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search booking or service..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+              />
+            </label>
+            <div className="relative">
+              <button type="button" onClick={() => setShowFilterMenu((open) => !open)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50">
+                <Filter className="h-4 w-4" /> Filter
+              </button>
+              {showFilterMenu && <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                {[{ value: "all", label: "All statuses" }, ...Object.entries({ payment_receipt_checking: "Payment verification", confirmed: "Confirmed", assigned: "Provider assigned", in_progress: "In progress", completed: "Completed", cancelled: "Cancelled", placed: "Order placed", processing: "Processing", shipped: "Shipped", delivered: "Delivered" }).map(([value, label]) => ({ value, label }))].map((option) => (
+                  <button key={option.value} type="button" onClick={() => { setStatusFilter(option.value); setShowFilterMenu(false); }} className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${statusFilter === option.value ? "bg-emerald-50 font-bold text-emerald-700" : "text-slate-700 hover:bg-slate-50"}`}>
+                    {option.label}{statusFilter === option.value && <Check className="h-4 w-4" />}
+                  </button>
+                ))}
+              </div>}
+            </div>
+          </div>
         </div>
 
         <div className="mt-4">
-          {loading && !bookings.length ? <div className="grid gap-4 md:grid-cols-2" role="status" aria-label="Loading bookings"><span className="sr-only">Loading bookings…</span>{Array.from({ length: 4 }).map((_, index) => <div key={index} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-4"><Skeleton className="h-14 w-14 rounded-2xl" /><div className="flex-1 space-y-2"><Skeleton className="h-3 w-28" /><Skeleton className="h-6 w-2/3" /><Skeleton className="h-4 w-40" /></div><Skeleton className="h-8 w-24 rounded-full" /></div></div>)}</div> : bookings.length === 0 ? <Empty /> : visibleBookings.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm"><Package className="mx-auto h-10 w-10 text-slate-300" /><p className="mt-3 font-bold text-slate-700">No activity in this section</p><p className="mt-1 text-sm text-slate-500">Try another filter to see your bookings and orders.</p></div> : <div className="grid items-start gap-4 lg:grid-cols-2">{visibleBookings.map((booking) => <BookingCard key={`${booking.kind}-${booking.id}`} booking={booking} onUpdate={(updates) => updateBooking(booking.id, booking.kind, updates)} />)}</div>}
+          {loading && !bookings.length ? <div className="grid gap-4 md:grid-cols-2" role="status" aria-label="Loading bookings"><span className="sr-only">Loading bookings…</span>{Array.from({ length: 4 }).map((_, index) => <div key={index} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-4"><Skeleton className="h-14 w-14 rounded-2xl" /><div className="flex-1 space-y-2"><Skeleton className="h-3 w-28" /><Skeleton className="h-6 w-2/3" /><Skeleton className="h-4 w-40" /></div><Skeleton className="h-8 w-24 rounded-full" /></div></div>)}</div> : bookings.length === 0 ? <Empty /> : visibleBookings.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm"><Package className="mx-auto h-10 w-10 text-slate-300" /><p className="mt-3 font-bold text-slate-700">No activity in this section</p><p className="mt-1 text-sm text-slate-500">Try another filter to see your bookings and orders.</p></div> : <div className="grid items-start gap-4 lg:grid-cols-2">{visibleBookings.map((booking) => <BookingCard key={`${booking.kind}-${booking.id}`} booking={booking} onViewDetails={() => setSelectedBooking(booking)} onUpdate={(updates) => updateBooking(booking.id, booking.kind, updates)} />)}</div>}
         </div>
       </div>
+      {selectedBooking && <BookingDetailModal booking={selectedBooking} customerName={user.name} customerEmail={user.email} customerPhone={user.phone} onClose={() => setSelectedBooking(null)} onUpdate={(updates) => updateBooking(selectedBooking.id, selectedBooking.kind, updates)} />}
     </main>
   );
 }
@@ -488,15 +512,15 @@ function resolveBookingDetails(booking: Booking) {
 function BookingCard({
   booking,
   onUpdate,
+  onViewDetails,
 }: {
   booking: Booking;
   onUpdate: (updates: Partial<Booking>) => void;
+  onViewDetails: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [panel, setPanel] = useState<"review" | "issue" | "receipt" | "cancel" | null>(null);
 
-  const { normalized, paid, paymentTotal, paymentRemaining, receipts, latestReceipt, receiptStatus } = normalizeStatus(booking);
+  const { normalized, paid, paymentTotal, paymentRemaining, receiptStatus } = normalizeStatus(booking);
   const statusConfig = getStatusConfig(normalized);
   const isCancelled = normalized === "cancelled" || normalized === "canceled";
   const isCompleted = normalized === "completed" || normalized === "delivered";
@@ -543,14 +567,7 @@ function BookingCard({
   const totalSteps = stepLabels.length;
 
   const acceptsReceipt = booking.kind !== "shop" && ["rs 200 advance", "full payment", "full payment in advance"].includes(booking.paymentMethod?.toLowerCase());
-  const isInspection = /visit|inspection/i.test(booking.unitDescription || "");
-  const knownPending = booking.pendingPayment ? Number(booking.pendingPayment) : Math.max(0, total - paid);
-  const canUploadPayment = acceptsReceipt && (!receipts.length || receipts[receipts.length - 1]?.status === "rejected" || (booking.status.toLowerCase() === "completed" && (knownPending > 0 || isInspection)));
-  const now = Date.now();
-  const appointment = booking.preferredTime ? Date.parse(booking.preferredTime) : NaN;
-  const hoursRemaining = Number.isFinite(appointment) ? (appointment - now) / 3_600_000 : null;
-  const terminal = ["completed", "delivered", "cancelled", "canceled", "refunded"].includes(normalized);
-  const canCancel = !terminal && (booking.kind === "shop" || (hoursRemaining !== null && hoursRemaining >= 6));
+  const progressColor = isCancelled ? "bg-red-500" : isCompleted ? "bg-emerald-500" : normalized === "in_progress" ? "bg-indigo-500" : normalized === "assigned" ? "bg-blue-500" : "bg-amber-500";
 
   return (
     <article className="relative flex h-full flex-col justify-between overflow-hidden rounded-[1.25rem] border border-slate-200/80 bg-white p-4 sm:p-5 shadow-sm transition-all duration-150 hover:shadow-md">
@@ -611,13 +628,9 @@ function BookingCard({
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50">
                     <Copy className="h-3.5 w-3.5 text-slate-400" /> Copy Order ID
                   </button>
-                  <button type="button" onClick={() => { setExpanded(true); setMenuOpen(false); }}
+                  <button type="button" onClick={() => { onViewDetails(); setMenuOpen(false); }}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50">
                     <ReceiptText className="h-3.5 w-3.5 text-emerald-600" /> View Details
-                  </button>
-                  <button type="button" onClick={() => { setExpanded(true); setPanel("issue"); setMenuOpen(false); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                    <MessageSquareWarning className="h-3.5 w-3.5 text-amber-500" /> Raise an Issue
                   </button>
                 </div>
               )}
@@ -635,7 +648,7 @@ function BookingCard({
       </div>
 
       {/* ── Bottom Section: Financials (left) + Progress (right) ── */}
-      <div className="mt-4 sm:mt-5 flex flex-col gap-3.5 border-t border-slate-100 pt-3.5 sm:pt-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-[1.2fr_.8fr]">
         {/* Left Column: Financial Numbers + View Details */}
         <div className="min-w-0">
           <div className="grid grid-cols-3 gap-2 sm:gap-6">
@@ -655,13 +668,44 @@ function BookingCard({
             </div>
           </div>
 
-          {isShop && booking.items && booking.items.length > 0 && <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4"><h3 className="font-bold text-slate-900">Products ordered</h3><div className="mt-3 grid gap-2 sm:grid-cols-2">{booking.items.map((item, index) => <div key={`${item.productId}-${index}`} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">{item.imageUrl ? <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-slate-100"><Image src={absoluteImage(item.imageUrl)} alt={item.title} fill className="object-cover" sizes="56px" /></div> : <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-slate-100"><Package className="h-5 w-5 text-slate-400" /></div>}<div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-900">{item.title}</p><p className="text-xs text-slate-500">Qty {item.quantity}</p></div><p className="text-xs font-black text-slate-900">PKR {(item.price * item.quantity).toLocaleString("en-PK")}</p></div>)}</div></section>}
-
-          <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-slate-500">Available actions</h3><BookingActions booking={booking} completed={isCompleted} isCancelled={isCancelled} acceptsReceipt={acceptsReceipt} onUpdate={onUpdate} /></section>
+          <button type="button" onClick={onViewDetails} className="mt-3 inline-flex items-center gap-2 border-t border-slate-100 pt-3 text-xs font-bold text-emerald-600 hover:text-emerald-700">View Details<ArrowRight className="h-3.5 w-3.5" /></button>
+        </div>
+        <div className="border-t border-slate-100 pt-4 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
+          <p className="text-[10px] font-semibold text-slate-500">Booking Progress</p>
+          <div className="mt-3 flex items-center">
+            {stepLabels.map((label, index) => <div key={label} className="flex flex-1 items-center last:flex-none"><span className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${index <= activeStep ? `${progressColor} border-transparent text-white` : "border-slate-300 bg-white"}`}>{index <= activeStep && <Check className="h-2.5 w-2.5 stroke-[3]" />}</span>{index < totalSteps - 1 && <span className={`h-0.5 flex-1 ${index < activeStep ? progressColor : "bg-slate-200"}`} />}</div>)}
+          </div>
+          <p className="mt-3 text-[10px] font-medium text-slate-500">{isCancelled ? "Cancelled" : `${completedCount} of ${totalSteps} Completed`}</p>
         </div>
       </div>
     </article>
   );
+}
+
+function BookingDetailModal({ booking, customerName, customerEmail, customerPhone, onClose, onUpdate }: { booking: Booking; customerName: string; customerEmail: string; customerPhone: string; onClose: () => void; onUpdate: (updates: Partial<Booking>) => void }) {
+  const { normalized, paid, paymentTotal, paymentRemaining } = normalizeStatus(booking);
+  const status = getStatusConfig(normalized);
+  const { title, iconTheme } = resolveBookingDetails(booking);
+  const IconComponent = iconTheme.Icon;
+  const isCompleted = normalized === "completed" || normalized === "delivered";
+  const isCancelled = normalized === "cancelled" || normalized === "canceled";
+  const schedule = booking.preferredTime && !Number.isNaN(Date.parse(booking.preferredTime)) ? new Date(booking.preferredTime).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : booking.preferredTime || "Not scheduled";
+
+  return <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 p-0 backdrop-blur-sm sm:items-center sm:justify-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby="booking-details-title" onMouseDown={onClose}>
+    <section className="max-h-[92dvh] w-full max-w-3xl overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl" onMouseDown={(event) => event.stopPropagation()}>
+      <header className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-100 bg-white px-5 py-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3"><div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${iconTheme.boxBg}`}><IconComponent className="h-6 w-6" /></div><div className="min-w-0"><p className={`text-[10px] font-extrabold uppercase tracking-[0.14em] ${booking.kind === "shop" ? "text-blue-600" : "text-emerald-600"}`}>{booking.kind === "shop" ? "Shop order" : "Home service"}</p><h2 id="booking-details-title" className="truncate text-lg font-black text-slate-900">{title}</h2><p className="font-mono text-xs text-slate-500">#USTAADPRO-{booking.id.slice(-6).toUpperCase()}</p></div></div>
+        <button type="button" onClick={onClose} aria-label="Close details" className="rounded-xl p-2 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button>
+      </header>
+      <div className="space-y-5 p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50 p-4"><div><p className="text-xs font-semibold text-slate-500">Current status</p><span className={`mt-1 inline-flex rounded-lg px-2.5 py-1 text-xs font-bold ${status.color}`}>{status.label}</span></div><div className="text-right"><p className="text-xs font-semibold text-slate-500">Total amount</p><p className="mt-1 text-xl font-black text-slate-900">PKR {paymentTotal.toLocaleString("en-PK")}</p></div></div>
+        <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-2xl border border-slate-200 p-4"><h3 className="mb-4 text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">Booking details</h3><div className="space-y-4"><DetailRow icon={<CalendarDays className="h-4 w-4" />} label="Appointment" value={schedule} />{booking.address && <DetailRow icon={<MapPin className="h-4 w-4" />} label="Service address" value={booking.address} />}{booking.notes && <DetailRow icon={<ReceiptText className="h-4 w-4" />} label="Customer notes" value={booking.notes} />}</div></div><div className="rounded-2xl border border-slate-200 p-4"><h3 className="mb-4 text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">Customer details</h3><div className="space-y-4"><DetailRow icon={<UserRound className="h-4 w-4" />} label="Name" value={customerName || "Not available"} /><DetailRow icon={<MessageSquareWarning className="h-4 w-4" />} label="Email" value={booking.userEmail || customerEmail || "Not available"} /><DetailRow icon={<CreditCard className="h-4 w-4" />} label="Phone" value={customerPhone || "Not available"} /></div></div></div>
+        <div className="rounded-2xl border border-slate-200 p-4"><h3 className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">Payment summary</h3><div className="mt-3 grid grid-cols-3 divide-x divide-slate-100"><SummaryValue label="Total" value={`PKR ${paymentTotal.toLocaleString("en-PK")}`} /><SummaryValue label="Paid online" value={`PKR ${paid.toLocaleString("en-PK")}`} /><SummaryValue label="Remaining" value={`PKR ${paymentRemaining.toLocaleString("en-PK")}`} /></div></div>
+        {booking.items?.length ? <div className="rounded-2xl border border-slate-200 p-4"><h3 className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">Order items</h3><div className="mt-3 space-y-2">{booking.items.map((item, index) => <div key={`${item.productId}-${index}`} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">{item.imageUrl ? <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg"><Image src={absoluteImage(item.imageUrl)} alt={item.title} fill className="object-cover" sizes="48px" /></div> : <Package className="h-5 w-5 text-slate-400" />}<p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{item.title} <span className="text-slate-500">× {item.quantity}</span></p><p className="text-sm font-black text-slate-900">PKR {(item.price * item.quantity).toLocaleString("en-PK")}</p></div>)}</div></div> : null}
+        <div className="rounded-2xl bg-slate-50 p-4"><h3 className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">Available actions</h3><BookingActions booking={booking} completed={isCompleted} isCancelled={isCancelled} acceptsReceipt={booking.kind !== "shop"} onUpdate={onUpdate} /></div>
+      </div>
+    </section>
+  </div>;
 }
 
 function SummaryValue({ label, value, truncate = false, dark = false, accent = false }: { label: string; value: string; truncate?: boolean; dark?: boolean; accent?: boolean }) {
