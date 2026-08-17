@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, type RefObject } from "react";
-import { Check, Copy, CreditCard, Gift, ShieldCheck, Upload } from "lucide-react";
+import { Check, Copy, CreditCard, Gift, ShieldCheck, Upload, WalletCards } from "lucide-react";
 
 const EASYPAISA_NUMBER = "03485838593";
 
@@ -17,6 +17,15 @@ interface EasyPaisaPaymentSectionProps {
   rewardLoading?: boolean;
   useRewardPoints?: boolean;
   onUseRewardPointsChange?: (value: boolean) => void;
+  rewardPoints?: number;
+  rewardBalanceValue?: number;
+  rewardDiscount?: number;
+  rewardRedeemablePoints?: number;
+  rewardHint?: string;
+  walletBalance?: number;
+  walletAdjustment?: number;
+  useWalletBalance?: boolean;
+  onUseWalletBalanceChange?: (value: boolean) => void;
 }
 
 export default function EasyPaisaPaymentSection({
@@ -31,12 +40,20 @@ export default function EasyPaisaPaymentSection({
   rewardLoading = false,
   useRewardPoints = false,
   onUseRewardPointsChange,
+  rewardPoints = 0,
+  rewardBalanceValue = 0,
+  rewardDiscount = 0,
+  rewardRedeemablePoints = 0,
+  rewardHint = "",
+  walletBalance = 0,
+  walletAdjustment = 0,
+  useWalletBalance = false,
+  onUseWalletBalanceChange,
 }: EasyPaisaPaymentSectionProps) {
   const [copied, setCopied] = useState(false);
-  const rewardDiscount = useRewardPoints ? Math.min(200, total) : 0;
   const cashDue = paymentMethod === "Rs 200 Advance"
-    ? Math.max(0, Math.min(200, total) - rewardDiscount)
-    : Math.max(0, total - rewardDiscount);
+    ? Math.max(0, Math.min(200, total))
+    : Math.max(0, total);
   const remaining = paymentMethod === "Rs 200 Advance" ? Math.max(0, total - 200) : 0;
 
   const copyEasyPaisaNumber = async () => {
@@ -74,16 +91,27 @@ export default function EasyPaisaPaymentSection({
         </button>
       </div>
 
-      {(rewardEligible || rewardLoading) && (
+      <button
+        type="button"
+        disabled={walletBalance <= 0}
+        onClick={() => onUseWalletBalanceChange?.(!useWalletBalance)}
+        className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${useWalletBalance ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-300" : "border-emerald-200 bg-white hover:bg-emerald-50"} disabled:cursor-not-allowed disabled:opacity-60`}
+      >
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-700"><WalletCards className="h-5 w-5" /></span>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-900">Use wallet balance</span><span className="block text-[11px] text-slate-500">Available: Rs {walletBalance.toLocaleString("en-PK")}. {walletBalance > 0 ? `Apply up to Rs ${Math.min(walletBalance, total + walletAdjustment).toLocaleString("en-PK")}.` : "No wallet balance is available."}</span></span>
+        <span className={`grid h-6 w-6 place-items-center rounded-lg border ${useWalletBalance ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-300 bg-white text-transparent"}`}><Check className="h-4 w-4" /></span>
+      </button>
+
+      {(rewardLoading || rewardPoints > 0) && (
         <button
           type="button"
-          disabled={rewardLoading}
+          disabled={rewardLoading || !rewardEligible}
           onClick={() => onUseRewardPointsChange?.(!useRewardPoints)}
-          className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${useRewardPoints ? "border-violet-500 bg-violet-50 ring-1 ring-violet-300" : "border-violet-200 bg-white hover:bg-violet-50"}`}
+          className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${useRewardPoints ? "border-violet-500 bg-violet-50 ring-1 ring-violet-300" : "border-violet-200 bg-white hover:bg-violet-50"} disabled:cursor-not-allowed disabled:opacity-60`}
         >
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-100 text-violet-700"><Gift className="h-5 w-5" /></span>
-          <span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-900">Redeem PKR 200 loyalty reward</span><span className="block text-[11px] text-slate-500">Use it for the booking advance or deduct it from full payment.</span></span>
-          <span className={`h-5 w-9 rounded-full p-0.5 transition ${useRewardPoints ? "bg-violet-600" : "bg-slate-200"}`}><span className={`block h-4 w-4 rounded-full bg-white transition ${useRewardPoints ? "translate-x-4" : ""}`} /></span>
+          <span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-900">Reward points: {rewardPoints} pts</span><span className="block text-[11px] text-slate-500">Worth Rs {rewardBalanceValue.toLocaleString("en-PK")}. {rewardHint}</span></span>
+          <span className={`grid h-6 w-6 place-items-center rounded-lg border ${useRewardPoints ? "border-violet-600 bg-violet-600 text-white" : "border-slate-300 bg-white text-transparent"}`}><Check className="h-4 w-4" /></span>
         </button>
       )}
 
@@ -93,7 +121,8 @@ export default function EasyPaisaPaymentSection({
         <div><p className="text-[9px] uppercase text-slate-400">Remaining</p><p className="text-xs font-bold">Rs {remaining.toLocaleString("en-PK")}</p></div>
       </div>
 
-      {useRewardPoints && <p className="rounded-xl bg-violet-100 px-3 py-2 text-xs font-bold text-violet-800">PKR {rewardDiscount.toLocaleString("en-PK")} loyalty reward applied to this booking.</p>}
+      {useRewardPoints && <p className="rounded-xl bg-violet-100 px-3 py-2 text-xs font-bold text-violet-800">{rewardRedeemablePoints} points applied: Rs {rewardDiscount.toLocaleString("en-PK")} off.</p>}
+      {useWalletBalance && <p className="rounded-xl bg-emerald-100 px-3 py-2 text-xs font-bold text-emerald-800">Rs {walletAdjustment.toLocaleString("en-PK")} wallet balance applied.</p>}
 
       {/* Notice when EasyPaisa selected */}
       {cashDue > 0 && <div className="overflow-hidden rounded-2xl border-2 border-emerald-400 bg-gradient-to-br from-emerald-600 to-emerald-800 text-white shadow-lg shadow-emerald-700/15 animate-in fade-in duration-200">

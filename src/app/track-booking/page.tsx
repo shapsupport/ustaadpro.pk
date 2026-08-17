@@ -5,6 +5,7 @@ import Image from "next/image";
 import { type ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, ArrowRight, CalendarDays, Camera, ChevronDown, Clock3, CreditCard, MapPin, MessageSquareWarning, Package, ReceiptText, RefreshCw, ShoppingBag, Star, UserRound, WalletCards, Wrench, XCircle, ClipboardList } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { getProfile } from "@/services/authService";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +24,7 @@ type Booking = {
   pendingPayment?: number;
   apiTotal?: number;
   paidAmount?: number;
+  cancelReason?: string;
 };
 
 type OrderItem = {
@@ -123,6 +125,7 @@ function listFrom(payload: unknown, kind: "service" | "shop"): Booking[] {
       pendingPayment: Number(row.pendingPayment || row.pending_payment || row.remainingAmount || row.remaining_amount || row.amountPayable || row.amount_payable || 0),
       apiTotal,
       paidAmount: Number(row.paidAmount || row.paid_amount || row.amountPaid || row.amount_paid || receiptsPaid),
+      cancelReason: String(row.cancelReason || row.cancel_reason || ""),
     } as Booking;
   }).filter((item) => item.id);
 }
@@ -178,6 +181,14 @@ export default function TrackBookingPage() {
   const serviceCount = bookings.filter((booking) => booking.kind === "service").length;
   const shopCount = bookings.filter((booking) => booking.kind === "shop").length;
   const completedCount = bookings.filter((booking) => ["completed", "delivered"].includes(booking.status.toLowerCase().replace(/\s+/g, "_"))).length;
+  const pendingBalanceBooking = bookings.find((booking) => {
+    if (booking.kind !== "service" || booking.status.toLowerCase() !== "completed" || !booking.paymentMethod.toLowerCase().includes("200 advance")) return false;
+    const receipts = booking.paymentReceipts?.length ? booking.paymentReceipts : booking.paymentReceipt ? [booking.paymentReceipt] : [];
+    const hasRemainingReceipt = receipts.some((receipt) => receipt.paymentStage === "remaining" && receipt.status !== "rejected");
+    const paid = Number(booking.paidAmount ?? receipts.filter((receipt) => receipt.status !== "rejected").reduce((sum, receipt) => sum + Number(receipt.amount || 0), 0));
+    const remaining = Number(booking.pendingPayment || 0) || Math.max(0, Number(booking.apiTotal || booking.servicePrice || 0) - paid);
+    return remaining > 0 && !hasRemainingReceipt;
+  });
   const updateBooking = (id: string, kind: Booking["kind"], updates: Partial<Booking>) => {
     setBookings((current) => current.map((booking) => booking.id === id && booking.kind === kind ? { ...booking, ...updates } : booking));
   };
@@ -216,6 +227,7 @@ export default function TrackBookingPage() {
           {loading && !bookings.length ? <div className="grid gap-4 md:grid-cols-2" role="status" aria-label="Loading bookings"><span className="sr-only">Loading bookings…</span>{Array.from({ length: 4 }).map((_, index) => <div key={index} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-4"><Skeleton className="h-14 w-14 rounded-2xl" /><div className="flex-1 space-y-2"><Skeleton className="h-3 w-28" /><Skeleton className="h-6 w-2/3" /><Skeleton className="h-4 w-40" /></div><Skeleton className="h-8 w-24 rounded-full" /></div></div>)}</div> : bookings.length === 0 ? <Empty /> : visibleBookings.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm"><Package className="mx-auto h-10 w-10 text-slate-300" /><p className="mt-3 font-bold text-slate-700">No activity in this section</p><p className="mt-1 text-sm text-slate-500">Try another filter to see your bookings and orders.</p></div> : <div className="grid items-start gap-4 lg:grid-cols-2">{visibleBookings.map((booking) => <BookingCard key={`${booking.kind}-${booking.id}`} booking={booking} onUpdate={(updates) => updateBooking(booking.id, booking.kind, updates)} />)}</div>}
         </div>
       </div>
+      {pendingBalanceBooking && <RemainingPaymentModal booking={pendingBalanceBooking} onUploaded={load} />}
     </main>
   );
 }
@@ -321,14 +333,12 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
 
 function BookingActions({ booking, completed, isCancelled, acceptsReceipt, onUpdate }: { booking: Booking; completed: boolean; isCancelled: boolean; acceptsReceipt: boolean; onUpdate: (updates: Partial<Booking>) => void }) {
   const [panel, setPanel] = useState<"review" | "issue" | "receipt" | "cancel" | null>(null);
-  const [now] = useState(Date.now);
   const normalized = booking.status.toLowerCase().replace(/\s+/g, "_");
   const terminal = ["completed", "delivered", "cancelled", "canceled", "refunded"].includes(normalized);
-  const appointment = booking.preferredTime ? Date.parse(booking.preferredTime) : NaN;
-  const hoursRemaining = Number.isFinite(appointment) ? (appointment - now) / 3_600_000 : null;
-  const canCancel = !terminal && (booking.kind === "shop" || (hoursRemaining !== null && hoursRemaining >= 6));
-  const cancellationHint = booking.kind === "service" && !terminal && !canCancel
-    ? hoursRemaining === null ? "Cancellation is unavailable because this booking has no valid appointment time." : "Online cancellation closes six hours before the appointment. Please contact support for urgent help."
+  const cancellableServiceStatus = ["confirmed", "checking_receipt"].includes(normalized);
+  const canCancel = !terminal && (booking.kind === "shop" || cancellableServiceStatus);
+  const cancellationHint = booking.kind === "service" && !terminal && !cancellableServiceStatus
+    ? "This booking can no longer be cancelled after assignment. Please contact support for urgent help."
     : "";
   const receipts = booking.paymentReceipts?.length ? booking.paymentReceipts : booking.paymentReceipt ? [booking.paymentReceipt] : [];
   const paid = Number(booking.paidAmount ?? receipts.filter((receipt) => receipt.status !== "rejected").reduce((sum, receipt) => sum + Number(receipt.amount || 0), 0));
@@ -352,13 +362,13 @@ function BookingActions({ booking, completed, isCancelled, acceptsReceipt, onUpd
     </div>
     {cancellationHint && <p className="mt-3 text-xs font-medium text-amber-700">{cancellationHint}</p>}
     {panel === "review" && <ReviewForm booking={booking} />}
-    {panel === "receipt" && <UploadReceiptForm booking={booking} />}
+    {panel === "receipt" && <UploadReceiptForm booking={booking} onUploaded={() => onUpdate({ paymentReceipt: { status: "submitted", paymentStage: booking.status.toLowerCase() === "completed" ? "remaining" : "advance" } })} />}
     {panel === "issue" && <IssueForm booking={booking} />}
     {panel === "cancel" && <CancelForm booking={booking} onCancelled={() => { onUpdate({ status: "cancelled" }); setPanel(null); }} />}
   </div>;
 }
 
-function UploadReceiptForm({ booking }: { booking: Booking }) {
+function UploadReceiptForm({ booking, onUploaded }: { booking: Booking; onUploaded?: () => void | Promise<void> }) {
   const EASYPAISA_NUMBER = "03485838593";
   const EASYPAISA_TITLE = "Muhammad Ikram";
   const [dataUrl, setDataUrl] = useState("");
@@ -395,6 +405,7 @@ function UploadReceiptForm({ booking }: { booking: Booking }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Receipt upload failed.");
       setMessage("Payment receipt uploaded. It is now being checked by admin. Review will unlock after the final payment is verified.");
+      await onUploaded?.();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Receipt upload failed.");
     } finally { setBusy(false); }
@@ -471,9 +482,23 @@ function ReviewForm({ booking }: { booking: Booking }) {
 }
 
 function CancelForm({ booking, onCancelled }: { booking: Booking; onCancelled: () => void }) {
+  const { updateUser } = useAuth();
   const [reason, setReason] = useState(""), [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
-  async function cancel() { if (reason.trim().length < 5) { setMessage("Please provide a short cancellation reason."); return; } setBusy(true); setMessage(""); try { const path = booking.kind === "shop" ? `/api/shop/orders/${booking.id}/cancel` : `/api/orders/${booking.id}/cancel`; const body = booking.kind === "shop" ? { reason: reason.trim() } : { cancelReason: reason.trim() }; const res = await fetch(`${API_BASE}${path}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify(body) }); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.message || "Cancellation could not be completed."); onCancelled(); } catch (error) { setMessage(error instanceof Error ? error.message : "Cancellation could not be completed."); } finally { setBusy(false); } }
+  async function cancel() { if (reason.trim().length < 5) { setMessage("Please provide a short cancellation reason."); return; } setBusy(true); setMessage(""); try { const path = booking.kind === "shop" ? `/api/shop/orders/${booking.id}/cancel` : `/api/orders/${booking.id}/cancel`; const body = booking.kind === "shop" ? { reason: reason.trim() } : { cancelReason: reason.trim() }; const res = await fetch(`${API_BASE}${path}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify(body) }); const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data.message || "Cancellation could not be completed."); if (booking.kind === "service") { try { updateUser(await getProfile()); } catch { /* Wallet refreshes from the server on the wallet page. */ } } onCancelled(); } catch (error) { setMessage(error instanceof Error ? error.message : "Cancellation could not be completed."); } finally { setBusy(false); } }
   return <div className="mt-4 space-y-3 rounded-2xl border border-red-200 bg-red-50/60 p-4"><div className="flex gap-3"><AlertCircle className="h-5 w-5 shrink-0 text-red-600" /><div><p className="font-bold text-slate-900">Cancel this {booking.kind === "shop" ? "order" : "booking"}?</p><p className="mt-1 text-sm text-slate-600">This action is sent immediately and may not be reversible.</p></div></div><Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Tell us why you need to cancel" />{message && <p className="text-sm font-medium text-red-700">{message}</p>}<Button className="bg-red-600 text-white hover:bg-red-700" onClick={() => void cancel()} disabled={busy}>{busy ? "Cancelling…" : "Confirm cancellation"}</Button></div>;
+}
+
+function RemainingPaymentModal({ booking, onUploaded }: { booking: Booking; onUploaded: () => void | Promise<void> }) {
+  const receipts = booking.paymentReceipts?.length ? booking.paymentReceipts : booking.paymentReceipt ? [booking.paymentReceipt] : [];
+  const paid = Number(booking.paidAmount ?? receipts.filter((receipt) => receipt.status !== "rejected").reduce((sum, receipt) => sum + Number(receipt.amount || 0), 0));
+  const remaining = Number(booking.pendingPayment || 0) || Math.max(0, Number(booking.apiTotal || booking.servicePrice || 0) - paid);
+  return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="remaining-payment-title">
+    <div className="max-h-[95dvh] w-full max-w-xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-6">
+      <div><p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Service completed</p><h2 id="remaining-payment-title" className="mt-1 text-2xl font-black text-slate-900">Pay your remaining balance</h2><p className="mt-2 text-sm text-slate-600">Your PKR 200 advance is recorded. Upload the remaining payment receipt to finish this booking.</p></div>
+      <div className="mt-4 rounded-2xl bg-slate-950 p-4 text-white"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">Remaining balance</p><p className="mt-1 text-3xl font-black">PKR {remaining.toLocaleString("en-PK")}</p><p className="mt-1 text-xs text-slate-400">Order #{booking.id}</p></div>
+      <UploadReceiptForm booking={booking} onUploaded={onUploaded} />
+    </div>
+  </div>;
 }
 
 function IssueForm({ booking }: { booking: Booking }) {
