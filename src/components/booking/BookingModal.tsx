@@ -324,12 +324,12 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const rewardEligible = reward.canRedeem;
   const rewardDiscount = useRewardPoints && reward.canRedeem ? reward.redeemableValue : 0;
   const afterRewardSubtotal = Math.max(0, serviceSubtotal - rewardDiscount);
-  const fullAdvanceDiscount = paymentMethod === "Full Payment in Advance" ? Math.round(afterRewardSubtotal * 0.05) : 0;
+  const fullAdvanceDiscount = paymentMethod === "Full Payment in Advance" ? Math.ceil(afterRewardSubtotal * 0.05) : 0;
   const taxableSubtotal = Math.max(0, afterRewardSubtotal - fullAdvanceDiscount);
-  const serviceTax = taxableSubtotal * serviceTaxPercent / 100;
-  const totalBeforeWallet = taxableSubtotal + inspectionFee + serviceTax;
+  const serviceTax = Math.ceil(taxableSubtotal * serviceTaxPercent / 100);
+  const totalBeforeWallet = Math.ceil(taxableSubtotal + inspectionFee + serviceTax);
   const walletAdjustment = useWalletBalance ? Math.min(walletBalance, totalBeforeWallet) : 0;
-  const calculatedTotal = Math.max(0, totalBeforeWallet - walletAdjustment);
+  const calculatedTotal = Math.ceil(Math.max(0, totalBeforeWallet - walletAdjustment));
   const paymentNow = paymentMethod === "Rs 200 Advance"
     ? Math.max(0, Math.min(200, calculatedTotal) - rewardDiscount)
     : Math.max(0, calculatedTotal - rewardDiscount);
@@ -432,9 +432,10 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       focusValidationCard("contact");
       return;
     }
-    if (!phone.trim()) {
+    const normalizedPhone = normalizePakistaniMobile(phone);
+    if (!normalizedPhone) {
       setInvalidContact({ phone: true });
-      setError("Please enter your phone number.");
+      setError("Please enter a valid Pakistani mobile number (e.g. 0300 1234567).");
       focusValidationCard("contact");
       return;
     }
@@ -510,12 +511,6 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       return;
     }
 
-    if (paymentNow > 0 && !receiptDataUrl) {
-      setReceiptValidationError(true);
-      focusValidationCard("receipt");
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -545,7 +540,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       // 1. Submit Booking
       const response = await createBooking({
         name: name.trim(),
-        phone: phone.trim(),
+        phone: normalizedPhone,
         address: completeAddress,
         addressLat: addressCoords?.lat,
         addressLng: addressCoords?.lng,
@@ -571,24 +566,28 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
         const confirmedCoveredAmount = paymentMethod === "Rs 200 Advance" ? Math.min(200, confirmedTotal) : confirmedTotal;
         let receiptUploaded = false;
         let receiptError = "";
-        if (confirmedPaymentNow > 0) {
+        if (confirmedPaymentNow > 0 && receiptDataUrl) {
           try {
             await uploadPaymentReceipt(orderId, receiptDataUrl, confirmedPaymentNow, receiptFileName);
             receiptUploaded = true;
           } catch (uploadError) {
             receiptError = uploadError instanceof Error ? uploadError.message : "Receipt upload failed.";
           }
-        } else {
+        } else if (confirmedPaymentNow <= 0) {
           receiptUploaded = true;
+        } else {
+          receiptError = "No payment receipt was uploaded. Open Track Booking to upload the payment screenshot for verification.";
         }
+
+        const confirmedPaidAmount = receiptUploaded ? confirmedCoveredAmount : 0;
 
         setBookingSuccess({
           orderId,
           total: confirmedTotal,
           receiptUploaded,
           receiptError,
-          paidAmount: confirmedCoveredAmount,
-          remainingAmount: Math.max(0, confirmedTotal - confirmedCoveredAmount),
+          paidAmount: confirmedPaidAmount,
+          remainingAmount: Math.max(0, confirmedTotal - confirmedPaidAmount),
           rewardApplied: useRewardPoints && rewardEligible,
         });
         sessionStorage.removeItem(BOOKING_DRAFT_KEY);
@@ -608,7 +607,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 status: response.order.status || "confirmed",
                 createdAt: new Date().toISOString(),
                 customerName: name,
-                phone,
+                phone: normalizedPhone,
                 address: completeAddress,
                 paymentMethod,
                 recurringDays: daysCount,

@@ -87,6 +87,7 @@ export default function EasyPaisaPaymentSection({
         <button type="button" onClick={() => onPaymentMethodChange("Full Payment in Advance")} className={`rounded-2xl border p-3 text-center transition ${paymentMethod === "Full Payment in Advance" ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-400" : "border-slate-200 bg-white"}`}>
           <span className="text-lg font-black text-emerald-600">Rs {total.toLocaleString("en-PK")}</span>
           <p className="text-xs font-bold text-slate-800">Pay in full</p>
+          <p className="text-[10px] font-semibold text-emerald-700">Get 5% discount when you pay in full</p>
           <p className="text-[10px] text-slate-500">No balance on the listed charge</p>
         </button>
       </div>
@@ -134,14 +135,14 @@ export default function EasyPaisaPaymentSection({
                 {copied ? "Copied" : "Copy number"}
               </button>
             </div>
-            <p className="mt-3 text-xs leading-5 text-emerald-100">After transferring the amount, upload the payment screenshot below for verification.</p>
+            <p className="mt-3 text-xs leading-5 text-emerald-100">After transferring the amount, upload the screenshot below or submit the booking and upload it later from Track Booking.</p>
           </div>
         </div>}
 
       <div ref={receiptAreaRef} className="min-w-0 space-y-2">
       {cashDue > 0 && <label className={`flex min-h-14 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed px-3 py-3 text-center text-sm font-bold transition-colors sm:px-4 ${receiptError ? "border-red-400 bg-white text-red-700 hover:bg-red-50" : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50"}`}>
           <Upload className="h-5 w-5 shrink-0" />
-          <span className="min-w-0 truncate">{receiptFileName || <>Upload booking payment receipt <span className="text-red-500">*</span></>}</span>
+          <span className="min-w-0 truncate">{receiptFileName || <>Upload payment receipt <span className="font-medium text-slate-500">(optional now)</span></>}</span>
           <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => onReceiptSelect(event.target.files?.[0] ?? null)} />
         </label>}
       </div>
