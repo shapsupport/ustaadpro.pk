@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -22,6 +23,7 @@ import {
   Plus,
   Wallet,
   Info,
+  MessageCircle,
 } from "lucide-react";
 import type { ApiReview, ApiService, WorkPrice } from "@/lib/api-types";
 import BookingModal from "@/components/booking/BookingModal";
@@ -181,22 +183,26 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
   return (
     <>
       <div className="min-h-screen bg-slate-50">
-        {/* Back bar */}
-        <div className="border-b border-slate-100 bg-white/90 px-4 py-3 backdrop-blur-md">
-          <div className="max-w-6xl mx-auto flex items-center gap-3">
+        {/* Fixed breadcrumb matching category and subcategory pages */}
+        <div className="fixed inset-x-0 top-20 z-40 border-b border-slate-100 bg-white/95 shadow-sm backdrop-blur">
+          <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-4 sm:px-6 lg:px-8">
             <button
               type="button"
               onClick={() => router.back()}
-              className="flex shrink-0 items-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl px-1.5 sm:px-2 py-1 sm:py-1.5 text-sm sm:text-base font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-600 sm:text-lg"
+              className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-slate-700 transition hover:bg-slate-50 sm:w-10 sm:px-0"
               aria-label="Go back to the previous page"
             >
-              <ArrowLeft className="h-5 w-5 sm:h-6 sm:w-6" />
-              Back
+              <ArrowLeft className="h-5 w-5" />
+              <span className="text-sm font-bold sm:hidden">Back to services</span>
             </button>
-            <ChevronRight className="h-5 w-5 shrink-0 text-slate-300" />
-            <span className="truncate text-base font-medium text-slate-500 sm:text-lg">{service.title}</span>
+            <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1.5 whitespace-nowrap text-sm text-slate-500 sm:flex">
+              <Link href="/services" className="font-medium hover:text-emerald-600">Services</Link>
+              <ChevronRight className="h-4 w-4 shrink-0" />
+              <span className="font-bold text-slate-900" title={service.title}>{service.title}</span>
+            </nav>
           </div>
         </div>
+        <div className="h-[73px]" aria-hidden="true" />
 
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid lg:grid-cols-5 gap-8">
@@ -669,15 +675,14 @@ export function ServiceDetailClient({ service, initialReviews }: { service: ApiS
                     <Plus className="h-4 w-4" />
                     Add to service cart
                   </button>
-                  <a
-                    href="https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%2C%20I%20want%20to%20book%20a%20service."
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => setIsBookingOpen(true)}
                     className="flex items-center justify-center gap-2 w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-2xl text-sm transition-colors mt-3"
                   >
-                    <ShoppingBag className="h-4 w-4" />
-                    Book via WhatsApp
-                  </a>
+                    <MessageCircle className="h-4 w-4" />
+                    Checkout via WhatsApp
+                  </button>
                 </div>
 
                 {/* Trust badges */}
@@ -784,13 +789,25 @@ function ServiceReviews({
   const [sort, setSort] = useState<ReviewSort>("best");
 
   useEffect(() => {
+    if (!open || initialReviews.length > 0) return;
     const controller = new AbortController();
     async function loadReviews() {
       setLoading(true);
       setError("");
       try {
+        const cacheKey = `ustaadpro:service-reviews:${serviceId}`;
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached) as { expiresAt?: number; reviews?: ApiReview[] };
+          if (parsed.expiresAt && parsed.expiresAt > Date.now() && Array.isArray(parsed.reviews)) {
+            setReviews(parsed.reviews);
+            onReviewsLoaded(parsed.reviews);
+            return;
+          }
+          sessionStorage.removeItem(cacheKey);
+        }
         const response = await fetch(`${API_BASE.replace(/\/$/, "")}/api/services/${encodeURIComponent(serviceId)}/reviews`, {
-          cache: "no-store",
+          cache: "default",
           signal: controller.signal,
           headers: { Accept: "application/json" },
         });
@@ -800,6 +817,9 @@ function ServiceReviews({
         const normalized = (data as ApiReview[]).filter(
           (review) => Number(review.rating) >= 1 && Number(review.rating) <= 5 && String(review.comment || "").trim()
         );
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify({ expiresAt: Date.now() + 5 * 60 * 1000, reviews: normalized }));
+        } catch { /* Reviews remain usable when session storage is unavailable. */ }
         setReviews(normalized);
         onReviewsLoaded(normalized);
       } catch (loadError) {
@@ -810,7 +830,7 @@ function ServiceReviews({
     }
     void loadReviews();
     return () => controller.abort();
-  }, [onReviewsLoaded, serviceId]);
+  }, [initialReviews.length, onReviewsLoaded, open, serviceId]);
 
   const average = reviews.length ? reviews.reduce((sum, review) => sum + Number(review.rating), 0) / reviews.length : 0;
   const counts = useMemo(

@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useReducer,
+  useState,
   useEffect,
   useCallback,
   type ReactNode,
@@ -31,6 +32,7 @@ type CartAction =
 
 interface CartContextValue {
   items: CartItem[];
+  hydrated: boolean;
   totalItems: number;
   subtotal: number;
   addItem: (product: ApiProduct, quantity?: number) => void;
@@ -151,6 +153,7 @@ const CartContext = createContext<CartContextValue | null>(null);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(cartReducer, { items: [] });
+  const [hydrated, setHydrated] = useState(false);
 
   // Hydrate from localStorage on mount (client only)
   useEffect(() => {
@@ -158,6 +161,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (stored.length > 0) {
       dispatch({ type: "HYDRATE", items: stored });
     }
+    const hydrationTimer = window.setTimeout(() => setHydrated(true), 0);
+    return () => window.clearTimeout(hydrationTimer);
   }, []);
 
   // Persist on every change
@@ -207,6 +212,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     <CartContext.Provider
       value={{
         items: state.items,
+        hydrated,
         totalItems,
         subtotal,
         addItem,

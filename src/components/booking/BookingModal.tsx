@@ -18,6 +18,7 @@ import {
   Plus,
   Trash2,
   ArrowLeft,
+  MessageCircle,
 } from "lucide-react";
 import { createBooking, uploadPaymentReceipt, ServiceItemInput } from "@/services/bookingService";
 import { useAuth } from "@/context/AuthContext";
@@ -29,12 +30,36 @@ import { showSuccessToast } from "@/context/ToastContext";
 import { getProfile } from "@/services/authService";
 import { useRouter } from "next/navigation";
 import { useServiceCart } from "@/context/ServiceCartContext";
+import { useLocation } from "@/context/LocationContext";
 import { bookingTimestamp, clampBookingLeadHours, earliestBookingTimestamp, nextAvailableBookingDate, pakistanDateAndTime } from "@/lib/booking-time";
 import { calculateRewards } from "@/lib/rewards";
+import { money, normalizePakistaniMobile, openWhatsAppOrder } from "@/lib/whatsapp-order";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 const BOOKING_DRAFT_KEY = "ustaadpro_booking_draft";
 const CHECKOUT_SELECTION_KEY = "ustaadpro_service_checkout";
+const SAVED_CHECKOUT_ADDRESS_KEY = "ustaadpro_checkout_address_v1";
+const SAVED_CHECKOUT_ADDRESS_TTL = 30 * 24 * 60 * 60 * 1000;
+
+interface SavedCheckoutAddress {
+  selectedLocation: string;
+  specificAddress: string;
+  addressCoords: { lat: number; lng: number } | null;
+  expiresAt: number;
+}
+
+function readSavedCheckoutAddress(): SavedCheckoutAddress | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVED_CHECKOUT_ADDRESS_KEY) || "null") as SavedCheckoutAddress | null;
+    if (!saved || saved.expiresAt <= Date.now()) {
+      localStorage.removeItem(SAVED_CHECKOUT_ADDRESS_KEY);
+      return null;
+    }
+    return saved;
+  } catch {
+    return null;
+  }
+}
 
 // ── Service Area: Rawalpindi + Islamabad ────────────────────────────────
 const SERVICE_AREA = { south: 33.40, north: 33.80, west: 72.85, east: 73.30 };
@@ -78,9 +103,9 @@ function dateCardLabel(date: string, index: number) {
   };
 }
 
-function validateSpecificAddress(value: string, mapLocationSelected: boolean): string {
+function validateSpecificAddress(value: string): string {
   const address = value.trim();
-  if (!address) return mapLocationSelected ? "" : "Enter your house and street address, or select a precise map location.";
+  if (!address) return "House / Street Address is required, even when a map location is selected.";
   if (address.length < 8) return "Add a little more detail, including your house and street number.";
   if (!/\d/.test(address)) return "Include your house, building, or street number.";
   const words = address.match(/[a-zA-Z]{2,}/g) || [];
@@ -90,6 +115,7 @@ function validateSpecificAddress(value: string, mapLocationSelected: boolean): s
 
 export default function BookingModal({ isOpen, onClose, service, services, onBookingComplete, pageMode = false }: BookingModalProps) {
   const { user, updateUser, setAuthModalMode } = useAuth();
+  const { location, setManualLocation } = useLocation();
   const router = useRouter();
   const { items: cartItems, addService, updateQuantity, removeService } = useServiceCart();
   const [step, setStep] = useState<"details" | "payment">("details");
@@ -101,6 +127,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const scheduleCardRef = useRef<HTMLDivElement>(null);
   const receiptAreaRef = useRef<HTMLDivElement>(null);
   const errorAlertRef = useRef<HTMLDivElement>(null);
+  const loadedRewardsForUserRef = useRef("");
+  const addressInitializedRef = useRef(false);
   const [validationFocus, setValidationFocus] = useState<{ target: "contact" | "address" | "schedule" | "receipt"; attempt: number } | null>(null);
 
   useEffect(() => {
@@ -207,26 +235,65 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
         requirements?: string; selectedTime?: string; fromDate?: string; toDate?: string;
         isRecurring?: boolean; addressCoords?: { lat: number; lng: number } | null;
       };
-      if (!draft) return;
-      if (draft.name) setName(draft.name);
-      if (draft.phone) setPhone(draft.phone);
-      setSelectedLocation(draft.selectedLocation || "");
-      setSpecificAddress(draft.specificAddress || "");
-      setRequirements(draft.requirements || "");
-      setSelectedTime(draft.selectedTime || "");
-      if (draft.fromDate) setFromDate(draft.fromDate);
-      if (draft.toDate) setToDate(draft.toDate);
-      setIsRecurring(Boolean(draft.isRecurring));
-      setAddressCoords(draft.addressCoords || null);
+      if (draft) {
+        if (draft.name) setName(draft.name);
+        if (draft.phone) setPhone(draft.phone);
+        setRequirements(draft.requirements || "");
+        setSelectedTime(draft.selectedTime || "");
+        if (draft.fromDate) setFromDate(draft.fromDate);
+        if (draft.toDate) setToDate(draft.toDate);
+        setIsRecurring(Boolean(draft.isRecurring));
+      }
+
+      if (draft?.selectedLocation || draft?.specificAddress) {
+        setSelectedLocation(draft.selectedLocation || "");
+        setSpecificAddress(draft.specificAddress || "");
+        setAddressCoords(draft.addressCoords || null);
+        addressInitializedRef.current = true;
+        return;
+      }
+
+      const savedAddress = readSavedCheckoutAddress();
+      if (savedAddress) {
+        setSelectedLocation(savedAddress.selectedLocation || "");
+        setSpecificAddress(savedAddress.specificAddress || "");
+        setAddressCoords(savedAddress.addressCoords || null);
+        addressInitializedRef.current = true;
+      }
     } catch { /* Ignore an invalid saved draft. */ }
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen || addressInitializedRef.current || location.status !== "serviceable" || !location.label) return;
+    setSelectedLocation(location.label);
+    setAddressCoords(location.coords || null);
+    addressInitializedRef.current = true;
+  }, [isOpen, location.coords, location.label, location.status]);
+
+  useEffect(() => {
+    if (!isOpen || (!selectedLocation.trim() && !specificAddress.trim())) return;
+    const timer = window.setTimeout(() => {
+      const savedAddress: SavedCheckoutAddress = {
+        selectedLocation: selectedLocation.trim(),
+        specificAddress: specificAddress.trim(),
+        addressCoords,
+        expiresAt: Date.now() + SAVED_CHECKOUT_ADDRESS_TTL,
+      };
+      try { localStorage.setItem(SAVED_CHECKOUT_ADDRESS_KEY, JSON.stringify(savedAddress)); } catch {}
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [addressCoords, isOpen, selectedLocation, specificAddress]);
+
+  useEffect(() => {
     if (!isOpen || !user) {
+      loadedRewardsForUserRef.current = "";
       setUseRewardPoints(false);
       setUseWalletBalance(false);
       return;
     }
+    const userKey = String(user.id || user.email || user.phone || "signed-in-user");
+    if (loadedRewardsForUserRef.current === userKey) return;
+    loadedRewardsForUserRef.current = userKey;
     setRewardLoading(true);
     getProfile()
       .then((profile) => { setRewardPoints(Number(profile.rewardPoints || 0)); setWalletBalance(Number(profile.walletBalance || 0)); updateUser(profile); })
@@ -257,18 +324,18 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
   const rewardEligible = reward.canRedeem;
   const rewardDiscount = useRewardPoints && reward.canRedeem ? reward.redeemableValue : 0;
   const afterRewardSubtotal = Math.max(0, serviceSubtotal - rewardDiscount);
-  const fullAdvanceDiscount = paymentMethod === "Full Payment in Advance" ? Math.round(afterRewardSubtotal * 0.05) : 0;
+  const fullAdvanceDiscount = paymentMethod === "Full Payment in Advance" ? Math.ceil(afterRewardSubtotal * 0.05) : 0;
   const taxableSubtotal = Math.max(0, afterRewardSubtotal - fullAdvanceDiscount);
-  const serviceTax = taxableSubtotal * serviceTaxPercent / 100;
-  const totalBeforeWallet = taxableSubtotal + inspectionFee + serviceTax;
+  const serviceTax = Math.ceil(taxableSubtotal * serviceTaxPercent / 100);
+  const totalBeforeWallet = Math.ceil(taxableSubtotal + inspectionFee + serviceTax);
   const walletAdjustment = useWalletBalance ? Math.min(walletBalance, totalBeforeWallet) : 0;
-  const calculatedTotal = Math.max(0, totalBeforeWallet - walletAdjustment);
+  const calculatedTotal = Math.ceil(Math.max(0, totalBeforeWallet - walletAdjustment));
   const paymentNow = paymentMethod === "Rs 200 Advance"
     ? Math.max(0, Math.min(200, calculatedTotal) - rewardDiscount)
     : Math.max(0, calculatedTotal - rewardDiscount);
   const isInspectionService = selectedServices.some((item) => /visit|inspection/i.test(item.unitDescription || ""));
   const hasMapLocation = Boolean(selectedLocation.trim() && addressCoords);
-  const addressFieldError = validateSpecificAddress(specificAddress, hasMapLocation);
+  const addressFieldError = validateSpecificAddress(specificAddress);
   const minimumBookingDate = nextAvailableBookingDate(minimumBookingLeadHours);
   const quickBookingDates = useMemo(
     () => Array.from({ length: 5 }, (_, index) => addDays(minimumBookingDate, index)),
@@ -365,17 +432,19 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       focusValidationCard("contact");
       return;
     }
-    if (!phone.trim()) {
+    const normalizedPhone = normalizePakistaniMobile(phone);
+    if (!normalizedPhone) {
       setInvalidContact({ phone: true });
-      setError("Please enter your phone number.");
+      setError("Please enter a valid Pakistani mobile number (e.g. 0300 1234567).");
       focusValidationCard("contact");
       return;
     }
 
     const hasSpecificAddress = !!specificAddress.trim();
 
-    if (!hasMapLocation && !hasSpecificAddress) {
+    if (!hasSpecificAddress) {
       setAddressTouched(true);
+      setError("Please enter your House / Street Address before continuing.");
       focusValidationCard("address");
       return;
     }
@@ -414,7 +483,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       return;
     }
 
-    if (step === "details" && !pageMode) {
+    if (step === "details") {
       setQuoteLoading(true);
       try {
         const settingsResponse = await fetch(`${API_BASE}/api/settings`, { cache: "no-store" });
@@ -439,12 +508,6 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       } finally {
         setQuoteLoading(false);
       }
-      return;
-    }
-
-    if (paymentNow > 0 && !receiptDataUrl) {
-      setReceiptValidationError(true);
-      focusValidationCard("receipt");
       return;
     }
 
@@ -477,7 +540,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       // 1. Submit Booking
       const response = await createBooking({
         name: name.trim(),
-        phone: phone.trim(),
+        phone: normalizedPhone,
         address: completeAddress,
         addressLat: addressCoords?.lat,
         addressLng: addressCoords?.lng,
@@ -503,24 +566,28 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
         const confirmedCoveredAmount = paymentMethod === "Rs 200 Advance" ? Math.min(200, confirmedTotal) : confirmedTotal;
         let receiptUploaded = false;
         let receiptError = "";
-        if (confirmedPaymentNow > 0) {
+        if (confirmedPaymentNow > 0 && receiptDataUrl) {
           try {
             await uploadPaymentReceipt(orderId, receiptDataUrl, confirmedPaymentNow, receiptFileName);
             receiptUploaded = true;
           } catch (uploadError) {
             receiptError = uploadError instanceof Error ? uploadError.message : "Receipt upload failed.";
           }
-        } else {
+        } else if (confirmedPaymentNow <= 0) {
           receiptUploaded = true;
+        } else {
+          receiptError = "No payment receipt was uploaded. Open Track Booking to upload the payment screenshot for verification.";
         }
+
+        const confirmedPaidAmount = receiptUploaded ? confirmedCoveredAmount : 0;
 
         setBookingSuccess({
           orderId,
           total: confirmedTotal,
           receiptUploaded,
           receiptError,
-          paidAmount: confirmedCoveredAmount,
-          remainingAmount: Math.max(0, confirmedTotal - confirmedCoveredAmount),
+          paidAmount: confirmedPaidAmount,
+          remainingAmount: Math.max(0, confirmedTotal - confirmedPaidAmount),
           rewardApplied: useRewardPoints && rewardEligible,
         });
         sessionStorage.removeItem(BOOKING_DRAFT_KEY);
@@ -540,7 +607,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 status: response.order.status || "confirmed",
                 createdAt: new Date().toISOString(),
                 customerName: name,
-                phone,
+                phone: normalizedPhone,
                 address: completeAddress,
                 paymentMethod,
                 recurringDays: daysCount,
@@ -584,6 +651,63 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleWhatsAppBooking = () => {
+    setError("");
+    setInvalidContact({});
+    if (!name.trim()) {
+      setInvalidContact({ name: true }); setError("Please enter your full name."); focusValidationCard("contact"); return;
+    }
+    const normalizedPhone = normalizePakistaniMobile(phone);
+    if (!normalizedPhone) {
+      setInvalidContact({ phone: true }); setError("Please enter a valid Pakistani mobile number (e.g. 0300 1234567)."); focusValidationCard("contact"); return;
+    }
+    if (!specificAddress.trim() || addressFieldError) {
+      setAddressTouched(true); setError(addressFieldError || "Please enter your House / Street Address before continuing."); focusValidationCard("address"); return;
+    }
+    if (!fromDate || !selectedTime) {
+      setScheduleError(!fromDate ? "Please select a service date." : "Please select a 30-minute time slot from the grid.");
+      if (step === "payment") setStep("details");
+      focusValidationCard("schedule"); return;
+    }
+    const selectedDateTime = bookingTimestamp(fromDate, selectedTime);
+    if (!Number.isFinite(selectedDateTime) || selectedDateTime < earliestBookingTimestamp(minimumBookingLeadHours)) {
+      setScheduleError("Please choose a valid future booking date and time."); focusValidationCard("schedule"); return;
+    }
+
+    const itemLines = selectedServices.map((item, index) => {
+      const itemQuantity = Math.max(1, Math.min(10, Number(item.quantity || 1)));
+      return `${index + 1}. ${item.selectedWorkTitle || item.title} × ${itemQuantity} — ${money(Number(item.price) * itemQuantity * daysCount)}`;
+    });
+    const amountDueNow = paymentMethod === "Rs 200 Advance" ? Math.min(200, calculatedTotal) : calculatedTotal;
+    const message = [
+      "*Ustaad Pro — Service Booking Request*",
+      "",
+      `Customer: ${name.trim()}`,
+      `Phone: ${normalizedPhone}`,
+      `Service address: ${[specificAddress.trim(), selectedLocation.trim()].filter(Boolean).join(" · ")}`,
+      `Schedule: ${fromDate} at ${selectedTime}`,
+      isRecurring ? `Recurring occurrences: ${daysCount}` : "Booking type: One time",
+      requirements.trim() ? `Requirements: ${requirements.trim()}` : null,
+      "",
+      "*Selected services*",
+      ...itemLines,
+      "",
+      `Service subtotal: ${money(serviceSubtotal)}`,
+      rewardDiscount > 0 ? `Reward discount: - ${money(rewardDiscount)}` : null,
+      fullAdvanceDiscount > 0 ? `Full advance discount: - ${money(fullAdvanceDiscount)}` : null,
+      `Inspection/service charge: ${money(inspectionFee)}`,
+      `Service tax (${serviceTaxPercent}%): ${money(serviceTax)}`,
+      walletAdjustment > 0 ? `Wallet balance: - ${money(walletAdjustment)}` : null,
+      `*Final total: ${money(calculatedTotal)}*`,
+      `Payment option: ${paymentMethod}`,
+      `*Amount to pay now: ${money(amountDueNow)}*`,
+      "",
+      "Please confirm this booking and the payment details.",
+      "Payment screenshot: I will send the screenshot in this WhatsApp chat after transferring the amount due now.",
+    ].filter((line): line is string => line !== null).join("\n");
+    openWhatsAppOrder(message);
   };
 
   const handleModalClose = () => {
@@ -634,23 +758,23 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
   return (
     <>
-      <div className={pageMode ? "min-h-screen bg-slate-50 px-3 py-5 sm:px-6 sm:py-8" : "fixed inset-0 z-50 flex touch-pan-y items-end justify-center overscroll-contain bg-slate-900/60 p-0 backdrop-blur-sm animate-in fade-in duration-200 sm:items-center sm:p-4"}>
-        <div className={pageMode ? "relative mx-auto flex min-w-0 w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:rounded-3xl" : "relative flex max-h-[90dvh] min-w-0 w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl"}>
-          <div className={`${pageMode ? "sticky top-0" : ""} z-20 flex shrink-0 items-center justify-between border-b border-slate-100 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 sm:py-5`}>
+      <div className={pageMode ? "min-h-[100svh] bg-slate-50 px-3 py-3 sm:px-6 sm:py-8" : "fixed inset-0 z-50 flex touch-pan-y items-end justify-center overscroll-contain bg-slate-900/60 p-0 backdrop-blur-sm animate-in fade-in duration-200 sm:items-center sm:p-4"}>
+        <div className={pageMode ? "relative mx-auto flex min-w-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-slate-200 bg-white shadow-sm sm:overflow-hidden sm:rounded-3xl" : "relative flex h-[100dvh] max-h-[100dvh] min-w-0 w-full max-w-4xl flex-col overflow-hidden rounded-none bg-white shadow-2xl sm:h-auto sm:max-h-[94dvh] sm:rounded-2xl"}>
+          <div className={`${pageMode ? "sticky top-0 bg-white" : "bg-white/95 backdrop-blur"} z-20 flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-6 sm:py-5`}>
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-              {pageMode && (
+              {pageMode && step === "details" && (
                 <button type="button" onClick={() => router.back()} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" aria-label="Go back">
                   <ArrowLeft className="h-4 w-4" />
                 </button>
               )}
-              {!pageMode && step === "payment" && (
+              {step === "payment" && (
                 <button type="button" onClick={returnToDetails} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-200 text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" aria-label="Back to booking details">
                   <ArrowLeft className="h-4 w-4" />
                 </button>
               )}
               <div className="min-w-0">
-                <h1 className="text-lg font-black text-slate-900 sm:text-2xl">Complete your booking</h1>
-                <p className="max-w-[16rem] truncate text-xs font-bold text-emerald-600 sm:max-w-xl">All details on one page · {selectedServices.length > 1 ? `${selectedServices.length} services selected` : service.title}</p>
+                <h1 className="text-lg font-black text-slate-900 sm:text-2xl">{step === "details" ? "Booking details" : "Payment & receipt"}</h1>
+                <p className="max-w-[16rem] truncate text-xs font-bold text-emerald-600 sm:max-w-xl">Step {step === "details" ? "1" : "2"} of 2 · {selectedServices.length > 1 ? `${selectedServices.length} services selected` : service.title}</p>
               </div>
             </div>
             {pageMode && <button type="button" onClick={addMoreServices} className="hidden rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-black text-emerald-700 transition hover:bg-emerald-100 sm:inline-flex">Book other services</button>}
@@ -664,21 +788,23 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
           </div>
 
           {/* Modal Body */}
-          <div ref={modalBodyRef} className={pageMode ? "min-w-0 overflow-x-hidden" : "min-w-0 max-h-[calc(100dvh-4.25rem)] overflow-x-hidden overflow-y-auto overscroll-contain touch-pan-y [overflow-anchor:none] booking-modal-scrollbar sm:max-h-[calc(94dvh-4.5rem)]"}>
+          <div ref={modalBodyRef} className={pageMode ? "min-w-0 overflow-x-hidden" : "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain touch-pan-y [overflow-anchor:none] booking-modal-scrollbar"}>
           {bookingSuccess ? (
             <div className="p-6 sm:p-8 text-center space-y-4">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-lg shadow-emerald-600/10">
                 <CheckCircle2 className="h-10 w-10" />
               </div>
-              <h3 className="text-2xl font-black text-slate-900">Order placed successfully!</h3>
+              <h3 className="text-2xl font-black text-slate-900">Booking placed successfully!</h3>
               <p className="text-sm text-slate-600 max-w-md mx-auto">
-                Your booking has been received. Track its status anytime from Track Booking while our team verifies the payment and assigns a professional.
+                {bookingSuccess.receiptUploaded
+                  ? "Your payment is under verification. You can follow its progress from Track Booking."
+                  : "Your booking is saved, but a payment receipt still needs to be uploaded from Track Booking."}
               </p>
-              <div className="mx-auto flex max-w-lg items-center justify-center gap-2 text-[11px] font-bold text-slate-500 sm:text-xs">
+              <div className="mx-auto grid max-w-lg grid-cols-1 gap-2 text-[11px] font-bold text-slate-500 min-[380px]:flex min-[380px]:items-center min-[380px]:justify-center sm:text-xs">
                 <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-emerald-700">1. Order placed</span>
-                <span aria-hidden="true">→</span>
+                <span className="hidden min-[380px]:inline" aria-hidden="true">→</span>
                 <span className="rounded-full bg-amber-100 px-3 py-1.5 text-amber-700">2. Verification</span>
-                <span aria-hidden="true">→</span>
+                <span className="hidden min-[380px]:inline" aria-hidden="true">→</span>
                 <span className="rounded-full bg-slate-100 px-3 py-1.5">3. Professional assigned</span>
               </div>
 
@@ -686,7 +812,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               <div className="my-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-1">
                 <p className="text-xs uppercase font-bold tracking-wider text-slate-400">Booking Reference ID</p>
                 <p className="text-2xl font-black text-emerald-700">{bookingSuccess.orderId}</p>
-                <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-white p-3 text-xs">
+                <div className="mt-3 grid grid-cols-1 gap-2 rounded-xl bg-white p-3 text-xs min-[380px]:grid-cols-3">
                   <div><p className="text-slate-400">Listed total</p><p className="font-black text-slate-800">Rs {bookingSuccess.total.toLocaleString("en-PK")}</p></div>
                   <div><p className="text-slate-400">Paid</p><p className="font-black text-emerald-700">Rs {bookingSuccess.paidAmount.toLocaleString("en-PK")}</p></div>
                   <div><p className="text-slate-400">Pay professional</p><p className="font-black text-slate-800">Rs {bookingSuccess.remainingAmount.toLocaleString("en-PK")}</p></div>
@@ -698,13 +824,13 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                   </p>
                 )}
                 {bookingSuccess.receiptUploaded && (!bookingSuccess.rewardApplied || bookingSuccess.paidAmount > 200) && (
-                  <p className="text-[11px] font-bold text-emerald-600 flex items-center justify-center gap-1 pt-1">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Payment receipt submitted for verification.
+                  <p className="flex items-center justify-center gap-1 pt-1 text-[11px] font-bold text-amber-700">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Payment under verification.
                   </p>
                 )}
                 {bookingSuccess.receiptError && (
                   <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-                    Your booking was created, but the receipt was not uploaded: {bookingSuccess.receiptError} Use Track Booking to retry—do not create another booking.
+                    Payment receipt needs to be uploaded. {bookingSuccess.receiptError} Use Track Booking to retry—do not create another booking.
                   </p>
                 )}
               </div>
@@ -722,7 +848,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
             <form
               noValidate
               onSubmit={handleSubmit}
-              className={step === "details" || pageMode
+              className={step === "details"
                 ? "grid min-w-0 grid-cols-1 content-start gap-3 overflow-x-hidden bg-slate-50/40 p-3 sm:p-5 lg:grid-cols-2 lg:gap-5"
                 : "flex min-w-0 flex-col gap-3 overflow-x-hidden bg-slate-50/40 p-3 sm:p-4"}
             >
@@ -753,7 +879,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               )}
 
               {/* Service Summary Card */}
-              <div className={`rounded-2xl border border-emerald-200 bg-white p-3 shadow-sm sm:p-4 ${step === "payment" && !pageMode ? "lg:col-span-2" : "lg:row-span-2 lg:h-full lg:self-stretch"}`}>
+              <div className={`rounded-2xl border border-emerald-200 bg-white p-3 shadow-sm sm:p-4 ${step === "payment" ? "lg:col-span-2" : "lg:row-span-2 lg:h-full lg:self-stretch"}`}>
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-[10px] uppercase font-bold text-slate-400">Selected service{selectedServices.length === 1 ? "" : "s"}</p>
                   <p className="text-sm font-black text-emerald-700">Rs {listedServicesTotal.toLocaleString()}</p>
@@ -764,8 +890,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                     const key = `${item.id}:${item.selectedWorkPriceId || "service"}`;
                     const cartItem = cartItems.find((entry) => entry.key === key);
                     return <article key={key} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 text-sm">
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 sm:gap-4">
-                        <p className="min-w-0 break-words text-xs font-black leading-4 text-slate-900 sm:text-sm">{item.selectedWorkTitle || item.title}</p>
+                      <div className="grid grid-cols-2 items-center gap-2 min-[380px]:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-4">
+                        <p className="col-span-2 min-w-0 break-words text-xs font-black leading-4 text-slate-900 min-[380px]:col-span-1 sm:text-sm">{item.selectedWorkTitle || item.title}</p>
                         <div className="min-w-16 text-right sm:min-w-24"><p className="text-[8px] font-bold uppercase tracking-wide text-slate-400 sm:text-[9px]">Unit price</p><p className="whitespace-nowrap text-[11px] font-semibold text-slate-600 sm:text-xs">Rs {Number(item.price).toLocaleString("en-PK")} each</p></div>
                         <div className="min-w-14 text-right sm:min-w-20"><p className="text-[8px] font-bold uppercase tracking-wide text-slate-400 sm:text-[9px]">Total</p><p className="whitespace-nowrap text-xs font-black text-emerald-700 sm:text-sm">Rs {(item.price * itemQuantity).toLocaleString("en-PK")}</p></div>
                       </div>
@@ -798,7 +924,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 <p className="mt-2 text-[10px] text-slate-400">The backend confirms the authoritative total when the order is submitted.</p>
               </div>
 
-              {step === "payment" && !pageMode && <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
+              {step === "payment" && <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
                 <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-black text-slate-900">Shared booking details</h3><button type="button" onClick={returnToDetails} className="text-xs font-bold text-emerald-700 hover:underline">Modify details</button></div>
                 <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
                   <div><p className="font-bold uppercase tracking-wide text-slate-400">Customer</p><p className="mt-1 font-semibold text-slate-800">{name} · {phone}</p></div>
@@ -809,7 +935,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>}
 
               {/* Contact Information */}
-              <div ref={contactCardRef} className={`${step === "details" || pageMode ? "lg:col-start-2" : "hidden"} rounded-2xl border bg-white p-4 shadow-sm transition ${invalidContact.name || invalidContact.phone ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
+              <div ref={contactCardRef} className={`${step === "details" ? "lg:col-start-2" : "hidden"} rounded-2xl border bg-white p-4 shadow-sm transition ${invalidContact.name || invalidContact.phone ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
                 <h3 className="mb-3 text-sm font-black text-slate-900">Your contact details</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                 <div>
@@ -845,11 +971,11 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>
 
               {/* FEATURE 3: Address & Map Picker */}
-              <div ref={addressCardRef} className={`${step === "details" || pageMode ? "lg:col-start-2" : "hidden"} space-y-3 rounded-2xl border bg-white p-4 shadow-sm transition ${addressTouched && (addressFieldError || error.includes("outside our service area")) ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
+              <div ref={addressCardRef} className={`${step === "details" ? "lg:col-start-2" : "hidden"} space-y-3 rounded-2xl border bg-white p-4 shadow-sm transition ${addressTouched && (addressFieldError || error.includes("outside our service area")) ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
                 <h3 className="text-sm font-black text-slate-900">Where should we send the professional?</h3>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-600">
-                    Service Location (map){!specificAddress.trim() && <span className="text-red-500"> *</span>}
+                    Area / Map Location
                   </label>
                   <button
                     type="button"
@@ -857,7 +983,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                     className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline"
                   >
                     <MapIcon className="h-3.5 w-3.5" />
-                    Pick from Map
+                    Pick from Map <span className="font-normal text-slate-400">(optional)</span>
                   </button>
                 </div>
                 <div className="relative">
@@ -866,7 +992,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                     type="text"
                     readOnly
                     value={selectedLocation}
-                    placeholder="Pick a location from the map"
+                    placeholder="Choose an area or location from the map"
                     className="w-full cursor-default rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-600"
                   />
                 </div>
@@ -880,11 +1006,11 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
                 <div>
                   <label className="mb-1 block text-xs font-bold text-slate-600">
-                    House / Street Address{!hasMapLocation && <span className="text-red-500"> *</span>}
+                    House / Street Address <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
-                    required={!(selectedLocation.trim() && addressCoords)}
+                    required
                     value={specificAddress}
                     onChange={(e) => {
                       setSpecificAddress(e.target.value);
@@ -908,7 +1034,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 </div>
               </div>
 
-              <div ref={scheduleCardRef} className={`${step === "details" || pageMode ? "" : "hidden"} space-y-4 rounded-2xl border bg-white p-4 shadow-sm transition lg:col-span-2 ${scheduleError ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
+              <div ref={scheduleCardRef} className={`${step === "details" ? "" : "hidden"} space-y-4 rounded-2xl border bg-white p-4 shadow-sm transition lg:col-span-2 ${scheduleError ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
                 <div><h3 className="text-sm font-black text-slate-900">Choose booking date & time</h3><p className="mt-1 text-xs text-slate-500">Select a date, recurrence preference, and an available arrival slot.</p></div>
                 {/* FEATURE 2: Recurring Booking Picker */}
                 <RecurringPicker
@@ -962,7 +1088,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>
 
               {/* FEATURE 4: Payment Option & EasyPaisa Receipt Upload */}
-              {(step === "payment" || pageMode) && <div className="min-w-0 lg:col-span-2">
+              {step === "payment" && <div className="min-w-0 lg:col-span-2">
                 <EasyPaisaPaymentSection
                   paymentMethod={paymentMethod}
                   onPaymentMethodChange={(method) => { setPaymentMethod(method); setReceiptDataUrl(""); setReceiptFileName(""); setReceiptValidationError(false); }}
@@ -988,7 +1114,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>}
 
               {/* Special Instructions */}
-              <div className={`${step === "details" || pageMode ? "" : "hidden"} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2`}>
+              <div className={`${step === "details" ? "" : "hidden"} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2`}>
                 <label className="block text-xs font-bold text-slate-600 mb-1">
                   Requirements / Special Instructions
                 </label>
@@ -1005,12 +1131,14 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>
 
               {/* Submit Button */}
-              <div className="pt-2 lg:col-span-2">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 lg:col-span-2">
+                <h3 className="text-sm font-black text-slate-900">{step === "details" ? "Continue to payment" : "Confirm your booking"}</h3>
+                <p className="mt-1 text-xs text-slate-500">{step === "details" ? "Review your information, address, and appointment time before continuing." : "Upload your payment receipt to place the booking under payment verification."}</p>
                 {!user ? (
                   <button
                     type="button"
                     onClick={() => setAuthModalMode("login")}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-600 py-3.5 font-bold text-white shadow-lg shadow-amber-600/20 hover:bg-amber-700 transition"
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-600 py-3.5 font-bold text-white shadow-lg shadow-amber-600/20 hover:bg-amber-700 transition"
                   >
                     <LogIn className="h-5 w-5" />
                     Sign In to Complete Booking
@@ -1019,7 +1147,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                   <button
                     type="submit"
                     disabled={loading || quoteLoading}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-4 font-bold text-white shadow-lg shadow-emerald-600/25 hover:bg-emerald-700 transition disabled:opacity-50 text-sm sm:text-base"
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-4 font-bold text-white shadow-lg shadow-emerald-600/25 hover:bg-emerald-700 transition disabled:opacity-50 text-sm sm:text-base"
                   >
                     {loading || quoteLoading ? (
                       <>
@@ -1027,10 +1155,24 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                         {quoteLoading ? "Preparing live bill..." : "Submitting Booking..."}
                       </>
                     ) : (
-                      paymentNow > 0 ? `Pay Rs ${paymentNow.toLocaleString()} & Confirm Booking` : "Redeem Reward & Confirm Booking"
+                      step === "details"
+                        ? "Next: Payment"
+                        : paymentNow > 0
+                          ? receiptDataUrl ? "Upload Receipt & Confirm Booking" : "Confirm Booking — Upload Receipt Later"
+                          : "Redeem Reward & Confirm Booking"
                     )}
                   </button>
                 )}
+                {step === "details" && <button
+                  type="button"
+                  onClick={handleWhatsAppBooking}
+                  disabled={loading || quoteLoading || selectedServices.length === 0}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#25D366] py-3.5 text-sm font-black text-white shadow-lg shadow-emerald-600/20 transition hover:bg-[#20bd5a] disabled:cursor-not-allowed disabled:opacity-50 sm:text-base"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  Checkout via WhatsApp — {money(calculatedTotal)}
+                </button>}
+                {step === "details" && <p className="mt-2 text-center text-[11px] text-slate-500">Your itemized booking and final total will open in WhatsApp. Send the payment screenshot there after transfer.</p>}
               </div>
             </form>
           )}
@@ -1040,13 +1182,20 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
       {/* Feature 3: Leaflet Map Modal */}
       <MapAddressPickerModal
+        key={isMapOpen ? `checkout-map-${addressCoords?.lat || location.coords?.lat || "default"}-${addressCoords?.lng || location.coords?.lng || "default"}` : "checkout-map-closed"}
         isOpen={isMapOpen}
         onClose={() => setIsMapOpen(false)}
         initialAddress={selectedLocation}
+        initialLat={addressCoords?.lat || location.coords?.lat}
+        initialLng={addressCoords?.lng || location.coords?.lng}
         onSelectAddress={(newAddress, lat, lng) => {
           setSelectedLocation(newAddress);
           if (lat !== undefined && lng !== undefined) {
-            setAddressCoords({ lat, lng });
+            const coords = { lat, lng };
+            setAddressCoords(coords);
+            const city = /islamabad/i.test(newAddress) ? "Islamabad" : /rawalpindi/i.test(newAddress) ? "Rawalpindi" : "Rawalpindi / Islamabad";
+            const area = newAddress.split(",")[0]?.trim() || undefined;
+            setManualLocation(coords, newAddress, city, area);
           }
         }}
       />

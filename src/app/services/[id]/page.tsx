@@ -10,14 +10,20 @@ import { serviceHref } from "@/lib/service-url";
 
 export const dynamic = "force-dynamic";
 
+export const revalidate = 300;
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
 
   const cat = await getMergedCatalogCategory(id);
   if (cat) {
+    const title = `${cat.title} Services in Rawalpindi & Islamabad | Ustaad Pro`;
+    const description = cat.subtitle ?? `Browse ${cat.title} services and book verified professionals in Rawalpindi and Islamabad.`;
     return {
-      title: cat ? `${cat.title} Services | Ustaad Pro` : "Services | Ustaad Pro",
-      description: cat?.subtitle ?? `Browse ${cat?.title ?? ""} services and book verified professionals in Pakistan.`,
+      title,
+      description,
+      alternates: { canonical: `/services/${encodeURIComponent(id)}` },
+      openGraph: { title, description, type: "website" },
     };
   }
 
@@ -35,6 +41,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function ServiceOrCategoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
+  // Catalog entries have dedicated, crawlable category pages.
   const catalogCategory = await getMergedCatalogCategory(id);
   if (catalogCategory) {
     return <CategoryPageClient catalogCategory={catalogCategory} />;

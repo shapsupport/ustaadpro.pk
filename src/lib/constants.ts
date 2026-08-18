@@ -1,3 +1,4 @@
+import { createWhatsAppOrderUrl } from "@/lib/whatsapp-order";
 
 export const siteConfig = {
   name: "Ustaad Pro",
@@ -18,13 +19,13 @@ export const appLinks = {
 } as const;
 
 export const whatsappUrl =
-  "https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%2C%20I%20want%20to%20book%20a%20service.";
+  createWhatsAppOrderUrl("Hi Ustaad Pro, I want to book a service.");
 
 export const whatsappCallUrl =
-  "https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%2C%20please%20call%20me%20on%20WhatsApp%20to%20help%20with%20my%20booking.";
+  createWhatsAppOrderUrl("Hi Ustaad Pro, please call me on WhatsApp to help with my booking.");
 
 export const whatsappBotUrl =
-  "https://wa.me/923719201273?text=Hi%20Ustaad%20Pro%20booking%20bot%2C%20I%20want%20to%20book%20a%20service%20quickly.";
+  createWhatsAppOrderUrl("Hi Ustaad Pro booking bot, I want to book a service quickly.");
 
 export const navItems = [
   { label: "Home", href: "/" },
@@ -37,7 +38,7 @@ export const navItems = [
 export const quickAccessMenu = [
   { label: "My Profile", href: "/profile", icon: "User" },
   { label: "My Bookings", href: "/track-booking", icon: "Calendar" },
-  { label: "My Store Orders", href: "/store/orders", icon: "Package" },
+  { label: "My Store Orders", href: "/track-booking?tab=shop", icon: "Package" },
   { label: "Privacy Policy", href: "/privacy-policy", icon: "FileText" },
 ] as const;
 

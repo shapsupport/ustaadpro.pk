@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, type ComponentType, useRef } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
@@ -28,7 +27,7 @@ import {
   CheckCircle2,
   Minus,
   Plus,
-  ShoppingCart,
+  ShoppingBasket,
 } from "lucide-react";
 import type { ApiCategory, ApiCatalogCategory, ApiService, ApiSubcategory } from "@/lib/api-types";
 import { orderServices } from "@/lib/service-order";
@@ -36,7 +35,9 @@ import { searchServicesFromApi } from "@/lib/search";
 import { useLocation } from "@/context/LocationContext";
 import BookingModal from "@/components/booking/BookingModal";
 import { useServiceCart } from "@/context/ServiceCartContext";
-import { categoryHref, subcategoryHref } from "@/lib/service-url";
+import { categoryHref, serviceHref, subcategoryHref } from "@/lib/service-url";
+import { ResilientImage } from "@/components/shared/ResilientImage";
+import { UniversalSearch } from "@/components/search/UniversalSearch";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 
@@ -46,17 +47,14 @@ function imgSrc(url: string | undefined | null) {
 }
 
 function SafeImage({ src, alt, fallback, className }: { src: string; alt: string; fallback: React.ReactNode; className?: string }) {
-  const [error, setError] = useState(false);
-  if (error) return <>{fallback}</>;
   return (
-    <Image
+    <ResilientImage
       src={src}
       alt={alt}
-      fill
-      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 50vw, 25vw"
-      className={`${className ?? "object-cover"} block [backface-visibility:hidden] [transform:translateZ(0)_scale(1.015)]`}
-      onError={() => setError(true)}
-
+      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+      className={`${className ?? "object-cover"} block`}
+      quality={100}
+      fallback={fallback}
     />
   );
 }
@@ -183,11 +181,6 @@ export function ServicesPageContent({
     window.requestAnimationFrame(() => {
       stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-  }
-
-  // Step 1 → Step 2: select main category, show subcategories
-  function selectCategory(catId: string) {
-    router.push(categoryHref(catId));
   }
 
   // Step 2 → Step 3: select sub-category, show services
@@ -389,13 +382,13 @@ export function ServicesPageContent({
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Hero */}
-      <section className="relative overflow-hidden border-b border-emerald-100 bg-[radial-gradient(circle_at_68%_20%,#d1fae5_0,transparent_28%),linear-gradient(108deg,#fff_0%,#f7fffb_58%,#059669_58%,#047857_100%)]">
+      <section className="relative overflow-visible border-b border-emerald-100 bg-[radial-gradient(circle_at_85%_8%,#d1fae5_0,transparent_38%),linear-gradient(180deg,#fff_0%,#f0fdf4_100%)] lg:overflow-hidden lg:bg-[radial-gradient(circle_at_68%_20%,#d1fae5_0,transparent_28%),linear-gradient(108deg,#fff_0%,#f7fffb_58%,#059669_58%,#047857_100%)]">
         <div
           className="absolute right-0 top-0 hidden h-full w-[42%] opacity-20 lg:block"
           style={{ backgroundImage: "radial-gradient(#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }}
         />
-        <div className="relative mx-auto grid min-h-[500px] max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.08fr_.92fr] lg:items-center lg:px-8">
-          <div className="relative z-10">
+        <div className="relative mx-auto grid min-h-0 max-w-7xl gap-6 px-4 py-8 sm:min-h-[500px] sm:gap-10 sm:px-6 sm:py-12 lg:grid-cols-[1.08fr_.92fr] lg:items-center lg:px-8">
+          <div className="relative z-10 min-w-0">
             <button
               type="button"
               onClick={() => setShowPicker(true)}
@@ -408,12 +401,15 @@ export function ServicesPageContent({
             <span className="mt-6 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-emerald-600">
               <Sparkles className="h-4 w-4" /> Book a service in 3 easy steps
             </span>
-            <h1 className="mt-3 max-w-2xl text-4xl font-black leading-[1.06] tracking-tight text-slate-950 sm:text-5xl xl:text-6xl">
+            <h1 className="mt-3 max-w-2xl text-3xl font-black leading-[1.08] tracking-tight text-slate-950 min-[380px]:text-4xl sm:text-5xl xl:text-6xl">
               Find the right expert.
               <span className="mt-2 block text-emerald-600">Get the job done right.</span>
             </h1>
+            <div data-hero-search className="mt-6 block w-full max-w-xl lg:hidden">
+              <UniversalSearch mobile defaultScope="service" />
+            </div>
             {/* Step indicator */}
-            <div className="mt-8 flex w-fit max-w-full items-center gap-2 overflow-x-auto rounded-2xl border border-emerald-200 bg-white p-2.5 shadow-lg sm:gap-3">
+            <div className="mt-8 hidden w-fit max-w-full items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-2.5 shadow-lg lg:flex">
               {[
                 { n: 1, label: "Category" },
                 { n: 2, label: "Sub-service" },
@@ -422,30 +418,29 @@ export function ServicesPageContent({
                 const isActive = (step === "category" && n === 1) || (step === "subcategory" && n === 2) || (step === "services" && n === 3);
                 const isDone = (step === "subcategory" && n === 1) || (step === "services" && n <= 2);
                 return (
-                  <div key={n} className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-black transition-all ${
-                        isDone ? "bg-emerald-600 text-white" : isActive ? "bg-emerald-100 text-emerald-800 ring-2 ring-emerald-500 shadow-sm" : "bg-slate-100 text-slate-500"
-                      }`}>
+                  <div key={n} className="flex min-w-0 items-center justify-start gap-3 rounded-xl bg-slate-50 px-2 py-1.5 min-[360px]:justify-center min-[360px]:rounded-none min-[360px]:bg-transparent min-[360px]:px-0 min-[360px]:py-0 sm:justify-start">
+                    <div className="flex min-w-0 flex-row items-center gap-2 min-[360px]:flex-col min-[360px]:gap-1.5 sm:flex-row sm:gap-2">
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black transition-all ${isDone ? "bg-emerald-600 text-white" : isActive ? "bg-emerald-100 text-emerald-800 ring-2 ring-emerald-500 shadow-sm" : "bg-slate-100 text-slate-500"
+                        }`}>
                         {isDone ? <CheckCircle2 className="h-4 w-4" /> : n}
                       </div>
-                      <span className={`whitespace-nowrap text-xs font-bold ${isActive ? "text-emerald-800" : isDone ? "text-emerald-700" : "text-slate-500"}`}>{label}</span>
+                      <span className={`max-w-full text-left text-xs font-bold leading-tight min-[360px]:text-center min-[360px]:text-[10px] sm:whitespace-nowrap sm:text-left sm:text-xs ${isActive ? "text-emerald-800" : isDone ? "text-emerald-700" : "text-slate-500"}`}>{label}</span>
                     </div>
-                    {i < 2 && <div className={`h-px w-5 sm:w-8 ${isDone ? "bg-emerald-400" : "bg-slate-200"}`} />}
+                    {i < 2 && <div className={`hidden h-px w-8 sm:block ${isDone ? "bg-emerald-400" : "bg-slate-200"}`} />}
                   </div>
                 );
               })}
             </div>
           </div>
 
-          <div className="relative z-10 lg:pl-8">
-            <div className="rounded-3xl border border-white/70 bg-white/95 p-5 shadow-2xl backdrop-blur sm:p-7">
+          <div className="relative z-10 hidden min-w-0 lg:block lg:pl-8">
+            <div className="rounded-2xl border border-emerald-100 bg-white/95 p-4 shadow-xl backdrop-blur sm:rounded-3xl sm:p-7 sm:shadow-2xl">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <span className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">How it works</span>
                   <h2 className="mt-1 text-xl font-black text-slate-950">3 steps to book</h2>
                 </div>
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                <span className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 min-[360px]:flex">
                   <Wrench className="h-6 w-6" />
                 </span>
               </div>
@@ -455,12 +450,12 @@ export function ServicesPageContent({
                   { icon: CheckCircle2, step: "2", text: "Select the specific sub-service" },
                   { icon: ArrowRight, step: "3", text: "Pick a rate & book instantly" },
                 ].map(({ icon: Icon, step: s, text }) => (
-                  <div key={s} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3">
+                  <div key={s} className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-100 p-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 font-black text-sm">
                       {s}
                     </span>
-                    <span className="text-sm font-medium text-slate-700">{text}</span>
-                    <Icon className="ml-auto h-4 w-4 text-slate-300" />
+                    <span className="min-w-0 flex-1 text-sm font-medium leading-5 text-slate-700">{text}</span>
+                    <Icon className="ml-auto hidden h-4 w-4 shrink-0 text-slate-300 min-[360px]:block" />
                   </div>
                 ))}
               </div>
@@ -478,16 +473,16 @@ export function ServicesPageContent({
                   </div>
                 ))}
               </div>
-              <div className="mt-4 rounded-xl bg-emerald-50 p-3 flex items-center justify-between">
-                <div>
+              <div className="mt-4 grid grid-cols-1 divide-y divide-emerald-200 rounded-xl bg-emerald-50 p-3 text-left min-[360px]:grid-cols-3 min-[360px]:divide-x min-[360px]:divide-y-0 min-[360px]:text-center">
+                <div className="flex min-w-0 items-center justify-between px-1 py-2 first:pt-0 min-[360px]:block min-[360px]:py-0">
                   <p className="text-xs text-emerald-700 font-semibold">Starting from</p>
                   <p className="text-lg font-black text-emerald-800">Rs {startingPrice ? startingPrice.toLocaleString() : "—"}</p>
                 </div>
-                <div>
+                <div className="flex min-w-0 items-center justify-between px-1 py-2 min-[360px]:block min-[360px]:py-0">
                   <p className="text-xs text-emerald-700 font-semibold">Categories</p>
                   <p className="text-lg font-black text-emerald-800">{PRIMARY_CATEGORIES.length}</p>
                 </div>
-                <div>
+                <div className="flex min-w-0 items-center justify-between px-1 py-2 last:pb-0 min-[360px]:block min-[360px]:py-0">
                   <p className="text-xs text-emerald-700 font-semibold">Services</p>
                   <p className="text-lg font-black text-emerald-800">{initialServices.length}</p>
                 </div>
@@ -511,7 +506,7 @@ export function ServicesPageContent({
             ) : searchedServices.length === 0 ? (
               <EmptyState onReset={backToCategories} />
             ) : (
-              <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:gap-5 lg:grid-cols-4">
                 {searchedServices.map((service, i) => (
                   <ServiceCard key={`${service.id}-${i}`} service={service} onBook={(quantity) => openBooking(service, quantity)} />
                 ))}
@@ -524,7 +519,7 @@ export function ServicesPageContent({
         {!isSearchMode && step === "category" && (
           <div>
             <StepHeader step={1} title="Select a Service Category" subtitle="Choose the type of work you need done" />
-            <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+            <div className="mt-6 grid grid-cols-2 gap-2 sm:gap-5 lg:grid-cols-4">
               {displayCategories.map((category) => {
                 const IconComponent = CAT_ICONS[category.id] || Wrench;
                 const gradient = CAT_GRADIENTS[category.id] || "from-slate-500 to-slate-600";
@@ -535,19 +530,18 @@ export function ServicesPageContent({
                 const imageUrl = imgSrc(webImgPath);
 
                 return (
-                  <button
+                  <Link
                     key={category.id}
-                    type="button"
-                    onClick={() => selectCategory(category.id)}
+                    href={categoryHref(category.id)}
                     className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md transition-all duration-300 hover:-translate-y-1 hover:border-emerald-300 hover:shadow-xl sm:rounded-3xl"
                   >
                     {/* Image / Gradient banner */}
-                    <div className={`relative m-2 h-36 overflow-hidden rounded-xl bg-gradient-to-br sm:m-3 sm:h-52 sm:rounded-2xl ${gradient}`}>
+                    <div className={`relative m-2 h-36 overflow-hidden rounded-xl sm:m-3 sm:h-52 sm:rounded-2xl ${imageUrl ? "bg-white" : `bg-gradient-to-br ${gradient}`}`}>
                       {imageUrl ? (
                         <SafeImage
                           src={imageUrl}
                           alt={category.title}
-                            className="object-cover opacity-90"
+                          className="rounded-xl object-cover sm:rounded-2xl"
                           fallback={
                             <div className="flex h-full w-full items-center justify-center">
                               <IconComponent className="h-10 w-10 text-white/80 sm:h-14 sm:w-14" />
@@ -559,7 +553,6 @@ export function ServicesPageContent({
                           <IconComponent className="h-10 w-10 text-white/90 sm:h-14 sm:w-14" />
                         </div>
                       )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
                     </div>
                     {/* Text */}
                     <div className="flex flex-1 flex-col p-3 sm:p-5">
@@ -569,7 +562,7 @@ export function ServicesPageContent({
                         View sub-services <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </span>
                     </div>
-                  </button>
+                  </Link>
                 );
               })}
             </div>
@@ -579,20 +572,20 @@ export function ServicesPageContent({
         {/* ── STEP 2: SELECT SUB-SERVICE ── */}
         {!isSearchMode && step === "subcategory" && (
           <div>
-            <div className="mb-4 flex flex-wrap items-center gap-3">
+            <div className="sticky top-20 z-40 -mx-4 mb-4 space-y-2.5 border-b border-slate-100 bg-white/95 px-4 py-2 shadow-sm backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+              <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1.5 whitespace-nowrap text-xs text-slate-500 sm:flex">
+                <button type="button" onClick={backToCategories} className="font-semibold text-emerald-700 transition hover:underline">{activeCategoryObj?.title}</button>
+                <span aria-hidden="true">›</span>
+                <span className="font-medium text-slate-600">Select sub-service</span>
+              </nav>
               <button
                 type="button"
                 onClick={backToCategories}
-                className="inline-flex min-h-12 items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-base font-black text-emerald-800 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-100 hover:shadow-md"
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
               >
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white shadow-sm"><ArrowLeft className="h-4 w-4" /></span>
+                <ArrowLeft className="h-3.5 w-3.5" />
                 Back to categories
               </button>
-              <nav className="flex items-center gap-1.5 text-xs text-slate-500">
-                <span className="font-medium text-emerald-700">{activeCategoryObj?.title}</span>
-                <span>›</span>
-                <span>Select sub-service</span>
-              </nav>
             </div>
             <StepHeader step={2} title={`Choose a Sub-Service`} subtitle={`Pick the specific ${activeCategoryObj?.title?.toLowerCase() || "service"} type you need`} />
 
@@ -604,7 +597,7 @@ export function ServicesPageContent({
                 </button>
               </div>
             ) : (
-              <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+              <div className="mt-6 grid grid-cols-2 gap-2 sm:gap-5 lg:grid-cols-4">
                 {currentSubcategories.map((subCat) => {
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   const subCatAny = subCat as any;
@@ -634,7 +627,7 @@ export function ServicesPageContent({
                           <SafeImage
                             src={subImgSrc}
                             alt={subCat.title}
-                            className="object-cover"
+                            className="rounded-xl object-cover sm:rounded-2xl"
                             fallback={
                               <div className="flex h-full w-full items-center justify-center">
                                 <IconComponent className="h-9 w-9 text-emerald-300 sm:h-12 sm:w-12" />
@@ -671,24 +664,26 @@ export function ServicesPageContent({
         {/* ── STEP 3: VIEW & BOOK SERVICES ── */}
         {!isSearchMode && step === "services" && activeSubcategory && (
           <div>
-            <div className="mb-4 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={backToSubcategories}
-                className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-800 shadow-sm transition hover:bg-emerald-100"
-              >
-                <ArrowLeft className="h-4 w-4" /> Back to sub-services
-              </button>
-              <button type="button" onClick={backToCategories} className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-700">
-                <Layers className="h-4 w-4" /> Back to categories
-              </button>
-              <nav className="flex items-center gap-1.5 text-xs text-slate-500">
-                <button onClick={backToCategories} className="font-medium text-emerald-700 hover:underline">{activeCategoryObj?.title}</button>
-                <span>›</span>
-                <span className="font-medium text-emerald-700">{activeSubcategory.title}</span>
-                <span>›</span>
-                <span>Services</span>
+            <div className="sticky top-20 z-40 -mx-4 mb-4 space-y-2.5 border-b border-slate-100 bg-white/95 px-4 py-2 shadow-sm backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+              <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1.5 whitespace-nowrap text-xs text-slate-500 sm:flex">
+                <button type="button" onClick={backToCategories} className="font-semibold text-emerald-700 hover:underline">{activeCategoryObj?.title}</button>
+                <span aria-hidden="true">›</span>
+                <button type="button" onClick={backToSubcategories} className="font-semibold text-emerald-700 hover:underline">{activeSubcategory.title}</button>
+                <span aria-hidden="true">›</span>
+                <span className="font-medium text-slate-600">Services</span>
               </nav>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={backToSubcategories}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-800 shadow-sm transition hover:bg-emerald-100"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" /> Back to sub-services
+                </button>
+                <button type="button" onClick={backToCategories} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-700">
+                  <Layers className="h-3.5 w-3.5" /> Categories
+                </button>
+              </div>
             </div>
 
             <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
@@ -704,7 +699,7 @@ export function ServicesPageContent({
             {subcategoryServices.length === 0 ? (
               <EmptyState onReset={backToSubcategories} />
             ) : (
-              <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+              <div className="mt-6 grid grid-cols-2 gap-2 sm:gap-5 lg:grid-cols-4">
                 {subcategoryServices.map((service, i) => (
                   <ServiceCard key={`${service.id}-${i}`} service={service} onBook={(quantity) => openBooking(service, quantity)} />
                 ))}
@@ -749,7 +744,7 @@ function StepHeader({ step, title, subtitle }: { step: number; title: string; su
 
 function LoadingGrid() {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 sm:gap-5 lg:grid-cols-4">
       {[1, 2, 3].map((i) => (
         <div key={i} className="h-64 animate-pulse rounded-2xl bg-slate-200" />
       ))}
@@ -773,7 +768,7 @@ function EmptyState({ onReset }: { onReset: () => void }) {
   );
 }
 
-function ServiceCard({ service, onBook }: { service: ApiService; onBook: (quantity: number) => void }) {
+export function ServiceCard({ service, onBook }: { service: ApiService; onBook?: (quantity: number) => void }) {
   const { items, addService } = useServiceCart();
   const src = imgSrc(service.serviceImageUrl || service.imageUrl || service.image_url);
   const originalPrice = Number(service.original_price || service.originalPrice || 0);
@@ -794,74 +789,84 @@ function ServiceCard({ service, onBook }: { service: ApiService; onBook: (quanti
 
   return (
     <div className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl sm:rounded-3xl">
-      <div className="relative m-2 h-36 shrink-0 overflow-hidden rounded-xl border border-slate-100 bg-white sm:m-3 sm:h-48 sm:rounded-2xl">
+      <div className="relative m-1.5 aspect-[4/3] w-[calc(100%-0.75rem)] shrink-0 overflow-hidden rounded-xl border border-slate-100 bg-white max-sm:has-[[data-service-image-fallback]]:hidden sm:m-2 sm:w-[calc(100%-1rem)] sm:rounded-2xl">
+        <Link href={serviceHref(service)} className="absolute inset-0 z-[1]" aria-label={`View ${service.title}`} />
         {src ? (
-          <Image
+          <ResilientImage
             src={src}
             alt={service.title}
-            fill
-
-            className="block object-cover [backface-visibility:hidden] [transform:translateZ(0)_scale(1.015)]"
-            sizes="(max-width:640px) 50vw, (max-width:1024px) 50vw, 25vw"
+            className="rounded-lg object-cover sm:rounded-2xl"
+            sizes="(max-width:639px) 50vw, (max-width:1023px) 50vw, (max-width:1279px) 33vw, 25vw"
+            quality={100}
+            fallback={<div data-service-image-fallback className="flex h-full w-full items-center justify-center bg-gradient-to-br from-emerald-50 via-teal-50 to-lime-100"><Wrench className="h-14 w-14 text-emerald-500" /></div>}
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
+          <div data-service-image-fallback className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
             <Layers className="h-14 w-14 text-slate-300" />
           </div>
         )}
-        <div className="absolute left-3 top-3 flex flex-wrap gap-2 sm:left-4 sm:top-4">
+        <div className="pointer-events-none absolute left-2 top-2 z-[2] flex flex-wrap gap-1 sm:left-4 sm:top-4 sm:gap-2">
           {service.badge ? (
-            <span className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow">{service.badge}</span>
+            <span className="rounded-full bg-emerald-600 px-2 py-1 text-[8px] font-bold text-white shadow sm:px-3 sm:py-1.5 sm:text-xs">{service.badge}</span>
           ) : null}
           {discount > 0 ? (
-            <span className="rounded-full bg-red-500 px-3 py-1.5 text-xs font-bold text-white shadow">{discount}% OFF</span>
+            <span className="rounded-full bg-red-500 px-2 py-1 text-[8px] font-bold text-white shadow sm:px-3 sm:py-1.5 sm:text-xs">{discount}% OFF</span>
           ) : null}
         </div>
         {service.duration ? (
-          <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm sm:bottom-4 sm:right-4">
+          <div className="absolute bottom-3 right-3 hidden max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm sm:bottom-4 sm:right-4 sm:flex">
             <Clock className="h-3.5 w-3.5" />
             {service.duration}
           </div>
         ) : null}
       </div>
 
-      <div className="flex flex-1 flex-col p-3 sm:p-5">
-        <Link href={`/services/${service.id}`} prefetch={false} className="group-hover:text-emerald-600">
-          <h3 className="line-clamp-2 min-h-10 text-sm font-black leading-5 text-slate-900 transition-colors sm:min-h-12 sm:text-base sm:leading-6">{service.title}</h3>
+      <div className="flex flex-1 flex-col p-2.5 sm:p-5">
+        <Link href={serviceHref(service)} prefetch={false} className="group-hover:text-emerald-600">
+          <h3 className="line-clamp-2 min-h-9 text-xs font-black leading-[1.125rem] text-slate-900 transition-colors sm:min-h-12 sm:text-base sm:leading-6">{service.title}</h3>
+        </Link>
+        <Link
+          href={serviceHref(service)}
+          prefetch={false}
+          className="mt-1 inline-flex w-fit items-center gap-1 text-[10px] font-bold text-emerald-700 transition hover:text-emerald-900 hover:underline sm:text-xs"
+          aria-label={`View details for ${service.title}`}
+        >
+          <span className="sm:hidden">Details</span><span className="hidden sm:inline">View details</span>
+          <ArrowRight className="h-3.5 w-3.5" />
         </Link>
         <p className="mt-2 hidden line-clamp-2 text-xs leading-5 text-slate-500 sm:block">
           {service.detailDescription || service.detail_description || service.description}
         </p>
 
-        <div className="mt-4 flex items-center gap-2">
-          <Star className={`h-4 w-4 ${Number(service.reviews || 0) > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} />
-          <span className="text-sm font-bold text-slate-700">{Number(service.reviews || 0) > 0 ? Number(service.rating || 0).toFixed(1) : "0.0"}</span>
-          <span className="text-xs text-slate-400">{Number(service.reviews || 0) > 0 ? `(${service.reviews} reviews)` : "(No reviews)"}</span>
+        <div className="mt-2 flex items-center gap-1 sm:mt-4 sm:gap-2">
+          <Star className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${Number(service.reviews || 0) > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} />
+          <span className="text-xs font-bold text-slate-700 sm:text-sm">{Number(service.reviews || 0) > 0 ? Number(service.rating || 0).toFixed(1) : "0.0"}</span>
+          <span className="hidden text-xs text-slate-400 sm:inline">{Number(service.reviews || 0) > 0 ? `(${service.reviews} reviews)` : "(No reviews)"}</span>
         </div>
 
-        {allowsQuantity ? <div className="mt-4 flex min-h-24 flex-col justify-between gap-2 rounded-xl border border-emerald-100 bg-emerald-50 p-2.5 sm:min-h-[4.25rem] sm:flex-row sm:items-center"><div><p className="text-xs font-bold text-emerald-900">How many?</p><p className="text-[10px] text-emerald-700">{unitText || "Per item"}</p></div><div className="flex w-fit items-center overflow-hidden rounded-xl border border-emerald-200 bg-white"><button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))} disabled={quantity <= 1} aria-label="Decrease quantity" className="grid h-9 w-8 place-items-center text-slate-600 disabled:opacity-30 sm:w-9"><Minus className="h-4 w-4" /></button><span className="grid h-9 min-w-8 place-items-center border-x border-emerald-100 text-sm font-black text-slate-900 sm:min-w-9">{quantity}</span><button type="button" onClick={() => setQuantity((value) => Math.min(10, value + 1))} disabled={quantity >= 10} aria-label="Increase quantity" className="grid h-9 w-8 place-items-center text-slate-600 disabled:opacity-30 sm:w-9"><Plus className="h-4 w-4" /></button></div></div> : <div className="mt-4 flex min-h-24 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5 sm:min-h-[4.25rem]"><CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" /><div><p className="text-xs font-bold text-slate-800">Single service booking</p><p className="text-[10px] leading-4 text-slate-500">No quantity selection required</p></div></div>}
+        {allowsQuantity ? <div className="mt-2 flex min-h-[4.25rem] flex-col justify-between gap-1.5 rounded-lg border border-emerald-100 bg-emerald-50 p-1.5 sm:mt-4 sm:flex-row sm:items-center sm:rounded-xl sm:p-2.5"><div><p className="text-[10px] font-bold text-emerald-900 sm:text-xs">How many?</p><p className="hidden text-[10px] text-emerald-700 sm:block">{unitText || "Per item"}</p></div><div className="flex w-fit items-center overflow-hidden rounded-lg border border-emerald-200 bg-white sm:rounded-xl"><button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))} disabled={quantity <= 1} aria-label="Decrease quantity" className="grid h-8 w-7 place-items-center text-slate-600 disabled:opacity-30 sm:h-9 sm:w-9"><Minus className="h-3.5 w-3.5 sm:h-4 sm:w-4" /></button><span className="grid h-8 min-w-7 place-items-center border-x border-emerald-100 text-xs font-black text-slate-900 sm:h-9 sm:min-w-9 sm:text-sm">{quantity}</span><button type="button" onClick={() => setQuantity((value) => Math.min(10, value + 1))} disabled={quantity >= 10} aria-label="Increase quantity" className="grid h-8 w-7 place-items-center text-slate-600 disabled:opacity-30 sm:h-9 sm:w-9"><Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" /></button></div></div> : <div className="mt-2 flex min-h-[4.25rem] items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-1.5 sm:mt-4 sm:gap-2 sm:rounded-xl sm:p-2.5"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 sm:h-5 sm:w-5" /><div><p className="text-[10px] font-bold leading-4 text-slate-800 sm:text-xs">Single service</p><p className="hidden text-[10px] leading-4 text-slate-500 sm:block">No quantity selection required</p></div></div>}
 
         <div className="mt-auto border-t border-slate-100 pt-4">
           <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              {unitText ? unitText : "Rate"}
-            </p>
-            <div className="mt-0.5 flex flex-wrap items-baseline gap-1.5">
-              <span className="text-2xl font-black text-slate-900">Rs {(service.price * quantity).toLocaleString()}</span>
-              {discount > 0 ? <span className="text-xs text-slate-400 line-through">Rs {originalPrice.toLocaleString()}</span> : null}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                {unitText ? unitText : "Rate"}
+              </p>
+              <div className="mt-0.5 flex flex-wrap items-baseline gap-1.5">
+                <span className="text-base font-black text-slate-900 sm:text-2xl">Rs {(service.price * quantity).toLocaleString()}</span>
+                {discount > 0 ? <span className="text-xs text-slate-400 line-through">Rs {originalPrice.toLocaleString()}</span> : null}
+              </div>
             </div>
           </div>
-          </div>
-          <div className="mt-3 grid grid-cols-[3.25rem_minmax(0,1fr)] gap-2">
-          <button type="button" onClick={addToCart} aria-label={inCart ? `Add another ${service.title} to cart` : `Add ${service.title} to cart`} title={inCart ? "Add another to cart" : "Add to cart"} className={`relative grid min-h-12 place-items-center rounded-2xl border transition ${inCart ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"}`}><ShoppingCart className="h-5 w-5" /><span className="absolute right-1.5 top-1.5 grid h-4 w-4 place-items-center rounded-full bg-emerald-600 text-[11px] font-black leading-none text-white">+</span></button>
-          <button
-            type="button"
-            onClick={() => onBook(quantity)}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700"
-          >
-            Book Now <ArrowRight className="h-4 w-4" />
-          </button>
+          <div className="mt-3 grid grid-cols-[2.5rem_minmax(0,1fr)] gap-1.5 sm:grid-cols-[3.25rem_minmax(0,1fr)] sm:gap-2">
+            <button type="button" onClick={addToCart} aria-label={inCart ? `Add another ${service.title} to cart` : `Add ${service.title} to cart`} title={inCart ? "Add another to cart" : "Add to cart"} className={`relative grid min-h-12 place-items-center rounded-2xl border-2 shadow-sm transition active:scale-95 ${inCart ? "border-emerald-500 bg-emerald-600 text-white" : "border-emerald-300 bg-emerald-50 text-emerald-700 hover:border-emerald-500 hover:bg-emerald-100"}`}><ShoppingBasket className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2.25} /><span className={`absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full text-[11px] font-black leading-none shadow ${inCart ? "bg-white text-emerald-700" : "bg-emerald-600 text-white"}`}>+</span></button>
+            {onBook ? <button
+              type="button"
+              onClick={() => onBook(quantity)}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700"
+            >
+              <span className="sm:hidden">Book</span><span className="hidden sm:inline">Book Now</span> <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </button> : <Link href={serviceHref(service)} prefetch={false} className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700"><span className="sm:hidden">Book</span><span className="hidden sm:inline">Book Now</span> <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" /></Link>}
           </div>
         </div>
       </div>

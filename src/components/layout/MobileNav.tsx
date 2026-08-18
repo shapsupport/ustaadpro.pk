@@ -1,21 +1,18 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { navItems, quickAccessMenu } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { LogOut, LogIn, ShoppingCart, WalletCards } from "lucide-react";
+import { LogOut, LogIn, ShoppingCart, Wallet } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
-import CartCheckoutModal from "@/components/store/CartCheckoutModal";
-import { UniversalSearch } from "@/components/search/UniversalSearch";
 
 function getIcon(iconName: string): LucideIcon {
   return (LucideIcons as unknown as Record<string, LucideIcon>)[iconName] || LucideIcons.FileText;
@@ -28,10 +25,9 @@ interface MobileNavProps {
 
 export function MobileNav({ open, onClose }: MobileNavProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, setAuthModalMode, logout } = useAuth();
   const { totalItems } = useCart();
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const searchScope = pathname.startsWith("/store") ? "shop_product" : "service";
   const visibleNavItems = navItems.filter((item) => item.href !== "/track-booking" || Boolean(user));
 
   return (
@@ -61,9 +57,6 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
         </SheetHeader>
 
         <div className="flex h-[calc(100vh-80px)] flex-col overflow-y-auto px-4 py-6">
-          <div className="mb-6">
-            <UniversalSearch key={searchScope} mobile defaultScope={searchScope} onNavigate={onClose} />
-          </div>
           {/* User Profile / Auth */}
           {user ? (
             <div className="mb-6 flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
@@ -71,25 +64,26 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
                 {user.name.charAt(0)}
               </div>
 
-              <div className="min-w-0 flex-1">
+              <Link href="/profile" onClick={onClose} className="min-w-0 flex-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                 <p className="truncate font-semibold text-slate-900">
                   {user.name}
                 </p>
                 <p className="truncate text-sm text-slate-500">
                   {user.email}
                 </p>
-              </div>
+                <span className="mt-1 block text-xs font-bold text-emerald-700">View profile</span>
+              </Link>
 
               <Link href="/wallet" onClick={onClose} aria-label="Open wallet and rewards" title="Wallet & Rewards" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 transition hover:bg-emerald-100">
-                <WalletCards className="h-5 w-5" />
+                <Wallet className="h-5 w-5" strokeWidth={2.25} />
               </Link>
 
               {/* Cart button */}
-              <button
+              {totalItems > 0 && <button
                 type="button"
                 onClick={() => {
                   onClose();
-                  setCheckoutOpen(true);
+                  router.push("/shop-checkout");
                 }}
                 className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-lime-400 hover:text-lime-600 transition"
                 aria-label={`Cart, ${totalItems} items`}
@@ -100,7 +94,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
                     {totalItems > 99 ? "99+" : totalItems}
                   </span>
                 )}
-              </button>
+              </button>}
             </div>
           ) : (
             <div className="mb-6 flex gap-2">
@@ -115,7 +109,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
                 Continue with account
               </button>
               <Link href="/wallet" onClick={onClose} aria-label="View wallet benefits" title="Wallet & Rewards" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700">
-                <WalletCards className="h-5 w-5" />
+                <Wallet className="h-5 w-5" strokeWidth={2.25} />
               </Link>
             </div>
           )}
@@ -224,11 +218,6 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
       </SheetContent>
     </Sheet>
 
-    {/* Mobile Cart Checkout Modal */}
-    <CartCheckoutModal
-      isOpen={checkoutOpen}
-      onClose={() => setCheckoutOpen(false)}
-    />
   </>
   );
 }

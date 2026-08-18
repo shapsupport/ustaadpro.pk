@@ -87,6 +87,7 @@ export default function EasyPaisaPaymentSection({
         <button type="button" onClick={() => onPaymentMethodChange("Full Payment in Advance")} className={`rounded-2xl border p-3 text-center transition ${paymentMethod === "Full Payment in Advance" ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-400" : "border-slate-200 bg-white"}`}>
           <span className="text-lg font-black text-emerald-600">Rs {total.toLocaleString("en-PK")}</span>
           <p className="text-xs font-bold text-slate-800">Pay in full</p>
+          <p className="text-[10px] font-semibold text-emerald-700">Get 5% discount when you pay in full</p>
           <p className="text-[10px] text-slate-500">No balance on the listed charge</p>
         </button>
       </div>
@@ -102,18 +103,16 @@ export default function EasyPaisaPaymentSection({
         <span className={`grid h-6 w-6 place-items-center rounded-lg border ${useWalletBalance ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-300 bg-white text-transparent"}`}><Check className="h-4 w-4" /></span>
       </button>
 
-      {(rewardLoading || rewardPoints > 0) && (
-        <button
-          type="button"
-          disabled={rewardLoading || !rewardEligible}
-          onClick={() => onUseRewardPointsChange?.(!useRewardPoints)}
-          className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${useRewardPoints ? "border-violet-500 bg-violet-50 ring-1 ring-violet-300" : "border-violet-200 bg-white hover:bg-violet-50"} disabled:cursor-not-allowed disabled:opacity-60`}
-        >
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-100 text-violet-700"><Gift className="h-5 w-5" /></span>
-          <span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-900">Reward points: {rewardPoints} pts</span><span className="block text-[11px] text-slate-500">Worth Rs {rewardBalanceValue.toLocaleString("en-PK")}. {rewardHint}</span></span>
-          <span className={`grid h-6 w-6 place-items-center rounded-lg border ${useRewardPoints ? "border-violet-600 bg-violet-600 text-white" : "border-slate-300 bg-white text-transparent"}`}><Check className="h-4 w-4" /></span>
-        </button>
-      )}
+      <button
+        type="button"
+        disabled={rewardLoading || !rewardEligible}
+        onClick={() => onUseRewardPointsChange?.(!useRewardPoints)}
+        className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${useRewardPoints ? "border-violet-500 bg-violet-50 ring-1 ring-violet-300" : "border-violet-200 bg-white hover:bg-violet-50"} disabled:cursor-not-allowed disabled:opacity-60`}
+      >
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-100 text-violet-700"><Gift className="h-5 w-5" /></span>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-900">{rewardLoading ? "Loading reward points…" : `Reward points: ${rewardPoints} pts`}</span><span className="block text-[11px] text-slate-500">Worth Rs {rewardBalanceValue.toLocaleString("en-PK")}. {rewardHint}</span></span>
+        <span className={`grid h-6 w-6 place-items-center rounded-lg border ${useRewardPoints ? "border-violet-600 bg-violet-600 text-white" : "border-slate-300 bg-white text-transparent"}`}><Check className="h-4 w-4" /></span>
+      </button>
 
       <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-900 p-3 text-center text-white sm:gap-2">
         <div><p className="text-[9px] uppercase text-slate-400">Service total</p><p className="text-xs font-bold">Rs {total.toLocaleString("en-PK")}</p></div>
@@ -136,15 +135,15 @@ export default function EasyPaisaPaymentSection({
                 {copied ? "Copied" : "Copy number"}
               </button>
             </div>
-            <p className="mt-3 text-xs leading-5 text-emerald-100">After transferring the amount, upload the payment screenshot below for verification.</p>
+            <p className="mt-3 text-xs leading-5 text-emerald-100">Upload the payment screenshot below for verification. If you do not have it yet, your booking will remain pending until you upload it from Track Booking.</p>
           </div>
         </div>}
 
       <div ref={receiptAreaRef} className="min-w-0 space-y-2">
       {cashDue > 0 && <label className={`flex min-h-14 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed px-3 py-3 text-center text-sm font-bold transition-colors sm:px-4 ${receiptError ? "border-red-400 bg-white text-red-700 hover:bg-red-50" : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50"}`}>
           <Upload className="h-5 w-5 shrink-0" />
-          <span className="min-w-0 truncate">{receiptFileName || <>Upload booking payment receipt <span className="text-red-500">*</span></>}</span>
-          <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => onReceiptSelect(event.target.files?.[0] ?? null)} />
+          <span className="min-w-0 truncate">{receiptFileName || <>Upload payment receipt <span className="font-medium text-red-600">(required)</span></>}</span>
+          <input type="file" accept="image/jpeg,image/png,image/webp" aria-required="true" className="sr-only" onChange={(event) => onReceiptSelect(event.target.files?.[0] ?? null)} />
         </label>}
       </div>
     </div>
