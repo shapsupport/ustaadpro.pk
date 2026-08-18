@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ComponentType, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   ArrowLeft,
@@ -35,6 +36,7 @@ import { searchServicesFromApi } from "@/lib/search";
 import { useLocation } from "@/context/LocationContext";
 import BookingModal from "@/components/booking/BookingModal";
 import { useServiceCart } from "@/context/ServiceCartContext";
+import { categoryHref, subcategoryHref } from "@/lib/service-url";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 
@@ -147,6 +149,7 @@ export function ServicesPageContent({
   initialCatalog = [],
   initialSearch = "",
 }: ServicesPageContentProps) {
+  const router = useRouter();
   const { location, setShowPicker } = useLocation();
   const [step, setStep] = useState<Step>("category");
   const [activeCategory, setActiveCategory] = useState<string>("all");
@@ -184,17 +187,12 @@ export function ServicesPageContent({
 
   // Step 1 → Step 2: select main category, show subcategories
   function selectCategory(catId: string) {
-    setActiveCategory(catId);
-    setActiveSubcategory(null);
-    setStep("subcategory");
-    scrollToStep();
+    router.push(categoryHref(catId));
   }
 
   // Step 2 → Step 3: select sub-category, show services
   function selectSubcategory(sub: SubcatItem) {
-    setActiveSubcategory(sub);
-    setStep("services");
-    scrollToStep();
+    router.push(subcategoryHref(activeCategory, sub.title));
   }
 
   // Back from Step 2 → Step 1

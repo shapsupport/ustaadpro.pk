@@ -21,6 +21,7 @@ import {
 import type { ApiCatalogCategory, ApiService, ApiSubcategory } from "@/lib/api-types";
 import BookingModal from "@/components/booking/BookingModal";
 import { useServiceCart } from "@/context/ServiceCartContext";
+import { categoryHref, serviceHref, subcategoryHref } from "@/lib/service-url";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 
@@ -32,11 +33,12 @@ function imgSrc(url: string | undefined | null) {
 
 interface CategoryPageClientProps {
   catalogCategory: ApiCatalogCategory;
+  initialSubcategory?: ApiSubcategory | null;
 }
 
-export function CategoryPageClient({ catalogCategory }: CategoryPageClientProps) {
+export function CategoryPageClient({ catalogCategory, initialSubcategory = null }: CategoryPageClientProps) {
   const router = useRouter();
-  const [activeSubcategory, setActiveSubcategory] = useState<ApiSubcategory | null>(null);
+  const [activeSubcategory, setActiveSubcategory] = useState<ApiSubcategory | null>(initialSubcategory);
   const [bookingService, setBookingService] = useState<ApiService | null>(null);
   const [bookingQuantity, setBookingQuantity] = useState(1);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
@@ -45,13 +47,12 @@ export function CategoryPageClient({ catalogCategory }: CategoryPageClientProps)
   const directServices: ApiService[] = (catalogCategory.directServices ?? catalogCategory.services ?? []);
 
   const handleSubcategoryClick = (subcat: ApiSubcategory) => {
-    setActiveSubcategory(subcat);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    router.push(subcategoryHref(catalogCategory.id, subcat.title));
   };
 
   const handleBack = () => {
     if (activeSubcategory) {
-      setActiveSubcategory(null);
+      router.push(categoryHref(catalogCategory.id));
     } else {
       router.push("/services");
     }
@@ -83,7 +84,7 @@ export function CategoryPageClient({ catalogCategory }: CategoryPageClientProps)
               <ChevronRight className="h-4 w-4" />
               <button
                 type="button"
-                onClick={() => setActiveSubcategory(null)}
+                onClick={() => router.push(categoryHref(catalogCategory.id))}
                 className="font-medium hover:text-emerald-600"
               >
                 {catalogCategory.title}
@@ -124,6 +125,7 @@ export function CategoryPageClient({ catalogCategory }: CategoryPageClientProps)
                 <ServiceCard
                   key={service.id}
                   service={service}
+                  subcategoryTitle={activeSubcategory.title}
                   onBook={(quantity) => handleBookService(service, quantity)}
                 />
               ))}
@@ -323,9 +325,11 @@ function SubcategoryCard({
 // ─── Service Card ─────────────────────────────────────────────────────────────
 function ServiceCard({
   service,
+  subcategoryTitle,
   onBook,
 }: {
   service: ApiService;
+  subcategoryTitle?: string;
   onBook: (quantity: number) => void;
 }) {
   const { items, addService } = useServiceCart();
@@ -342,7 +346,7 @@ function ServiceCard({
   return (
     <div className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
       {/* Image */}
-      <div className="relative h-44 shrink-0 overflow-hidden bg-slate-100">
+      <Link href={serviceHref(service, subcategoryTitle)} prefetch={false} className="relative block h-44 shrink-0 overflow-hidden bg-slate-100">
         {src ? (
           <Image
             src={src}
@@ -371,13 +375,15 @@ function ServiceCard({
             {service.duration}
           </div>
         )}
-      </div>
+      </Link>
 
       {/* Content */}
       <div className="flex flex-1 flex-col p-5">
-        <h3 className="text-lg font-bold text-slate-900 transition-colors group-hover:text-emerald-600">
-          {service.title}
-        </h3>
+        <Link href={serviceHref(service, subcategoryTitle)} prefetch={false}>
+          <h3 className="text-lg font-bold text-slate-900 transition-colors group-hover:text-emerald-600">
+            {service.title}
+          </h3>
+        </Link>
         {(service.detailDescription || service.detail_description || service.description) && (
           <p className="mt-1.5 line-clamp-2 flex-1 text-sm text-slate-500">
             {service.detailDescription || service.detail_description || service.description}

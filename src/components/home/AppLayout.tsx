@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, BadgeCheck, CalendarCheck, Camera, CheckCircle2, ChevronDown,
@@ -13,6 +14,7 @@ import type { ApiCatalogCategory, ApiCategory, ApiReview, ApiService, ApiSubcate
 import { useLocation } from "@/context/LocationContext";
 import { orderCategories, orderServices } from "@/lib/service-order";
 import { AppStoreButtons } from "@/components/shared/AppStoreButtons";
+import { categoryHref, subcategoryHref } from "@/lib/service-url";
 
 // Always use the live public API origin for images so relative paths
 // like /uploads/... resolve correctly in all environments.
@@ -100,6 +102,7 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ initialServices, categories, catalog, reviews }: AppLayoutProps) {
+  const router = useRouter();
   const { location, setShowPicker } = useLocation();
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeSubcategory, setActiveSubcategory] = useState<ApiSubcategory | null>(null);
@@ -184,13 +187,17 @@ export function AppLayout({ initialServices, categories, catalog, reviews }: App
     .slice(0, 8), [orderedServices]);
 
   function showCategory(id: string) {
+    if (id !== "all") {
+      router.push(categoryHref(id));
+      return;
+    }
     setActiveCategory(id);
     setActiveSubcategory(null);
     window.requestAnimationFrame(() => servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
   function showSubcategory(subcategory: ApiSubcategory) {
-    setActiveSubcategory(subcategory);
+    router.push(subcategoryHref(activeCategory, subcategory.title));
   }
 
   return (
