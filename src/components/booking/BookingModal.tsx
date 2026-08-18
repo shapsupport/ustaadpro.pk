@@ -483,7 +483,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
       return;
     }
 
-    if (step === "details" && !pageMode) {
+    if (step === "details") {
       setQuoteLoading(true);
       try {
         const settingsResponse = await fetch(`${API_BASE}/api/settings`, { cache: "no-store" });
@@ -762,19 +762,19 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
         <div className={pageMode ? "relative mx-auto flex min-w-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-slate-200 bg-white shadow-sm sm:overflow-hidden sm:rounded-3xl" : "relative flex h-[100dvh] max-h-[100dvh] min-w-0 w-full max-w-4xl flex-col overflow-hidden rounded-none bg-white shadow-2xl sm:h-auto sm:max-h-[94dvh] sm:rounded-2xl"}>
           <div className={`${pageMode ? "sticky top-0 bg-white" : "bg-white/95 backdrop-blur"} z-20 flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-6 sm:py-5`}>
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-              {pageMode && (
+              {pageMode && step === "details" && (
                 <button type="button" onClick={() => router.back()} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" aria-label="Go back">
                   <ArrowLeft className="h-4 w-4" />
                 </button>
               )}
-              {!pageMode && step === "payment" && (
+              {step === "payment" && (
                 <button type="button" onClick={returnToDetails} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-200 text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" aria-label="Back to booking details">
                   <ArrowLeft className="h-4 w-4" />
                 </button>
               )}
               <div className="min-w-0">
-                <h1 className="text-lg font-black text-slate-900 sm:text-2xl">Complete your booking</h1>
-                <p className="max-w-[16rem] truncate text-xs font-bold text-emerald-600 sm:max-w-xl">All details on one page · {selectedServices.length > 1 ? `${selectedServices.length} services selected` : service.title}</p>
+                <h1 className="text-lg font-black text-slate-900 sm:text-2xl">{step === "details" ? "Booking details" : "Payment & receipt"}</h1>
+                <p className="max-w-[16rem] truncate text-xs font-bold text-emerald-600 sm:max-w-xl">Step {step === "details" ? "1" : "2"} of 2 · {selectedServices.length > 1 ? `${selectedServices.length} services selected` : service.title}</p>
               </div>
             </div>
             {pageMode && <button type="button" onClick={addMoreServices} className="hidden rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-black text-emerald-700 transition hover:bg-emerald-100 sm:inline-flex">Book other services</button>}
@@ -794,9 +794,11 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-lg shadow-emerald-600/10">
                 <CheckCircle2 className="h-10 w-10" />
               </div>
-              <h3 className="text-2xl font-black text-slate-900">Order placed successfully!</h3>
+              <h3 className="text-2xl font-black text-slate-900">Booking placed successfully!</h3>
               <p className="text-sm text-slate-600 max-w-md mx-auto">
-                Your booking has been received. Track its status anytime from Track Booking while our team verifies the payment and assigns a professional.
+                {bookingSuccess.receiptUploaded
+                  ? "Your payment is under verification. You can follow its progress from Track Booking."
+                  : "Your booking is saved, but a payment receipt still needs to be uploaded from Track Booking."}
               </p>
               <div className="mx-auto grid max-w-lg grid-cols-1 gap-2 text-[11px] font-bold text-slate-500 min-[380px]:flex min-[380px]:items-center min-[380px]:justify-center sm:text-xs">
                 <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-emerald-700">1. Order placed</span>
@@ -822,13 +824,13 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                   </p>
                 )}
                 {bookingSuccess.receiptUploaded && (!bookingSuccess.rewardApplied || bookingSuccess.paidAmount > 200) && (
-                  <p className="text-[11px] font-bold text-emerald-600 flex items-center justify-center gap-1 pt-1">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Payment receipt submitted for verification.
+                  <p className="flex items-center justify-center gap-1 pt-1 text-[11px] font-bold text-amber-700">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Payment under verification.
                   </p>
                 )}
                 {bookingSuccess.receiptError && (
                   <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-                    Your booking was created, but the receipt was not uploaded: {bookingSuccess.receiptError} Use Track Booking to retry—do not create another booking.
+                    Payment receipt needs to be uploaded. {bookingSuccess.receiptError} Use Track Booking to retry—do not create another booking.
                   </p>
                 )}
               </div>
@@ -846,7 +848,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
             <form
               noValidate
               onSubmit={handleSubmit}
-              className={step === "details" || pageMode
+              className={step === "details"
                 ? "grid min-w-0 grid-cols-1 content-start gap-3 overflow-x-hidden bg-slate-50/40 p-3 sm:p-5 lg:grid-cols-2 lg:gap-5"
                 : "flex min-w-0 flex-col gap-3 overflow-x-hidden bg-slate-50/40 p-3 sm:p-4"}
             >
@@ -877,7 +879,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               )}
 
               {/* Service Summary Card */}
-              <div className={`rounded-2xl border border-emerald-200 bg-white p-3 shadow-sm sm:p-4 ${step === "payment" && !pageMode ? "lg:col-span-2" : "lg:row-span-2 lg:h-full lg:self-stretch"}`}>
+              <div className={`rounded-2xl border border-emerald-200 bg-white p-3 shadow-sm sm:p-4 ${step === "payment" ? "lg:col-span-2" : "lg:row-span-2 lg:h-full lg:self-stretch"}`}>
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-[10px] uppercase font-bold text-slate-400">Selected service{selectedServices.length === 1 ? "" : "s"}</p>
                   <p className="text-sm font-black text-emerald-700">Rs {listedServicesTotal.toLocaleString()}</p>
@@ -922,7 +924,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 <p className="mt-2 text-[10px] text-slate-400">The backend confirms the authoritative total when the order is submitted.</p>
               </div>
 
-              {step === "payment" && !pageMode && <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
+              {step === "payment" && <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
                 <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-black text-slate-900">Shared booking details</h3><button type="button" onClick={returnToDetails} className="text-xs font-bold text-emerald-700 hover:underline">Modify details</button></div>
                 <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
                   <div><p className="font-bold uppercase tracking-wide text-slate-400">Customer</p><p className="mt-1 font-semibold text-slate-800">{name} · {phone}</p></div>
@@ -933,7 +935,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>}
 
               {/* Contact Information */}
-              <div ref={contactCardRef} className={`${step === "details" || pageMode ? "lg:col-start-2" : "hidden"} rounded-2xl border bg-white p-4 shadow-sm transition ${invalidContact.name || invalidContact.phone ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
+              <div ref={contactCardRef} className={`${step === "details" ? "lg:col-start-2" : "hidden"} rounded-2xl border bg-white p-4 shadow-sm transition ${invalidContact.name || invalidContact.phone ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
                 <h3 className="mb-3 text-sm font-black text-slate-900">Your contact details</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                 <div>
@@ -969,7 +971,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>
 
               {/* FEATURE 3: Address & Map Picker */}
-              <div ref={addressCardRef} className={`${step === "details" || pageMode ? "lg:col-start-2" : "hidden"} space-y-3 rounded-2xl border bg-white p-4 shadow-sm transition ${addressTouched && (addressFieldError || error.includes("outside our service area")) ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
+              <div ref={addressCardRef} className={`${step === "details" ? "lg:col-start-2" : "hidden"} space-y-3 rounded-2xl border bg-white p-4 shadow-sm transition ${addressTouched && (addressFieldError || error.includes("outside our service area")) ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
                 <h3 className="text-sm font-black text-slate-900">Where should we send the professional?</h3>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-600">
@@ -1032,7 +1034,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 </div>
               </div>
 
-              <div ref={scheduleCardRef} className={`${step === "details" || pageMode ? "" : "hidden"} space-y-4 rounded-2xl border bg-white p-4 shadow-sm transition lg:col-span-2 ${scheduleError ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
+              <div ref={scheduleCardRef} className={`${step === "details" ? "" : "hidden"} space-y-4 rounded-2xl border bg-white p-4 shadow-sm transition lg:col-span-2 ${scheduleError ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"}`}>
                 <div><h3 className="text-sm font-black text-slate-900">Choose booking date & time</h3><p className="mt-1 text-xs text-slate-500">Select a date, recurrence preference, and an available arrival slot.</p></div>
                 {/* FEATURE 2: Recurring Booking Picker */}
                 <RecurringPicker
@@ -1086,7 +1088,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>
 
               {/* FEATURE 4: Payment Option & EasyPaisa Receipt Upload */}
-              {(step === "payment" || pageMode) && <div className="min-w-0 lg:col-span-2">
+              {step === "payment" && <div className="min-w-0 lg:col-span-2">
                 <EasyPaisaPaymentSection
                   paymentMethod={paymentMethod}
                   onPaymentMethodChange={(method) => { setPaymentMethod(method); setReceiptDataUrl(""); setReceiptFileName(""); setReceiptValidationError(false); }}
@@ -1112,7 +1114,7 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
               </div>}
 
               {/* Special Instructions */}
-              <div className={`${step === "details" || pageMode ? "" : "hidden"} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2`}>
+              <div className={`${step === "details" ? "" : "hidden"} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2`}>
                 <label className="block text-xs font-bold text-slate-600 mb-1">
                   Requirements / Special Instructions
                 </label>
@@ -1130,8 +1132,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
 
               {/* Submit Button */}
               <div className="rounded-2xl border border-slate-200 bg-white p-4 lg:col-span-2">
-                <h3 className="text-sm font-black text-slate-900">Complete your booking</h3>
-                <p className="mt-1 text-xs text-slate-500">Confirm securely here or send the same services, details, and calculated total through WhatsApp.</p>
+                <h3 className="text-sm font-black text-slate-900">{step === "details" ? "Continue to payment" : "Confirm your booking"}</h3>
+                <p className="mt-1 text-xs text-slate-500">{step === "details" ? "Review your information, address, and appointment time before continuing." : "Upload your payment receipt to place the booking under payment verification."}</p>
                 {!user ? (
                   <button
                     type="button"
@@ -1153,11 +1155,15 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                         {quoteLoading ? "Preparing live bill..." : "Submitting Booking..."}
                       </>
                     ) : (
-                      paymentNow > 0 ? `Pay Rs ${paymentNow.toLocaleString()} & Confirm Booking` : "Redeem Reward & Confirm Booking"
+                      step === "details"
+                        ? "Next: Payment"
+                        : paymentNow > 0
+                          ? receiptDataUrl ? "Upload Receipt & Confirm Booking" : "Confirm Booking — Upload Receipt Later"
+                          : "Redeem Reward & Confirm Booking"
                     )}
                   </button>
                 )}
-                <button
+                {step === "details" && <button
                   type="button"
                   onClick={handleWhatsAppBooking}
                   disabled={loading || quoteLoading || selectedServices.length === 0}
@@ -1165,8 +1171,8 @@ export default function BookingModal({ isOpen, onClose, service, services, onBoo
                 >
                   <MessageCircle className="h-5 w-5" />
                   Checkout via WhatsApp — {money(calculatedTotal)}
-                </button>
-                <p className="mt-2 text-center text-[11px] text-slate-500">Your itemized booking and final total will open in WhatsApp. Send the payment screenshot there after transfer.</p>
+                </button>}
+                {step === "details" && <p className="mt-2 text-center text-[11px] text-slate-500">Your itemized booking and final total will open in WhatsApp. Send the payment screenshot there after transfer.</p>}
               </div>
             </form>
           )}

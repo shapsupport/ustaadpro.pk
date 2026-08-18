@@ -135,15 +135,15 @@ export default function EasyPaisaPaymentSection({
                 {copied ? "Copied" : "Copy number"}
               </button>
             </div>
-            <p className="mt-3 text-xs leading-5 text-emerald-100">After transferring the amount, upload the screenshot below or submit the booking and upload it later from Track Booking.</p>
+            <p className="mt-3 text-xs leading-5 text-emerald-100">Upload the payment screenshot below for verification. If you do not have it yet, your booking will remain pending until you upload it from Track Booking.</p>
           </div>
         </div>}
 
       <div ref={receiptAreaRef} className="min-w-0 space-y-2">
       {cashDue > 0 && <label className={`flex min-h-14 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed px-3 py-3 text-center text-sm font-bold transition-colors sm:px-4 ${receiptError ? "border-red-400 bg-white text-red-700 hover:bg-red-50" : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50"}`}>
           <Upload className="h-5 w-5 shrink-0" />
-          <span className="min-w-0 truncate">{receiptFileName || <>Upload payment receipt <span className="font-medium text-slate-500">(optional now)</span></>}</span>
-          <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => onReceiptSelect(event.target.files?.[0] ?? null)} />
+          <span className="min-w-0 truncate">{receiptFileName || <>Upload payment receipt <span className="font-medium text-red-600">(required)</span></>}</span>
+          <input type="file" accept="image/jpeg,image/png,image/webp" aria-required="true" className="sr-only" onChange={(event) => onReceiptSelect(event.target.files?.[0] ?? null)} />
         </label>}
       </div>
     </div>

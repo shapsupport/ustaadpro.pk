@@ -23,6 +23,7 @@ const STORAGE_KEY = "ustaadpro_bookings";
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Booking = {
   id: string; serviceId?: string; serviceTitle: string; workTitle?: string; servicePrice: number;
+  subcategoryTitle?: string;
   paymentMethod: string; status: string; createdAt: string; userEmail?: string; address?: string;
   preferredTime?: string; notes?: string; kind?: "service" | "shop";
   items?: OrderItem[];
@@ -42,6 +43,7 @@ type OrderItem = {
   quantity: number;
   price: number;
   imageUrl?: string;
+  subcategoryTitle?: string;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -88,6 +90,29 @@ function findServiceId(value: unknown, seen = new Set<object>()): string {
   return "";
 }
 
+function findSubcategoryTitle(value: unknown, seen = new Set<object>()): string {
+  const parsed = parsedObject(value);
+  if (!parsed || typeof parsed !== "object") return "";
+  if (seen.has(parsed)) return "";
+  seen.add(parsed);
+  const record = parsed as Record<string, unknown>;
+  for (const key of ["subcategoryTitle", "subcategory_title", "subCategoryTitle", "sub_category_title"]) {
+    const candidate = record[key];
+    if (candidate !== undefined && candidate !== null && String(candidate).trim()) return String(candidate).trim();
+  }
+  const subcategory = parsedObject(record.subcategory ?? record.subCategory ?? record.sub_category);
+  if (subcategory && typeof subcategory === "object") {
+    const nested = subcategory as Record<string, unknown>;
+    const candidate = nested.title ?? nested.name ?? nested.label;
+    if (candidate !== undefined && candidate !== null && String(candidate).trim()) return String(candidate).trim();
+  }
+  for (const child of Object.values(record)) {
+    const found = findSubcategoryTitle(child, seen);
+    if (found) return found;
+  }
+  return "";
+}
+
 function listFrom(payload: unknown, kind: "service" | "shop"): Booking[] {
   const object = payload as { orders?: Record<string, unknown>[]; data?: Record<string, unknown>[] };
   const rows = Array.isArray(payload) ? payload : object?.orders || object?.data || [];
@@ -104,6 +129,7 @@ function listFrom(payload: unknown, kind: "service" | "shop"): Booking[] {
         quantity: Number(item.quantity || 1),
         price: Number(item.unitPrice || item.unit_price || item.price || product.price || serviceItem.price || 0),
         imageUrl: String(item.imageUrl || product.imageUrl || ""),
+        subcategoryTitle: findSubcategoryTitle(item),
       };
     });
     const address = typeof row.address === "string" ? row.address : ((row.address || {}) as { address?: string; label?: string; fullAddress?: string }).address || ((row.address || {}) as { label?: string; fullAddress?: string }).fullAddress || ((row.address || {}) as { label?: string }).label || "";
@@ -145,6 +171,7 @@ function listFrom(payload: unknown, kind: "service" | "shop"): Booking[] {
       serviceId: findServiceId(row) || String(service.id || firstItem?.serviceId || ""),
       serviceTitle: extractedTitle,
       workTitle: extractedWork,
+      subcategoryTitle: findSubcategoryTitle(row) || firstItem?.subcategoryTitle || "",
       servicePrice: Number(row.servicePrice || (kind === "service" && listedItemsTotal > 0 ? listedItemsTotal : 0) || row.totalAmount || row.total || row.grandTotal || listedItemsTotal),
       paymentMethod: String(row.paymentMethod || row.payment_method || "Not specified"),
       status: String(row.status || (kind === "shop" ? "placed" : "confirmed")),
@@ -618,6 +645,7 @@ function BookingCard({
               <p className={`text-[9px] sm:text-[10px] font-extrabold uppercase tracking-[0.14em] ${isShop ? "text-blue-500" : "text-emerald-600"}`}>
                 {isShop ? "SHOP ORDER" : "HOME SERVICE"}
               </p>
+              {!isShop && booking.subcategoryTitle && <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">{booking.subcategoryTitle}</p>}
               <h2 className="mt-0.5 text-sm sm:text-base font-bold leading-snug text-slate-900 break-words line-clamp-2">{title}</h2>
               <p className="mt-0.5 font-mono text-[10px] sm:text-xs text-slate-400">#USTAADPRO-{booking.id.slice(-6).toUpperCase()}</p>
 
@@ -732,7 +760,7 @@ function BookingDetailModal({ booking, customerName, customerEmail, customerPhon
       </header>
       <div className="space-y-5 p-5 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50 p-4"><div><p className="text-xs font-semibold text-slate-500">Current status</p><span className={`mt-1 inline-flex rounded-lg px-2.5 py-1 text-xs font-bold ${status.color}`}>{status.label}</span></div><div className="text-right"><p className="text-xs font-semibold text-slate-500">Total amount</p><p className="mt-1 text-xl font-black text-slate-900">PKR {paymentTotal.toLocaleString("en-PK")}</p></div></div>
-        <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-2xl border border-slate-200 p-4"><h3 className="mb-4 text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">Booking details</h3><div className="space-y-4"><DetailRow icon={<CalendarDays className="h-4 w-4" />} label="Appointment" value={schedule} />{booking.address && <DetailRow icon={<MapPin className="h-4 w-4" />} label="Service address" value={booking.address} />}{booking.notes && <DetailRow icon={<ReceiptText className="h-4 w-4" />} label="Customer notes" value={booking.notes} />}</div></div><div className="rounded-2xl border border-slate-200 p-4"><h3 className="mb-4 text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">Customer details</h3><div className="space-y-4"><DetailRow icon={<UserRound className="h-4 w-4" />} label="Name" value={customerName || "Not available"} /><DetailRow icon={<MessageSquareWarning className="h-4 w-4" />} label="Email" value={booking.userEmail || customerEmail || "Not available"} /><DetailRow icon={<CreditCard className="h-4 w-4" />} label="Phone" value={customerPhone || "Not available"} /></div></div></div>
+        <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-2xl border border-slate-200 p-4"><h3 className="mb-4 text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">Booking details</h3><div className="space-y-4">{booking.kind !== "shop" && booking.subcategoryTitle && <DetailRow icon={<Wrench className="h-4 w-4" />} label="Service subcategory" value={booking.subcategoryTitle} />}<DetailRow icon={<CalendarDays className="h-4 w-4" />} label="Appointment" value={schedule} />{booking.address && <DetailRow icon={<MapPin className="h-4 w-4" />} label="Service address" value={booking.address} />}{booking.notes && <DetailRow icon={<ReceiptText className="h-4 w-4" />} label="Customer notes" value={booking.notes} />}</div></div><div className="rounded-2xl border border-slate-200 p-4"><h3 className="mb-4 text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">Customer details</h3><div className="space-y-4"><DetailRow icon={<UserRound className="h-4 w-4" />} label="Name" value={customerName || "Not available"} /><DetailRow icon={<MessageSquareWarning className="h-4 w-4" />} label="Email" value={booking.userEmail || customerEmail || "Not available"} /><DetailRow icon={<CreditCard className="h-4 w-4" />} label="Phone" value={customerPhone || "Not available"} /></div></div></div>
         <div className="rounded-2xl border border-slate-200 p-4"><h3 className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">Payment summary</h3><div className="mt-3 grid grid-cols-3 divide-x divide-slate-100"><SummaryValue label="Total" value={`PKR ${paymentTotal.toLocaleString("en-PK")}`} /><SummaryValue label="Paid online" value={`PKR ${paid.toLocaleString("en-PK")}`} /><SummaryValue label="Remaining" value={`PKR ${paymentRemaining.toLocaleString("en-PK")}`} /></div></div>
         {booking.items?.length ? <div className="rounded-2xl border border-slate-200 p-4"><h3 className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">Order items</h3><div className="mt-3 space-y-2">{booking.items.map((item, index) => <div key={`${item.productId}-${index}`} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">{item.imageUrl ? <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg"><Image src={absoluteImage(item.imageUrl)} alt={item.title} fill className="object-cover" sizes="48px" /></div> : <Package className="h-5 w-5 text-slate-400" />}<p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{item.title} <span className="text-slate-500">× {item.quantity}</span></p><p className="text-sm font-black text-slate-900">PKR {(item.price * item.quantity).toLocaleString("en-PK")}</p></div>)}</div></div> : null}
         <div className="rounded-2xl bg-slate-50 p-4"><h3 className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">Available actions</h3><BookingActions booking={booking} completed={isCompleted} isCancelled={isCancelled} acceptsReceipt={booking.kind !== "shop"} onUpdate={onUpdate} /></div>
