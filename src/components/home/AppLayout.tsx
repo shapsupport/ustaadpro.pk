@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, CalendarCheck, Camera, CheckCircle2, ChevronDown,
@@ -13,6 +14,7 @@ import type { ApiCatalogCategory, ApiCategory, ApiReview, ApiService, ApiSubcate
 import { useLocation } from "@/context/LocationContext";
 import { orderCategories, orderServices } from "@/lib/service-order";
 import { AppStoreButtons } from "@/components/shared/AppStoreButtons";
+import { categoryHref, serviceHref, subcategoryHref } from "@/lib/service-url";
 import { ResilientImage } from "@/components/shared/ResilientImage";
 import { UniversalSearch } from "@/components/search/UniversalSearch";
 import { ServiceCard as ServicesPageCard } from "@/app/services/ServicesPageContent";
@@ -96,6 +98,7 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ initialServices, categories, catalog, reviews }: AppLayoutProps) {
+  const router = useRouter();
   const { location, setShowPicker } = useLocation();
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeSubcategory, setActiveSubcategory] = useState<ApiSubcategory | null>(null);
@@ -184,6 +187,10 @@ export function AppLayout({ initialServices, categories, catalog, reviews }: App
     .slice(0, 8), [orderedServices]);
 
   function showCategory(id: string) {
+    if (id !== "all") {
+      router.push(categoryHref(id));
+      return;
+    }
     setActiveCategory(id);
     setActiveSubcategory(null);
     window.requestAnimationFrame(() => servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -338,7 +345,7 @@ export function AppLayout({ initialServices, categories, catalog, reviews }: App
                 const subcategoryServices = (subcategory.services ?? []).map((service) => servicesById.get(service.id) ?? service);
                 const prices = subcategoryServices.map((service) => Number(service.price)).filter((price) => price > 0);
                 const startingFrom = prices.length ? Math.min(...prices) : 0;
-                return <Link key={subcategory.id} href={`/services/${encodeURIComponent(activeCategory)}/${encodeURIComponent(subcategory.id)}`} className="group min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-md transition hover:-translate-y-1 hover:border-emerald-400 hover:shadow-xl sm:rounded-3xl"><div className="relative h-36 overflow-hidden border-b border-slate-100 bg-white sm:h-52">{subcategoryImage ? <Image src={subcategoryImage} alt={subcategory.title} fill quality={100} className="object-cover transition duration-500 group-hover:scale-[1.03]" sizes="(max-width:640px) 50vw, 25vw" /> : <div className="flex h-full items-center justify-center"><Wrench className="h-9 w-9 text-emerald-300 sm:h-12 sm:w-12" /></div>}{subcategoryServices.length > 0 ? <span className="absolute left-2 top-2 rounded-full bg-white px-2 py-1 text-[9px] font-black text-emerald-700 shadow sm:left-3 sm:top-3 sm:px-3 sm:py-1.5 sm:text-xs">{subcategoryServices.length} service{subcategoryServices.length === 1 ? "" : "s"}</span> : null}</div><div className="p-3 sm:p-5"><h3 className="line-clamp-2 text-sm font-black leading-snug group-hover:text-emerald-700 sm:text-lg">{subcategory.title}</h3>{subcategory.description ? <p className="mt-2 hidden line-clamp-2 min-h-10 text-xs leading-5 text-slate-500 sm:block">{subcategory.description}</p> : <p className="mt-2 hidden min-h-10 text-xs leading-5 text-slate-500 sm:block">View available options, pricing, and service details.</p>}<div className="mt-3 flex items-end justify-between gap-2 border-t border-slate-100 pt-3 sm:mt-4 sm:gap-4 sm:pt-4"><div className="min-w-0">{startingFrom ? <><span className="block text-[8px] font-bold uppercase tracking-wide text-slate-400 sm:text-[10px]">Starting from</span><strong className="mt-0.5 block truncate text-sm text-slate-950 sm:text-xl">Rs {startingFrom.toLocaleString()}</strong></> : <strong className="block text-xs text-emerald-700 sm:text-sm">View options</strong>}</div><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 sm:h-11 sm:w-11"><ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" /></span></div></div></Link>;
+                return <Link key={subcategory.id} href={subcategoryHref(activeCategory, subcategory.title)} className="group min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-md transition hover:-translate-y-1 hover:border-emerald-400 hover:shadow-xl sm:rounded-3xl"><div className="relative h-36 overflow-hidden border-b border-slate-100 bg-white sm:h-52">{subcategoryImage ? <Image src={subcategoryImage} alt={subcategory.title} fill quality={100} className="object-cover transition duration-500 group-hover:scale-[1.03]" sizes="(max-width:640px) 50vw, 25vw" /> : <div className="flex h-full items-center justify-center"><Wrench className="h-9 w-9 text-emerald-300 sm:h-12 sm:w-12" /></div>}{subcategoryServices.length > 0 ? <span className="absolute left-2 top-2 rounded-full bg-white px-2 py-1 text-[9px] font-black text-emerald-700 shadow sm:left-3 sm:top-3 sm:px-3 sm:py-1.5 sm:text-xs">{subcategoryServices.length} service{subcategoryServices.length === 1 ? "" : "s"}</span> : null}</div><div className="p-3 sm:p-5"><h3 className="line-clamp-2 text-sm font-black leading-snug group-hover:text-emerald-700 sm:text-lg">{subcategory.title}</h3>{subcategory.description ? <p className="mt-2 hidden line-clamp-2 min-h-10 text-xs leading-5 text-slate-500 sm:block">{subcategory.description}</p> : <p className="mt-2 hidden min-h-10 text-xs leading-5 text-slate-500 sm:block">View available options, pricing, and service details.</p>}<div className="mt-3 flex items-end justify-between gap-2 border-t border-slate-100 pt-3 sm:mt-4 sm:gap-4 sm:pt-4"><div className="min-w-0">{startingFrom ? <><span className="block text-[8px] font-bold uppercase tracking-wide text-slate-400 sm:text-[10px]">Starting from</span><strong className="mt-0.5 block truncate text-sm text-slate-950 sm:text-xl">Rs {startingFrom.toLocaleString()}</strong></> : <strong className="block text-xs text-emerald-700 sm:text-sm">View options</strong>}</div><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 sm:h-11 sm:w-11"><ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" /></span></div></div></Link>;
               })}
             </div>
           ) : activeCategory !== "all" && !activeSubcategory ? (
@@ -359,7 +366,7 @@ export function AppLayout({ initialServices, categories, catalog, reviews }: App
               return (
                 <Link
                   key={category.id}
-                  href={`/services/${encodeURIComponent(category.id)}`}
+                  href={categoryHref(category.id)}
                   className={`group flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-white text-left shadow-[0_8px_30px_rgba(15,23,42,0.07)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl sm:rounded-[2rem] ${
                     isActive ? "border-emerald-500 ring-2 ring-emerald-200" : "border-slate-200 hover:border-emerald-300"
                   }`}
@@ -529,7 +536,7 @@ function FeaturedCard({ service }: { service: ApiService }) {
           />
         </div>
       )}
-      <div className="p-5"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">Featured service</span><h2 className="mt-3 line-clamp-1 text-lg font-black">{service.title}</h2><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-4 flex items-end justify-between"><div><span className="block text-[10px] text-slate-400">Starting from</span><strong className="text-xl">Rs {service.price.toLocaleString()}</strong></div><Link href={`/services/${service.id}`} prefetch={false} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div><div className="mt-4 flex items-center gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span className="flex items-center gap-1"><Star className={`h-3.5 w-3.5 ${Number(service.reviews || 0) > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {Number(service.reviews || 0) > 0 ? `${Number(service.rating || 0).toFixed(1)} (${service.reviews})` : "0.0 · No reviews"}</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div></div>
+      <div className="p-5"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">Featured service</span><h2 className="mt-3 line-clamp-1 text-lg font-black">{service.title}</h2><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{service.description}</p><div className="mt-4 flex items-end justify-between"><div><span className="block text-[10px] text-slate-400">Starting from</span><strong className="text-xl">Rs {service.price.toLocaleString()}</strong></div><Link href={serviceHref(service)} prefetch={false} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Book now <ArrowRight className="h-3.5 w-3.5" /></Link></div><div className="mt-4 flex items-center gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span className="flex items-center gap-1"><Star className={`h-3.5 w-3.5 ${Number(service.reviews || 0) > 0 ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} /> {Number(service.reviews || 0) > 0 ? `${Number(service.rating || 0).toFixed(1)} (${service.reviews})` : "0.0 · No reviews"}</span>{service.duration && <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5 text-emerald-600" /> {service.duration}</span>}</div></div>
     </div>
   );
 }

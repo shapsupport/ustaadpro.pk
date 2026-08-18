@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getCatalog, getMergedCatalogCategory, getServices } from "@/lib/server-api";
+import { categoryHref, serviceHref, subcategoryHref } from "@/lib/service-url";
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://ustaadpro.pk").replace(/\/$/, "");
 
@@ -16,7 +17,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   const categoryPages: MetadataRoute.Sitemap = catalog.map((category) => ({
-    url: `${SITE_URL}/services/${encodeURIComponent(category.id)}`,
+    url: `${SITE_URL}${categoryHref(category.id)}`,
     lastModified: now,
     changeFrequency: "weekly",
     priority: 0.8,
@@ -25,19 +26,28 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const subcategoryPages: MetadataRoute.Sitemap = mergedCategories.flatMap((category, index) =>
     (category?.subcategories ?? [])
       .map((subcategory) => ({
-        url: `${SITE_URL}/services/${encodeURIComponent(catalog[index].id)}/${encodeURIComponent(subcategory.id)}`,
+        url: `${SITE_URL}${subcategoryHref(catalog[index].id, subcategory.title)}`,
         lastModified: now,
         changeFrequency: "weekly" as const,
         priority: 0.7,
       }))
   );
 
-  const servicePages: MetadataRoute.Sitemap = services.map((service) => ({
-    url: `${SITE_URL}/services/${encodeURIComponent(service.id)}`,
-    lastModified: service.updatedAt || service.updated_at || service.createdAt || service.created_at || now,
-    changeFrequency: "weekly",
-    priority: 0.7,
-  }));
+  const servicePages: MetadataRoute.Sitemap = services.map((service) => {
+    const categoryIndex = catalog.findIndex((category) =>
+      category.id === (service.categoryId || service.category_id)
+    );
+    const category = categoryIndex >= 0 ? mergedCategories[categoryIndex] : null;
+    const subcategory = (category?.subcategories ?? []).find((item) =>
+      item.id === (service.subcategoryId || service.subcategory_id)
+    );
+    return {
+      url: `${SITE_URL}${serviceHref(service, subcategory?.title)}`,
+      lastModified: service.updatedAt || service.updated_at || service.createdAt || service.created_at || now,
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    };
+  });
 
   return [...staticPages, ...categoryPages, ...subcategoryPages, ...servicePages];
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ComponentType, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   ArrowLeft,
@@ -34,6 +35,7 @@ import { searchServicesFromApi } from "@/lib/search";
 import { useLocation } from "@/context/LocationContext";
 import BookingModal from "@/components/booking/BookingModal";
 import { useServiceCart } from "@/context/ServiceCartContext";
+import { categoryHref, serviceHref, subcategoryHref } from "@/lib/service-url";
 import { ResilientImage } from "@/components/shared/ResilientImage";
 import { UniversalSearch } from "@/components/search/UniversalSearch";
 
@@ -145,6 +147,7 @@ export function ServicesPageContent({
   initialCatalog = [],
   initialSearch = "",
 }: ServicesPageContentProps) {
+  const router = useRouter();
   const { location, setShowPicker } = useLocation();
   const [step, setStep] = useState<Step>("category");
   const [activeCategory, setActiveCategory] = useState<string>("all");
@@ -180,12 +183,9 @@ export function ServicesPageContent({
     });
   }
 
-  // Step 1 → Step 2: select main category, show subcategories
   // Step 2 → Step 3: select sub-category, show services
   function selectSubcategory(sub: SubcatItem) {
-    setActiveSubcategory(sub);
-    setStep("services");
-    scrollToStep();
+    router.push(subcategoryHref(activeCategory, sub.title));
   }
 
   // Back from Step 2 → Step 1
@@ -420,9 +420,8 @@ export function ServicesPageContent({
                 return (
                   <div key={n} className="flex min-w-0 items-center justify-start gap-3 rounded-xl bg-slate-50 px-2 py-1.5 min-[360px]:justify-center min-[360px]:rounded-none min-[360px]:bg-transparent min-[360px]:px-0 min-[360px]:py-0 sm:justify-start">
                     <div className="flex min-w-0 flex-row items-center gap-2 min-[360px]:flex-col min-[360px]:gap-1.5 sm:flex-row sm:gap-2">
-                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black transition-all ${
-                        isDone ? "bg-emerald-600 text-white" : isActive ? "bg-emerald-100 text-emerald-800 ring-2 ring-emerald-500 shadow-sm" : "bg-slate-100 text-slate-500"
-                      }`}>
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black transition-all ${isDone ? "bg-emerald-600 text-white" : isActive ? "bg-emerald-100 text-emerald-800 ring-2 ring-emerald-500 shadow-sm" : "bg-slate-100 text-slate-500"
+                        }`}>
                         {isDone ? <CheckCircle2 className="h-4 w-4" /> : n}
                       </div>
                       <span className={`max-w-full text-left text-xs font-bold leading-tight min-[360px]:text-center min-[360px]:text-[10px] sm:whitespace-nowrap sm:text-left sm:text-xs ${isActive ? "text-emerald-800" : isDone ? "text-emerald-700" : "text-slate-500"}`}>{label}</span>
@@ -533,7 +532,7 @@ export function ServicesPageContent({
                 return (
                   <Link
                     key={category.id}
-                    href={`/services/${encodeURIComponent(category.id)}`}
+                    href={categoryHref(category.id)}
                     className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md transition-all duration-300 hover:-translate-y-1 hover:border-emerald-300 hover:shadow-xl sm:rounded-3xl"
                   >
                     {/* Image / Gradient banner */}
@@ -542,7 +541,7 @@ export function ServicesPageContent({
                         <SafeImage
                           src={imageUrl}
                           alt={category.title}
-                            className="rounded-xl object-cover sm:rounded-2xl"
+                          className="rounded-xl object-cover sm:rounded-2xl"
                           fallback={
                             <div className="flex h-full w-full items-center justify-center">
                               <IconComponent className="h-10 w-10 text-white/80 sm:h-14 sm:w-14" />
@@ -674,16 +673,16 @@ export function ServicesPageContent({
                 <span className="font-medium text-slate-600">Services</span>
               </nav>
               <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={backToSubcategories}
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-800 shadow-sm transition hover:bg-emerald-100"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" /> Back to sub-services
-              </button>
-              <button type="button" onClick={backToCategories} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-700">
-                <Layers className="h-3.5 w-3.5" /> Categories
-              </button>
+                <button
+                  type="button"
+                  onClick={backToSubcategories}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-800 shadow-sm transition hover:bg-emerald-100"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" /> Back to sub-services
+                </button>
+                <button type="button" onClick={backToCategories} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-700">
+                  <Layers className="h-3.5 w-3.5" /> Categories
+                </button>
               </div>
             </div>
 
@@ -791,7 +790,7 @@ export function ServiceCard({ service, onBook }: { service: ApiService; onBook?:
   return (
     <div className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl sm:rounded-3xl">
       <div className="relative m-1.5 aspect-[4/3] w-[calc(100%-0.75rem)] shrink-0 overflow-hidden rounded-xl border border-slate-100 bg-white max-sm:has-[[data-service-image-fallback]]:hidden sm:m-2 sm:w-[calc(100%-1rem)] sm:rounded-2xl">
-        <Link href={`/services/${encodeURIComponent(service.id)}`} className="absolute inset-0 z-[1]" aria-label={`View ${service.title}`} />
+        <Link href={serviceHref(service)} className="absolute inset-0 z-[1]" aria-label={`View ${service.title}`} />
         {src ? (
           <ResilientImage
             src={src}
@@ -823,11 +822,11 @@ export function ServiceCard({ service, onBook }: { service: ApiService; onBook?:
       </div>
 
       <div className="flex flex-1 flex-col p-2.5 sm:p-5">
-        <Link href={`/services/${service.id}`} prefetch={false} className="group-hover:text-emerald-600">
+        <Link href={serviceHref(service)} prefetch={false} className="group-hover:text-emerald-600">
           <h3 className="line-clamp-2 min-h-9 text-xs font-black leading-[1.125rem] text-slate-900 transition-colors sm:min-h-12 sm:text-base sm:leading-6">{service.title}</h3>
         </Link>
         <Link
-          href={`/services/${encodeURIComponent(service.id)}`}
+          href={serviceHref(service)}
           prefetch={false}
           className="mt-1 inline-flex w-fit items-center gap-1 text-[10px] font-bold text-emerald-700 transition hover:text-emerald-900 hover:underline sm:text-xs"
           aria-label={`View details for ${service.title}`}
@@ -849,25 +848,25 @@ export function ServiceCard({ service, onBook }: { service: ApiService; onBook?:
 
         <div className="mt-auto border-t border-slate-100 pt-4">
           <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              {unitText ? unitText : "Rate"}
-            </p>
-            <div className="mt-0.5 flex flex-wrap items-baseline gap-1.5">
-              <span className="text-base font-black text-slate-900 sm:text-2xl">Rs {(service.price * quantity).toLocaleString()}</span>
-              {discount > 0 ? <span className="text-xs text-slate-400 line-through">Rs {originalPrice.toLocaleString()}</span> : null}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                {unitText ? unitText : "Rate"}
+              </p>
+              <div className="mt-0.5 flex flex-wrap items-baseline gap-1.5">
+                <span className="text-base font-black text-slate-900 sm:text-2xl">Rs {(service.price * quantity).toLocaleString()}</span>
+                {discount > 0 ? <span className="text-xs text-slate-400 line-through">Rs {originalPrice.toLocaleString()}</span> : null}
+              </div>
             </div>
           </div>
-          </div>
           <div className="mt-3 grid grid-cols-[2.5rem_minmax(0,1fr)] gap-1.5 sm:grid-cols-[3.25rem_minmax(0,1fr)] sm:gap-2">
-          <button type="button" onClick={addToCart} aria-label={inCart ? `Add another ${service.title} to cart` : `Add ${service.title} to cart`} title={inCart ? "Add another to cart" : "Add to cart"} className={`relative grid min-h-12 place-items-center rounded-2xl border-2 shadow-sm transition active:scale-95 ${inCart ? "border-emerald-500 bg-emerald-600 text-white" : "border-emerald-300 bg-emerald-50 text-emerald-700 hover:border-emerald-500 hover:bg-emerald-100"}`}><ShoppingBasket className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2.25} /><span className={`absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full text-[11px] font-black leading-none shadow ${inCart ? "bg-white text-emerald-700" : "bg-emerald-600 text-white"}`}>+</span></button>
-          {onBook ? <button
-            type="button"
-            onClick={() => onBook(quantity)}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700"
-          >
-            <span className="sm:hidden">Book</span><span className="hidden sm:inline">Book Now</span> <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          </button> : <Link href={`/services/${service.id}`} prefetch={false} className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700"><span className="sm:hidden">Book</span><span className="hidden sm:inline">Book Now</span> <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" /></Link>}
+            <button type="button" onClick={addToCart} aria-label={inCart ? `Add another ${service.title} to cart` : `Add ${service.title} to cart`} title={inCart ? "Add another to cart" : "Add to cart"} className={`relative grid min-h-12 place-items-center rounded-2xl border-2 shadow-sm transition active:scale-95 ${inCart ? "border-emerald-500 bg-emerald-600 text-white" : "border-emerald-300 bg-emerald-50 text-emerald-700 hover:border-emerald-500 hover:bg-emerald-100"}`}><ShoppingBasket className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2.25} /><span className={`absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full text-[11px] font-black leading-none shadow ${inCart ? "bg-white text-emerald-700" : "bg-emerald-600 text-white"}`}>+</span></button>
+            {onBook ? <button
+              type="button"
+              onClick={() => onBook(quantity)}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700"
+            >
+              <span className="sm:hidden">Book</span><span className="hidden sm:inline">Book Now</span> <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </button> : <Link href={serviceHref(service)} prefetch={false} className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700"><span className="sm:hidden">Book</span><span className="hidden sm:inline">Book Now</span> <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" /></Link>}
           </div>
         </div>
       </div>

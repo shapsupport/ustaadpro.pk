@@ -21,6 +21,7 @@ import {
 import type { ApiCatalogCategory, ApiService, ApiSubcategory } from "@/lib/api-types";
 import BookingModal from "@/components/booking/BookingModal";
 import { useServiceCart } from "@/context/ServiceCartContext";
+import { categoryHref, serviceHref, subcategoryHref } from "@/lib/service-url";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.ustaadpro.pk";
 
@@ -32,13 +33,20 @@ function imgSrc(url: string | undefined | null) {
 
 interface CategoryPageClientProps {
   catalogCategory: ApiCatalogCategory;
+  initialSubcategory?: ApiSubcategory | null;
   initialSubcategoryId?: string;
 }
 
-export function CategoryPageClient({ catalogCategory, initialSubcategoryId }: CategoryPageClientProps) {
+export function CategoryPageClient({
+  catalogCategory,
+  initialSubcategory = null,
+  initialSubcategoryId,
+}: CategoryPageClientProps) {
   const router = useRouter();
   const [activeSubcategory] = useState<ApiSubcategory | null>(() =>
-    catalogCategory.subcategories?.find((subcategory) => subcategory.id === initialSubcategoryId) ?? null
+    initialSubcategory ??
+    catalogCategory.subcategories?.find((subcategory) => subcategory.id === initialSubcategoryId) ??
+    null
   );
   const [bookingService, setBookingService] = useState<ApiService | null>(null);
   const [bookingQuantity, setBookingQuantity] = useState(1);
@@ -49,7 +57,7 @@ export function CategoryPageClient({ catalogCategory, initialSubcategoryId }: Ca
 
   const handleBack = () => {
     if (activeSubcategory) {
-      router.push(`/services/${encodeURIComponent(catalogCategory.id)}`);
+      router.push(categoryHref(catalogCategory.id));
     } else {
       router.push("/services");
     }
@@ -83,7 +91,7 @@ export function CategoryPageClient({ catalogCategory, initialSubcategoryId }: Ca
               <ChevronRight className="h-4 w-4" />
               <button
                 type="button"
-                onClick={() => router.push(`/services/${encodeURIComponent(catalogCategory.id)}`)}
+                onClick={() => router.push(categoryHref(catalogCategory.id))}
                 className="font-medium hover:text-emerald-600"
               >
                 {catalogCategory.title}
@@ -128,6 +136,7 @@ export function CategoryPageClient({ catalogCategory, initialSubcategoryId }: Ca
                 <ServiceCard
                   key={service.id}
                   service={service}
+                  subcategoryTitle={activeSubcategory.title}
                   compact={services.length > 6}
                   onBook={(quantity) => handleBookService(service, quantity)}
                 />
@@ -222,7 +231,7 @@ export function CategoryPageClient({ catalogCategory, initialSubcategoryId }: Ca
             <SubcategoryCard
               key={subcat.id}
               subcat={subcat}
-              href={`/services/${encodeURIComponent(catalogCategory.id)}/${encodeURIComponent(subcat.id)}`}
+              href={subcategoryHref(catalogCategory.id, subcat.title)}
             />
           ))}
         </div>
@@ -330,10 +339,12 @@ function SubcategoryCard({
 // ─── Service Card ─────────────────────────────────────────────────────────────
 function ServiceCard({
   service,
+  subcategoryTitle,
   onBook,
   compact = false,
 }: {
   service: ApiService;
+  subcategoryTitle?: string;
   onBook: (quantity: number) => void;
   compact?: boolean;
 }) {
@@ -351,8 +362,12 @@ function ServiceCard({
   return (
     <div className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
       {/* Image */}
-      <div className={`relative shrink-0 overflow-hidden bg-slate-100 ${compact ? "h-28 sm:h-36 xl:h-40" : "h-44"}`}>
-        <Link href={`/services/${encodeURIComponent(service.id)}`} className="absolute inset-0 z-[1]" aria-label={`View ${service.title}`} />
+      <Link
+        href={serviceHref(service, subcategoryTitle)}
+        prefetch={false}
+        className={`relative block shrink-0 overflow-hidden bg-slate-100 ${compact ? "h-28 sm:h-36 xl:h-40" : "h-44"}`}
+        aria-label={`View ${service.title}`}
+      >
         {src ? (
           <Image
             src={src}
@@ -381,15 +396,16 @@ function ServiceCard({
             {service.duration}
           </div>
         )}
-      </div>
+      </Link>
 
       {/* Content */}
       <div className={`flex flex-1 flex-col ${compact ? "p-3 sm:p-4" : "p-5"}`}>
-        <Link href={`/services/${encodeURIComponent(service.id)}`} className={`${compact ? "min-h-10 text-sm sm:text-base" : "min-h-14 text-lg"} block font-bold text-slate-900 transition-colors group-hover:text-emerald-600`}>
+        <Link href={serviceHref(service, subcategoryTitle)} prefetch={false} className={`${compact ? "min-h-10 text-sm sm:text-base" : "min-h-14 text-lg"} block font-bold text-slate-900 transition-colors group-hover:text-emerald-600`}>
           <h3>{service.title}</h3>
         </Link>
         <Link
-          href={`/services/${encodeURIComponent(service.id)}`}
+          href={serviceHref(service, subcategoryTitle)}
+          prefetch={false}
           className="mt-1 inline-flex w-fit items-center gap-1 text-[11px] font-bold text-emerald-700 transition hover:text-emerald-900 hover:underline sm:text-xs"
           aria-label={`View details for ${service.title}`}
         >

@@ -1,23 +1,16 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { ServiceDetailClient } from "./ServiceDetailClient";
+import { notFound, redirect } from "next/navigation";
 import { CategoryPageClient } from "@/components/services/CategoryPageClient";
 import {
-  getReviewsForService,
   getServiceById,
   getServices,
   getMergedCatalogCategory,
-  getCatalog,
 } from "@/lib/server-api";
+import { serviceHref } from "@/lib/service-url";
+
+export const dynamic = "force-dynamic";
 
 export const revalidate = 300;
-
-export async function generateStaticParams() {
-  const [services, catalog] = await Promise.all([getServices(), getCatalog()]);
-  const serviceParams = services.map((s) => ({ id: s.id }));
-  const categoryParams = catalog.map((c) => ({ id: c.id }));
-  return [...serviceParams, ...categoryParams];
-}
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
@@ -61,6 +54,9 @@ export default async function ServiceOrCategoryPage({ params }: { params: Promis
     service = services.find((s) => s.id === id) ?? null;
   }
   if (!service) notFound();
-  const reviews = await getReviewsForService(service.id);
-  return <ServiceDetailClient service={service} initialReviews={reviews} />;
+  const serviceCategory = await getMergedCatalogCategory(service.categoryId || service.category_id || "");
+  const subcategory = (serviceCategory?.subcategories ?? []).find((item) =>
+    item.id === (service.subcategoryId || service.subcategory_id)
+  );
+  redirect(serviceHref(service, subcategory?.title));
 }
